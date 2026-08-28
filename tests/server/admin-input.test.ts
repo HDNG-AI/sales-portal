@@ -66,8 +66,15 @@ describe('CreateTenantSchema', () => {
         environment: 'production',
         imageBaseUrl: 'https://boattools.commerce.services',
       },
+      timezone: 'Europe/Stockholm',
     });
     expect(result.success).toBe(true);
+  });
+
+  it('accepts a payload with timezone omitted (createTenant defaults it to UTC)', () => {
+    const result = CreateTenantSchema.safeParse({ hostname: 'a.example.com' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.timezone).toBeUndefined();
   });
 
   it('rejects an unknown geinsSettings.environment value', () => {

@@ -327,6 +327,10 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     geinsSettings: merged.geinsSettings,
     mode: merged.mode,
     checkoutMode: merged.checkoutMode,
+    // Defensive fallback, not just the schema default — this function also
+    // runs on hand-built fixtures (server/plugins/99.dev-tenant-seed.ts)
+    // that never go through StoreSettingsSchema.parse().
+    timezone: merged.timezone ?? 'UTC',
     theme,
     branding,
     features,
@@ -788,6 +792,7 @@ export async function fetchTenantConfig(
       geinsSettings: { ...DEFAULT_GEINS_SETTINGS },
       mode: 'commerce' as const,
       checkoutMode: 'hosted' as const,
+      timezone: 'UTC',
       theme: themeWithDerived,
       css,
       branding: {
@@ -819,6 +824,7 @@ export async function fetchTenantConfig(
     geinsSettings: { ...DEFAULT_GEINS_SETTINGS },
     mode: 'commerce' as const,
     checkoutMode: 'hosted' as const,
+    timezone: 'UTC',
     theme: createDefaultTheme(hostname),
     css: '',
     branding: {
