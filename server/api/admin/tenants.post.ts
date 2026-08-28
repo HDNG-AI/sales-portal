@@ -40,7 +40,6 @@ export default defineEventHandler(async (event) => {
       aliases: body.aliases,
       mode: body.mode,
       checkoutMode: body.checkoutMode,
-      timezone: body.timezone,
       theme: body.theme,
       branding: body.branding
         ? { watermark: 'none', ...body.branding }

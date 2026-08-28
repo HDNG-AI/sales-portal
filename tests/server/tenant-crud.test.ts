@@ -112,8 +112,6 @@ describe('createTenant', () => {
     });
     expect(tenant.geinsSettings).toEqual(DEFAULT_GEINS_SETTINGS);
     expect(tenant.isActive).toBe(false);
-    // Never OS timezone — see docs/lessons-learned.md.
-    expect(tenant.timezone).toBe('UTC');
     expect(kvStore.get(tenantConfigKey('a.example.com'))).toEqual(tenant);
   });
 
@@ -128,7 +126,6 @@ describe('createTenant', () => {
           ...GEINS_SETTINGS,
           imageBaseUrl: 'https://cdn.example.com',
         },
-        timezone: 'Europe/Stockholm',
       },
     });
 
@@ -136,7 +133,6 @@ describe('createTenant', () => {
     expect(tenant.isActive).toBe(true);
     expect(tenant.branding).toEqual({ name: 'Boat Tools', watermark: 'none' });
     expect(tenant.geinsSettings.imageBaseUrl).toBe('https://cdn.example.com');
-    expect(tenant.timezone).toBe('Europe/Stockholm');
   });
 
   it('does not leak theme-internal keys (colors, radius, typography) onto the top-level config', async () => {

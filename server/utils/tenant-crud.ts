@@ -88,7 +88,6 @@ export async function createTenant(
     geinsSettings: { ...DEFAULT_GEINS_SETTINGS },
     mode: 'commerce',
     checkoutMode: 'hosted',
-    timezone: 'UTC',
     theme: defaultThemeDerived.themeWithDerived,
     css: defaultThemeDerived.css,
     themeHash: defaultThemeDerived.themeHash,

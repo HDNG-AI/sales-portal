@@ -221,7 +221,6 @@ vi.mock('../app/composables/useTenant', () => {
       ),
       mode: computed(() => tenant.value?.mode ?? 'commerce'),
       isCatalogMode: computed(() => mockIsCatalogMode.value),
-      timezone: computed(() => tenant.value?.timezone ?? 'UTC'),
       watermark: computed(() => tenant.value?.branding?.watermark ?? 'full'),
       availableLocales: computed(() => ['sv']),
       availableMarkets: computed(() => []),

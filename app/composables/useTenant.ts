@@ -35,7 +35,6 @@ export function useTenant() {
   const mode = computed(() => tenant.value?.mode ?? 'commerce');
   const isCatalogMode = computed(() => mode.value === 'catalog');
   const checkoutMode = computed(() => tenant.value?.checkoutMode ?? 'custom');
-  const timezone = computed(() => tenant.value?.timezone ?? 'UTC');
   const watermark = computed(() => tenant.value?.branding?.watermark ?? 'full');
 
   /**
@@ -124,7 +123,6 @@ export function useTenant() {
     mode,
     isCatalogMode,
     checkoutMode,
-    timezone,
     watermark,
     availableLocales,
     availableMarkets,

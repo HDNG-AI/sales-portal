@@ -287,10 +287,6 @@ export const StoreSettingsSchema = z.object({
   geinsSettings: GeinsSettingsSchema,
   mode: TenantModeSchema,
   checkoutMode: z.enum(['custom', 'hosted']).default('custom'),
-  // IANA identifier, e.g. 'Europe/Stockholm' — never a raw UTC offset.
-  // Not a field the Geins platform sends; defaults generic (UTC) rather
-  // than guessing a tenant-specific value. See docs/lessons-learned.md.
-  timezone: z.string().default('UTC'),
   theme: ThemeConfigSchema,
   branding: BrandingConfigSchema,
   features: z.record(z.string(), FeatureConfigInputSchema).default({}),

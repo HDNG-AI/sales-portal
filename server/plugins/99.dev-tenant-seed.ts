@@ -159,7 +159,6 @@ function makeFixture(input: FixtureInput): StoreSettings {
     },
     mode: 'commerce',
     checkoutMode: 'hosted',
-    timezone: 'UTC',
     theme: {
       name: input.tenantId,
       displayName: input.brandName,

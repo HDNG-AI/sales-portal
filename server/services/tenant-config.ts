@@ -93,7 +93,6 @@ export async function getPublicConfig(
     aliases: config.aliases,
     mode: config.mode,
     checkoutMode: config.checkoutMode,
-    timezone: config.timezone,
     theme: config.theme,
     branding: config.branding,
     layout: config.layout,
