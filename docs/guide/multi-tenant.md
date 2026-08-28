@@ -188,6 +188,63 @@ const { tenant, hasFeature, isLoading } = useTenant();
 </template>
 ```
 
+## Admin Tenant Onboarding
+
+`POST /api/admin/tenants` (`server/api/admin/tenants.post.ts`) creates or
+updates one tenant directly in KV, bypassing the normal merchant-admin →
+merchant API flow. It's a one-off onboarding tool, not the primary way
+tenants get configured — most tenants are still configured externally per
+[Tenant Configuration](#tenant-configuration) above. Use this endpoint when
+bringing up a tenant that doesn't have a merchant-API record yet, or to
+patch a field on one that does.
+
+Gated by `?key=<NUXT_ADMIN_SECRET>` (separate secret from the health-check
+one — this gates a write). Calling it again with the same `tenantId`
+updates the existing tenant in place rather than creating a duplicate;
+fields omitted from the request body are left untouched, not blanked (see
+`mergeTenantConfig` in `server/utils/tenant-crud.ts`).
+
+### Parameters
+
+| Field                              | Required                  | Notes                                                                                                                                                                                                                                             |
+| ---------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hostname`                         | yes                       | Primary hostname visitors use (`www.example.com`).                                                                                                                                                                                                |
+| `tenantId`                         | no                        | Defaults to `hostname` if omitted. Use a short, stable id — this is the KV key.                                                                                                                                                                   |
+| `aliases`                          | no                        | Additional hostnames that resolve to the same tenant — e.g. a `.localhost` dev domain alongside the production one.                                                                                                                               |
+| `branding.name`                    | no                        | Defaults to `tenantId`.                                                                                                                                                                                                                           |
+| `branding.watermark`               | no                        | Defaults to `'none'` when `branding` is given at all, `'full'` otherwise.                                                                                                                                                                         |
+| `mode` / `checkoutMode`            | no                        | Default to `'commerce'` / `'hosted'`.                                                                                                                                                                                                             |
+| `geinsSettings.apiKey`             | only with `geinsSettings` | The Geins account's API key.                                                                                                                                                                                                                      |
+| `geinsSettings.accountName`        | only with `geinsSettings` | The Geins account slug used for API auth — **not necessarily the image CDN subdomain**, see below.                                                                                                                                                |
+| `geinsSettings.channel` / `.tld`   | only with `geinsSettings` | Split from the platform's combined `channelId` format (`"1\|se"` → `channel: "1"`, `tld: "se"`).                                                                                                                                                  |
+| `geinsSettings.locale` / `.market` | only with `geinsSettings` | Use the full locale tag (`sv-SE`), not the bare language code (`sv`) — matches `DEFAULT_GEINS_SETTINGS` and every existing tenant.                                                                                                                |
+| `geinsSettings.imageBaseUrl`       | no                        | Overrides the `accountName`-derived image CDN host. Set this whenever a tenant's image subdomain differs from its Geins account name — the derived default is `https://{accountName}.commerce.services`, which is wrong whenever the two diverge. |
+| `geinsSettings.environment`        | no                        | Defaults to `'production'`.                                                                                                                                                                                                                       |
+| `theme`                            | no                        | Merged onto the default theme; omitted keys keep their default/existing value.                                                                                                                                                                    |
+
+### Example
+
+```bash
+curl -X POST "https://<host>/api/admin/tenants?key=$NUXT_ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hostname": "www.example-store.com",
+    "tenantId": "example-store",
+    "aliases": ["example-store.localhost"],
+    "branding": { "name": "Example Store" },
+    "geinsSettings": {
+      "apiKey": "<geins-api-key>",
+      "accountName": "example_store_prod",
+      "channel": "1",
+      "tld": "se",
+      "locale": "sv-SE",
+      "market": "se",
+      "environment": "production",
+      "imageBaseUrl": "https://example-store.commerce.services"
+    }
+  }'
+```
+
 ## Related Documentation
 
 - [Theming System](/guide/theming) — How to customize tenant appearance

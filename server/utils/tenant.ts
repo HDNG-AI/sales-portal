@@ -15,6 +15,7 @@ import {
 } from './storefront-settings-defaults';
 import { KV_STORAGE_KEYS } from '#shared/constants/storage';
 import { logger } from './logger';
+import { clearSdkCache } from '../services/_sdk';
 import {
   createDefaultTheme,
   generateTenantCss,
@@ -131,6 +132,42 @@ export function tenantIdKey(hostname: string): string {
 
 export function tenantConfigKey(tenantId: string): string {
   return `${KV_STORAGE_KEYS.TENANT_CONFIG_PREFIX}${tenantId}`;
+}
+
+export interface TenantCacheStorage {
+  removeItem(key: string): Promise<void>;
+}
+
+/**
+ * Invalidates every cache that can serve stale data for a tenant after its
+ * config changes: the per-tenant Geins SDK client, the hostname
+ * negative-resolution cache, and the /api/config response cache.
+ *
+ * Nitro 2.x stores defineCachedEventHandler entries at
+ * `{group}:{name}:{escapeKey(getKey())}.json`, where group="nitro/handlers",
+ * name="_" (default), and escapeKey strips all non-word characters (\W).
+ * The leading /cache: base is absorbed by the useStorage("cache") namespace,
+ * so the key removed here is `nitro/handlers:_:{stripped configKey}.json`
+ * — see server/api/config.get.ts for the handler this targets.
+ *
+ * Called by both writers of tenant config today — the Geins Studio webhook
+ * (server/utils/webhook-handler.ts) and the admin onboarding endpoint
+ * (server/utils/tenant-crud.ts) — so a third writer gets this for free
+ * instead of needing to remember three separate cache invalidations, the
+ * way withoutUndefined had to be remembered at three separate merge sites
+ * before it was consolidated.
+ */
+export async function invalidateTenantCaches(
+  tenantId: string,
+  hostname: string,
+  cacheStorage: TenantCacheStorage,
+): Promise<void> {
+  clearSdkCache(tenantId);
+  clearNegativeCache(hostname);
+
+  const escapedConfigKey = tenantConfigKey(tenantId).replace(/\W/g, '');
+  const nitroCacheKey = `nitro/handlers:_:${escapedConfigKey}.json`;
+  await cacheStorage.removeItem(nitroCacheKey);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +327,10 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     geinsSettings: merged.geinsSettings,
     mode: merged.mode,
     checkoutMode: merged.checkoutMode,
+    // Defensive fallback, not just the schema default — this function also
+    // runs on hand-built fixtures (server/plugins/99.dev-tenant-seed.ts)
+    // that never go through StoreSettingsSchema.parse().
+    timezone: merged.timezone ?? 'UTC',
     theme,
     branding,
     features,
@@ -751,6 +792,7 @@ export async function fetchTenantConfig(
       geinsSettings: { ...DEFAULT_GEINS_SETTINGS },
       mode: 'commerce' as const,
       checkoutMode: 'hosted' as const,
+      timezone: 'UTC',
       theme: themeWithDerived,
       css,
       branding: {
@@ -782,6 +824,7 @@ export async function fetchTenantConfig(
     geinsSettings: { ...DEFAULT_GEINS_SETTINGS },
     mode: 'commerce' as const,
     checkoutMode: 'hosted' as const,
+    timezone: 'UTC',
     theme: createDefaultTheme(hostname),
     css: '',
     branding: {

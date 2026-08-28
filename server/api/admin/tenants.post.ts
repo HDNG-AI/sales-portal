@@ -5,8 +5,9 @@ import { CreateTenantSchema } from '../../schemas/admin-input';
 /**
  * One-off tenant onboarding endpoint — the actual "workflow for the next
  * tenant" this exists to validate (see the P0 sales-portal investigation).
- * Takes a hostname plus optional theme/branding/geinsSettings overrides and
- * writes a real, active TenantConfig via the existing createTenant() util
+ * Takes a hostname plus optional aliases/theme/branding/geinsSettings
+ * overrides and writes a real, active TenantConfig via the existing
+ * createTenant() util
  * (theme derivation, hostname->tenantId mapping, KV write) — nothing here
  * duplicates that logic, this is purely the auth + input-shaping layer.
  *
@@ -36,8 +37,10 @@ export default defineEventHandler(async (event) => {
     tenantId: body.tenantId,
     config: {
       isActive: true,
+      aliases: body.aliases,
       mode: body.mode,
       checkoutMode: body.checkoutMode,
+      timezone: body.timezone,
       theme: body.theme,
       branding: body.branding
         ? { watermark: 'none', ...body.branding }

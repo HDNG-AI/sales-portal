@@ -4,6 +4,7 @@ import { deriveThemeColors, type FullThemeColors } from './theme';
 import { toSafariSafeColor } from './color-coercion';
 import { logger } from './logger';
 import { escapeCssString } from './sanitize';
+import { withoutUndefined } from './object';
 
 /**
  * Default 6 core colors (shadcn zinc theme)
@@ -329,8 +330,8 @@ export function mergeThemes(
   if (!updates) return base;
   return {
     ...base,
-    ...updates,
-    colors: { ...base.colors, ...updates.colors },
+    ...withoutUndefined(updates),
+    colors: { ...base.colors, ...withoutUndefined(updates.colors ?? {}) },
     typography:
       updates.typography !== undefined ? updates.typography : base.typography,
   };

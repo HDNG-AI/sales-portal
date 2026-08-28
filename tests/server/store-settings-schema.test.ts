@@ -335,6 +335,82 @@ describe('StoreSettingsSchema', () => {
       if (result.success) expect(result.data.mode).toBe('catalog');
     });
 
+    it('defaults timezone to UTC when the merchant API response omits it', () => {
+      const config = {
+        tenantId: 'tz-default',
+        hostname: 'tz-default.example.com',
+        geinsSettings: {
+          apiKey: 'key',
+          accountName: 'acct',
+          channel: '1',
+          tld: 'se',
+          locale: 'sv-SE',
+          market: 'se',
+          environment: 'production',
+          availableLocales: ['sv-SE'],
+          availableMarkets: ['se'],
+        },
+        mode: 'commerce',
+        theme: {
+          colors: {
+            primary: 'oklch(0.5 0.1 200)',
+            primaryForeground: 'oklch(0.9 0 0)',
+            secondary: 'oklch(0.8 0 0)',
+            secondaryForeground: 'oklch(0.2 0 0)',
+            background: 'oklch(1 0 0)',
+            foreground: 'oklch(0.1 0 0)',
+          },
+        },
+        branding: { name: 'Test', watermark: 'full' },
+        features: {},
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        // timezone deliberately omitted
+      };
+      const result = StoreSettingsSchema.safeParse(config);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.timezone).toBe('UTC');
+    });
+
+    it('preserves an explicit timezone rather than overriding it with UTC', () => {
+      const config = {
+        tenantId: 'tz-explicit',
+        hostname: 'tz-explicit.example.com',
+        geinsSettings: {
+          apiKey: 'key',
+          accountName: 'acct',
+          channel: '1',
+          tld: 'se',
+          locale: 'sv-SE',
+          market: 'se',
+          environment: 'production',
+          availableLocales: ['sv-SE'],
+          availableMarkets: ['se'],
+        },
+        mode: 'commerce',
+        timezone: 'Europe/Stockholm',
+        theme: {
+          colors: {
+            primary: 'oklch(0.5 0.1 200)',
+            primaryForeground: 'oklch(0.9 0 0)',
+            secondary: 'oklch(0.8 0 0)',
+            secondaryForeground: 'oklch(0.2 0 0)',
+            background: 'oklch(1 0 0)',
+            foreground: 'oklch(0.1 0 0)',
+          },
+        },
+        branding: { name: 'Test', watermark: 'full' },
+        features: {},
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const result = StoreSettingsSchema.safeParse(config);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.timezone).toBe('Europe/Stockholm');
+    });
+
     it('should validate minimal required config', () => {
       const minimal = {
         tenantId: 'test',

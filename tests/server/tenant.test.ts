@@ -305,6 +305,28 @@ describe('Tenant utilities', () => {
       expect(result.displayName).toBe('New Display Name');
       expect(result.colors).toEqual(base.colors);
     });
+
+    // Regression: a plain `{ ...base, ...updates }` spread copies a key
+    // present with value `undefined` too, silently blanking a real base
+    // value. `updates.displayName = undefined` here mirrors the shape
+    // tenants.post.ts produces when a caller's request omits a field
+    // (`branding: body.branding ? {...} : undefined`).
+    it('should not let an explicit undefined in updates blank a set base value', () => {
+      const base = {
+        ...createDefaultTheme('test'),
+        displayName: 'Original Display Name',
+      };
+      const result = mergeThemes(base, { displayName: undefined });
+      expect(result.displayName).toBe('Original Display Name');
+    });
+
+    it('should not let an explicit undefined color in updates blank a set base color', () => {
+      const base = createDefaultTheme('test');
+      const result = mergeThemes(base, {
+        colors: { primary: undefined },
+      });
+      expect(result.colors.primary).toBe(base.colors.primary);
+    });
   });
 
   describe('collectAllHostnames', () => {

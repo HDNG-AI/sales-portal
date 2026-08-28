@@ -157,13 +157,25 @@ describe('server/services/_sdk', () => {
       );
     });
 
-    it('should default to prod when environment is undefined', () => {
+    // Regression: this used to silently default to 'prod' — the opposite
+    // of a safe fallback for bad data (e.g. a stale/malformed KV record).
+    it('should throw when environment is undefined rather than default to prod', () => {
       const settings = { ...MOCK_GEINS_SETTINGS };
       delete (settings as Partial<GeinsSettings>).environment;
-      createTenantSDK(settings);
 
-      expect(mockGeinsCore).toHaveBeenCalledWith(
-        expect.objectContaining({ environment: 'prod' }),
+      expect(() => createTenantSDK(settings)).toThrow(
+        'Unknown Geins environment',
+      );
+    });
+
+    it('should throw on an unrecognized environment value instead of defaulting to prod', () => {
+      const settings = {
+        ...MOCK_GEINS_SETTINGS,
+        environment: 'dev',
+      } as GeinsSettings;
+
+      expect(() => createTenantSDK(settings)).toThrow(
+        'Unknown Geins environment: "dev"',
       );
     });
 

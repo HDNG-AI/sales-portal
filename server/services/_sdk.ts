@@ -21,6 +21,14 @@ export interface TenantSDK {
 /**
  * Maps our tenant environment values to SDK environment values.
  * Our config uses 'production'/'staging', SDK expects 'prod'/'qa'/'dev'.
+ *
+ * `geinsSettings` ultimately comes from KV storage via a bare type
+ * assertion (`storage.getItem<TenantConfig>(...)`, no runtime validation),
+ * so a malformed or stale record can reach here with an `environment` value
+ * outside the type. Throwing on anything but the two known values is
+ * deliberate: silently falling through to 'prod' — the previous
+ * behavior — is exactly backwards, since it means the failure mode for bad
+ * data is "quietly talk to production" rather than "stop and get fixed."
  */
 function mapEnvironment(
   env?: TenantGeinsSettings['environment'],
@@ -29,8 +37,11 @@ function mapEnvironment(
     case 'staging':
       return 'qa';
     case 'production':
-    default:
       return 'prod';
+    default:
+      throw new Error(
+        `Unknown Geins environment: "${env}". Expected "production" or "staging".`,
+      );
   }
 }
 

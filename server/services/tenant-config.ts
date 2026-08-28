@@ -93,6 +93,7 @@ export async function getPublicConfig(
     aliases: config.aliases,
     mode: config.mode,
     checkoutMode: config.checkoutMode,
+    timezone: config.timezone,
     theme: config.theme,
     branding: config.branding,
     layout: config.layout,
@@ -106,8 +107,10 @@ export async function getPublicConfig(
     market: config.geinsSettings?.market,
     availableLocales: config.geinsSettings?.availableLocales ?? [],
     availableMarkets: config.geinsSettings?.availableMarkets ?? [],
-    imageBaseUrl: config.geinsSettings?.accountName
-      ? `https://${config.geinsSettings.accountName}.commerce.services`
-      : '',
+    imageBaseUrl:
+      config.geinsSettings?.imageBaseUrl ||
+      (config.geinsSettings?.accountName
+        ? `https://${config.geinsSettings.accountName}.commerce.services`
+        : ''),
   };
 }
