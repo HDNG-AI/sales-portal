@@ -17,6 +17,7 @@ const mockTenantConfig: TenantConfig = {
     availableMarkets: ['se'],
   },
   mode: 'commerce',
+  timezone: 'Europe/Stockholm',
   theme: {
     name: 'test-theme',
     colors: {
@@ -209,6 +210,11 @@ describe('Tenant Config Service', () => {
     it('should include mode', async () => {
       const pub = await service.getPublicConfig(createMockEvent());
       expect(pub?.mode).toBe('commerce');
+    });
+
+    it('should include timezone', async () => {
+      const pub = await service.getPublicConfig(createMockEvent());
+      expect(pub?.timezone).toBe('Europe/Stockholm');
     });
 
     it('should derive imageBaseUrl from accountName when no override is set', async () => {
