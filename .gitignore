@@ -57,3 +57,6 @@ docs/.vitepress/cache
 
 # Playwright saved auth state (session cookies — never commit)
 playwright/.auth/
+
+# Local redis-server snapshot, if run from the repo root without --dir
+dump.rdb
