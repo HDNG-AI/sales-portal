@@ -908,6 +908,20 @@ export async function resolvePreviewTenant(
 // ---------------------------------------------------------------------------
 
 /**
+ * Backfills `timezone` on a config read straight from KV. A raw read isn't
+ * re-validated against the schema, so a record stored before this field
+ * existed comes back without it — used by every call site that returns a
+ * stored config directly rather than through buildTenantConfig(). See
+ * docs/adr/023-tenant-operating-timezone.md.
+ */
+export function withTenantConfigDefaults(config: TenantConfig): TenantConfig {
+  return {
+    ...config,
+    timezone: config.timezone ?? 'UTC',
+  };
+}
+
+/**
  * Retrieves a tenant config directly by tenantId (no hostname lookup).
  * Returns null for missing or inactive configs without side-effects —
  * invalidation is handled exclusively by the webhook handler.
@@ -918,7 +932,7 @@ export async function getTenantById(
   const storage = useStorage('kv');
   const config = await storage.getItem<TenantConfig>(tenantConfigKey(tenantId));
   if (!config || !config.isActive) return null;
-  return config;
+  return withTenantConfigDefaults(config);
 }
 
 /**
@@ -967,10 +981,11 @@ export async function resolveTenant(
   }
 
   // Backwards compat: check for legacy tenant:config:{hostname}
-  const legacyConfig = await storage.getItem<TenantConfig>(
+  const rawLegacyConfig = await storage.getItem<TenantConfig>(
     tenantConfigKey(hostname),
   );
-  if (legacyConfig && legacyConfig.isActive) {
+  if (rawLegacyConfig && rawLegacyConfig.isActive) {
+    const legacyConfig = withTenantConfigDefaults(rawLegacyConfig);
     const tid = legacyConfig.tenantId || hostname;
     if (tid !== hostname) {
       await storage.setItem(tenantConfigKey(tid), legacyConfig);

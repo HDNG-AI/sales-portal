@@ -411,6 +411,43 @@ describe('StoreSettingsSchema', () => {
       if (result.success) expect(result.data.timezone).toBe('Europe/Stockholm');
     });
 
+    it('rejects a raw UTC offset instead of an IANA timezone identifier', () => {
+      const config = {
+        tenantId: 'tz-offset',
+        hostname: 'tz-offset.example.com',
+        geinsSettings: {
+          apiKey: 'key',
+          accountName: 'acct',
+          channel: '1',
+          tld: 'se',
+          locale: 'sv-SE',
+          market: 'se',
+          environment: 'production',
+          availableLocales: ['sv-SE'],
+          availableMarkets: ['se'],
+        },
+        mode: 'commerce',
+        timezone: 'GMT+1',
+        theme: {
+          colors: {
+            primary: 'oklch(0.5 0.1 200)',
+            primaryForeground: 'oklch(0.9 0 0)',
+            secondary: 'oklch(0.8 0 0)',
+            secondaryForeground: 'oklch(0.2 0 0)',
+            background: 'oklch(1 0 0)',
+            foreground: 'oklch(0.1 0 0)',
+          },
+        },
+        branding: { name: 'Test', watermark: 'full' },
+        features: {},
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      const result = StoreSettingsSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
     it('should validate minimal required config', () => {
       const minimal = {
         tenantId: 'test',

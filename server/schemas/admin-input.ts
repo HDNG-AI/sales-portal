@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TimezoneSchema } from './store-settings';
 
 /**
  * Input for the one-off tenant onboarding endpoint
@@ -52,9 +53,8 @@ export const CreateTenantSchema = z.object({
     .optional(),
   mode: z.enum(['commerce', 'catalog']).optional(),
   checkoutMode: z.enum(['custom', 'hosted']).optional(),
-  // IANA identifier, e.g. 'Europe/Stockholm' — never a raw UTC offset.
   // Omitted → createTenant() defaults to 'UTC', not a guessed value.
-  timezone: z.string().optional(),
+  timezone: TimezoneSchema.optional(),
 });
 
 export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;

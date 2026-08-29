@@ -14,6 +14,7 @@ import ProductCard, {
 import { useQuotesStore } from '~/stores/quotes';
 import { useFavoritesStore } from '~/stores/favorites';
 import { getQuoteStatusPillClass } from '~/utils/quote-status';
+import { formatTenantDate } from '~/utils/tenant-date';
 import { Button } from '~/components/ui/button';
 
 definePageMeta({
@@ -22,6 +23,7 @@ definePageMeta({
 
 const { t } = useI18n();
 const { localePath } = useLocaleMarket();
+const { timezone } = useTenant();
 
 // ---------------------------------------------------------------------------
 // Orders data
@@ -102,16 +104,7 @@ const mostPurchasedSubtitle = computed(() => {
 // Helpers
 // ---------------------------------------------------------------------------
 function formatDate(dateStr: string | number | null | undefined): string {
-  if (dateStr == null) return '-';
-  try {
-    return new Date(dateStr).toLocaleDateString('sv-SE', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-  } catch {
-    return String(dateStr);
-  }
+  return formatTenantDate(dateStr, timezone.value);
 }
 
 function getStatusLabel(status: QuoteStatus): string {

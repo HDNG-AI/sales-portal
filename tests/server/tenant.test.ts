@@ -13,6 +13,7 @@ import {
   mergeDeep,
   resolvePreviewTenant,
   DEFAULT_CMS_CONFIG,
+  getTenantById,
 } from '../../server/utils/tenant';
 import { CMS_MENUS } from '../../shared/constants/cms';
 import { CMS_SLOTS } from '../../shared/types/cms-slots';
@@ -49,6 +50,7 @@ const { mockLoggerWarn, mockUseRuntimeConfig, mockUseStorage } = vi.hoisted(
     })),
   }),
 );
+vi.stubGlobal('useStorage', mockUseStorage);
 vi.mock('#imports', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -891,6 +893,49 @@ describe('Tenant utilities', () => {
       expect(storage.data.get(tenantIdKey('shared.example.com'))).toBe(
         'tenant-b',
       );
+    });
+  });
+
+  describe('getTenantById', () => {
+    it('backfills timezone on a config stored before the field existed', async () => {
+      // A raw KV read isn't re-validated against the schema, so a record
+      // written before `timezone` was added to TenantConfig comes back
+      // without it.
+      const legacy = {
+        tenantId: 'legacy-tenant',
+        hostname: 'legacy.example.com',
+        mode: 'commerce',
+        checkoutMode: 'hosted',
+        theme: { name: 'legacy-tenant', colors: {} as ThemeColors },
+        css: '',
+        branding: { name: 'Legacy', watermark: 'full' },
+        features: {},
+        isActive: true,
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+      } as unknown as TenantConfig;
+
+      mockUseStorage.mockReturnValue({
+        getItem: vi.fn(() => Promise.resolve(legacy)),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        hasItem: vi.fn(() => Promise.resolve(false)),
+      });
+
+      const result = await getTenantById('legacy-tenant');
+      expect(result?.timezone).toBe('UTC');
+    });
+
+    it('returns null for a missing config without throwing', async () => {
+      mockUseStorage.mockReturnValue({
+        getItem: vi.fn(() => Promise.resolve(null)),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        hasItem: vi.fn(() => Promise.resolve(false)),
+      });
+
+      const result = await getTenantById('nonexistent');
+      expect(result).toBeNull();
     });
   });
 
