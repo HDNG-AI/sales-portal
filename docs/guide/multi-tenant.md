@@ -198,10 +198,13 @@ tenants get configured — most tenants are still configured externally per
 bringing up a tenant that doesn't have a merchant-API record yet, or to
 patch a field on one that does.
 
-Gated by `?key=<NUXT_ADMIN_SECRET>` (separate secret from the health-check
-one — this gates a write). Calling it again with the same `tenantId`
-updates the existing tenant in place rather than creating a duplicate;
-fields omitted from the request body are left untouched, not blanked (see
+Gated by the `X-Admin-Key: <NUXT_ADMIN_SECRET>` header (separate secret from
+the health-check one — this gates a write, and a header rather than a query
+param so the secret never lands in a logged request URL). Calling it again
+with the same `tenantId` updates the existing tenant in place rather than
+creating a duplicate — the request's `hostname` must already be one of that
+tenant's known hostnames/aliases, or the call is rejected; fields omitted
+from the request body are left untouched, not blanked (see
 `mergeTenantConfig` in `server/utils/tenant-crud.ts`).
 
 ### Parameters
@@ -225,7 +228,8 @@ fields omitted from the request body are left untouched, not blanked (see
 ### Example
 
 ```bash
-curl -X POST "https://<host>/api/admin/tenants?key=$NUXT_ADMIN_SECRET" \
+curl -X POST "https://<host>/api/admin/tenants" \
+  -H "X-Admin-Key: $NUXT_ADMIN_SECRET" \
   -H "Content-Type: application/json" \
   -d '{
     "hostname": "www.example-store.com",
