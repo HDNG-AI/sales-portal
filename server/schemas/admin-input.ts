@@ -5,6 +5,7 @@ import {
   ThemeTypographySchema,
   ThemeColorsSchema,
   TenantModeSchema,
+  TimezoneSchema,
 } from './store-settings';
 
 /**
@@ -60,9 +61,8 @@ export const CreateTenantSchema = z
       .optional(),
     mode: TenantModeSchema.optional(),
     checkoutMode: z.enum(['custom', 'hosted']).optional(),
-    // IANA identifier, e.g. 'Europe/Stockholm' — never a raw UTC offset.
     // Omitted → createTenant() defaults to 'UTC', not a guessed value.
-    timezone: z.string().optional(),
+    timezone: TimezoneSchema.optional(),
   })
   // An unrecognized field (a typo, or a value from a different schema
   // entirely) should fail loudly, not be silently dropped — the caller

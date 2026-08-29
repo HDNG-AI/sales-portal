@@ -44,4 +44,11 @@ describe('formatTenantDate', () => {
       '2025-12-22T12:00:00Z',
     );
   });
+
+  // SDK ProductList.updatedAt is a numeric epoch (Date.now()), not an ISO
+  // string — portal/index.vue's stat cards format that directly.
+  it('accepts a numeric epoch timestamp, not just an ISO string', () => {
+    const epoch = Date.UTC(2025, 11, 22, 23, 30);
+    expect(formatTenantDate(epoch, 'UTC')).toBe('2025-12-22');
+  });
 });

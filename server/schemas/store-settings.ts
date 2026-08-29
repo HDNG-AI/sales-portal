@@ -118,6 +118,32 @@ const SafeUrlSchema = z.string().refine(
   { message: 'Must be a valid HTTP(S) URL' },
 );
 
+/**
+ * IANA timezone identifier (e.g. 'Europe/Stockholm', 'UTC'), never a raw
+ * UTC offset — an offset doesn't shift for daylight saving. Validated by
+ * attempting construction rather than checking against
+ * Intl.supportedValuesOf('timeZone'), which omits 'UTC' itself even
+ * though the runtime accepts it as a real timeZone value. Rejects both
+ * offsets ('GMT+1') and plausible-looking nonsense ('Ohio/United-States').
+ * See docs/adr/023-tenant-operating-timezone.md for why 'UTC' — not
+ * 'Etc/UTC' (functionally identical) or a tenant-specific guess — is the
+ * default everywhere this schema is used.
+ */
+export const TimezoneSchema = z.string().refine(
+  (val) => {
+    try {
+      new Intl.DateTimeFormat(undefined, { timeZone: val });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  {
+    message:
+      'Must be a valid IANA timezone identifier, e.g. "Europe/Stockholm"',
+  },
+);
+
 export const BrandingConfigSchema = z.object({
   name: z.string(),
   watermark: z.enum(['full', 'minimal', 'none']),
@@ -287,10 +313,10 @@ export const StoreSettingsSchema = z.object({
   geinsSettings: GeinsSettingsSchema,
   mode: TenantModeSchema,
   checkoutMode: z.enum(['custom', 'hosted']).default('custom'),
-  // IANA identifier, e.g. 'Europe/Stockholm' — never a raw UTC offset.
   // Not a field the Geins platform sends; defaults generic (UTC) rather
-  // than guessing a tenant-specific value. See docs/lessons-learned.md.
-  timezone: z.string().default('UTC'),
+  // than guessing a tenant-specific value. See
+  // docs/adr/023-tenant-operating-timezone.md.
+  timezone: TimezoneSchema.default('UTC'),
   theme: ThemeConfigSchema,
   branding: BrandingConfigSchema,
   features: z.record(z.string(), FeatureConfigInputSchema).default({}),

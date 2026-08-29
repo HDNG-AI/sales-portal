@@ -77,6 +77,14 @@ describe('CreateTenantSchema', () => {
     if (result.success) expect(result.data.timezone).toBeUndefined();
   });
 
+  it('rejects a raw UTC offset instead of an IANA timezone identifier', () => {
+    const result = CreateTenantSchema.safeParse({
+      hostname: 'a.example.com',
+      timezone: 'GMT+1',
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects an unknown geinsSettings.environment value', () => {
     const result = CreateTenantSchema.safeParse({
       hostname: 'a.example.com',

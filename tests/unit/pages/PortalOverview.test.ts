@@ -53,6 +53,13 @@ vi.mock('../../../app/composables/useLocaleMarket', () => ({
   }),
 }));
 
+// Mock useTenant — the page only reads `timezone` from it.
+vi.stubGlobal('useTenant', () => ({ timezone: computed(() => 'UTC') }));
+
+vi.mock('../../../app/composables/useTenant', () => ({
+  useTenant: () => ({ timezone: computed(() => 'UTC') }),
+}));
+
 // Mock callOnce — calls the factory function synchronously (mirrors Nuxt's callOnce)
 vi.stubGlobal(
   'callOnce',

@@ -12,6 +12,7 @@ import {
   resolveTenant,
   DEFAULT_GEINS_SETTINGS,
   invalidateTenantCaches,
+  withTenantConfigDefaults,
 } from './tenant';
 import { withoutUndefined } from './object';
 
@@ -63,9 +64,12 @@ export async function createTenant(
   const finalTenantId = tenantId || hostname;
   const identity = { tenantId: finalTenantId, hostname };
 
-  const existingConfig = await storage.getItem<TenantConfig>(
+  const rawExistingConfig = await storage.getItem<TenantConfig>(
     tenantConfigKey(finalTenantId),
   );
+  const existingConfig = rawExistingConfig
+    ? withTenantConfigDefaults(rawExistingConfig)
+    : null;
 
   if (existingConfig) {
     if (!partialConfig) return existingConfig;

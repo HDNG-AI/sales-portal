@@ -5,6 +5,7 @@ import { useAuthStore } from '~/stores/auth';
 
 const { t } = useI18n();
 const { localePath } = useLocaleMarket();
+const { timezone } = useTenant();
 const authStore = useAuthStore();
 
 defineProps<{
@@ -30,6 +31,7 @@ function formatDate(value: number | string | undefined): string {
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: timezone.value,
     });
   } catch {
     return String(value);

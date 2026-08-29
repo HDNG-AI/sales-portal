@@ -112,9 +112,35 @@ describe('createTenant', () => {
     });
     expect(tenant.geinsSettings).toEqual(DEFAULT_GEINS_SETTINGS);
     expect(tenant.isActive).toBe(false);
-    // Never OS timezone — see docs/lessons-learned.md.
+    // Never OS timezone — see docs/adr/023-tenant-operating-timezone.md.
     expect(tenant.timezone).toBe('UTC');
     expect(kvStore.get(tenantConfigKey('a.example.com'))).toEqual(tenant);
+  });
+
+  it('backfills timezone on a stored config from before the field existed', async () => {
+    // Simulate a KV record written before `timezone` was added to
+    // TenantConfig — a raw storage read wouldn't re-run schema defaults.
+    const legacy = {
+      tenantId: 'legacy-tenant',
+      hostname: 'legacy.example.com',
+      geinsSettings: DEFAULT_GEINS_SETTINGS,
+      mode: 'commerce',
+      checkoutMode: 'hosted',
+      theme: {},
+      branding: { name: 'Legacy', watermark: 'full' },
+      features: {},
+      isActive: true,
+      createdAt: '2020-01-01T00:00:00.000Z',
+      updatedAt: '2020-01-01T00:00:00.000Z',
+    };
+    kvStore.set(tenantConfigKey('legacy-tenant'), legacy);
+
+    const tenant = await createTenant({
+      hostname: 'legacy.example.com',
+      tenantId: 'legacy-tenant',
+    });
+
+    expect(tenant.timezone).toBe('UTC');
   });
 
   it('applies partial config over the defaults on fresh create', async () => {
