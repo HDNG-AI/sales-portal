@@ -72,6 +72,18 @@ export async function createTenant(
     : null;
 
   if (existingConfig) {
+    // The request's hostname must already belong to this tenant — a
+    // matching tenantId alone isn't proof the caller controls this
+    // hostname, since tenantId is a predictable slug, not a secret. This
+    // stops a request naming an unrelated hostname from silently
+    // retargeting or claiming it for an existing tenant. Adding a new
+    // hostname to a tenant is the `aliases` field's job, not this one.
+    if (!collectAllHostnames(existingConfig).has(hostname)) {
+      throw createAppError(
+        ErrorCode.CONFLICT,
+        `tenantId "${finalTenantId}" already exists for a different hostname`,
+      );
+    }
     if (!partialConfig) return existingConfig;
 
     const updatedConfig = mergeTenantConfig(

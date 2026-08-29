@@ -2,6 +2,7 @@ import type { H3Event } from 'h3';
 import { getHeader } from 'h3';
 import { timingSafeEqual } from 'node:crypto';
 import { RateLimiter, getClientIp } from './rate-limiter';
+import { readAdminAuthConfig } from './admin-config';
 
 const adminAuthRateLimiter = new RateLimiter({
   limit: 5,
@@ -49,7 +50,7 @@ export async function requireAdminAuth(event: H3Event): Promise<void> {
     throw createAppError(ErrorCode.RATE_LIMITED, 'Too many requests');
   }
 
-  const config = useRuntimeConfig(event);
+  const config = readAdminAuthConfig(event);
   const providedKey = getHeader(event, 'x-admin-key');
   if (
     !config.adminSecret ||

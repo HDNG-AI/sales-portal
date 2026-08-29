@@ -15,13 +15,15 @@ import { requireAdminAuth } from '../../utils/admin-auth';
  * onboarding step itself — that's setting up the merchant's Geins account
  * and product catalog, which happens on Geins' side.
  *
- * Gated on NUXT_ADMIN_SECRET via requireAdminAuth (server/utils/admin-auth.ts).
+ * Gated on NUXT_ADMIN_SECRET via requireAdminAuth (server/utils/admin-auth.ts)
+ * — header, constant-time compare, and rate limit; see that file for why.
  *
  * isActive defaults to false in createTenant() — a tenant created that way
  * would silently 404 on every hostname (resolveTenant only returns active
  * tenants). Always set true here since this endpoint's whole purpose is
  * producing a usable tenant, not a draft.
  */
+
 export default defineEventHandler(async (event) => {
   await requireAdminAuth(event);
 

@@ -11,6 +11,12 @@ import {
   DEFAULT_GEINS_SETTINGS,
 } from '../../server/utils/tenant';
 
+// Use the REAL createAppError / ErrorCode so the ownership-check test below
+// verifies the actual thrown error shape, not a mock's.
+const errorsModule = await import('../../server/utils/errors');
+vi.stubGlobal('createAppError', errorsModule.createAppError);
+vi.stubGlobal('ErrorCode', errorsModule.ErrorCode);
+
 const {
   mockUseStorage,
   mockClearSdkCache,
@@ -202,6 +208,42 @@ describe('createTenant', () => {
 
     expect(kvStore.get(tenantIdKey('www.boattools.store'))).toBe('boattools');
     expect(kvStore.get(tenantIdKey('boattools.localhost'))).toBe('boattools');
+  });
+
+  it("rejects a hostname that is not already one of the existing tenant's hostnames", async () => {
+    await createTenant({
+      hostname: 'www.boattools.store',
+      tenantId: 'boattools',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+
+    await expect(
+      createTenant({
+        hostname: 'attacker-controlled.example',
+        tenantId: 'boattools',
+        config: { branding: { name: 'Hijacked', watermark: 'none' } },
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('allows a request whose hostname is an existing alias, not just the primary', async () => {
+    await createTenant({
+      hostname: 'www.boattools.store',
+      tenantId: 'boattools',
+      config: {
+        isActive: true,
+        aliases: ['boattools.localhost'],
+        geinsSettings: GEINS_SETTINGS,
+      },
+    });
+
+    const updated = await createTenant({
+      hostname: 'boattools.localhost',
+      tenantId: 'boattools',
+      config: { branding: { name: 'Renamed', watermark: 'none' } },
+    });
+
+    expect(updated.branding).toEqual({ name: 'Renamed', watermark: 'none' });
   });
 
   it('preserves fields the update omits instead of blanking them (regression: undefined-spread clobber)', async () => {
