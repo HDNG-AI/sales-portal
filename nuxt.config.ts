@@ -414,7 +414,7 @@ export default defineNuxtConfig({
   // Vite configuration
   vite: {
     server: {
-      allowedHosts: ['.litium.portal', '.boattools.store'],
+      allowedHosts: ['.litium.portal'],
     },
   },
 });
