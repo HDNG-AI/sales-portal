@@ -8,6 +8,11 @@ import {
   AccordionTrigger,
 } from '~/components/ui/accordion';
 import { adminText } from '~/utils/product-texts';
+import { FileText } from 'lucide-vue-next';
+import {
+  classifyMediaParameter,
+  type ProductMediaParameter,
+} from '#shared/constants/product-media';
 
 const props = defineProps<{
   product: DetailProduct;
@@ -34,6 +39,30 @@ const detailsText3 = computed(() => {
 const hasDescription = computed(
   () => !!(detailsText2.value || detailsText3.value),
 );
+// Parameters whose name/value match a known media convention (see
+// shared/constants/product-media.ts) are pulled out of the spec table and
+// rendered as embeds/download links in the Documents tab instead — a raw
+// URL in a text-value row isn't useful to a shopper.
+const classifiedParameters = computed(() => {
+  const videos: ProductMediaParameter[] = [];
+  const documents: ProductMediaParameter[] = [];
+  const mediaKeys = new Set<string>();
+  for (const group of props.product.parameterGroups ?? []) {
+    for (const param of group.parameters ?? []) {
+      const media = classifyMediaParameter(param);
+      if (!media) continue;
+      mediaKeys.add(`${group.parameterGroupId}:${param.name}`);
+      (media.kind === 'video' ? videos : documents).push(media);
+    }
+  }
+  return { videos, documents, mediaKeys };
+});
+const videoItems = computed(() => classifiedParameters.value.videos);
+const documentItems = computed(() => classifiedParameters.value.documents);
+const hasDocumentsContent = computed(
+  () => videoItems.value.length > 0 || documentItems.value.length > 0,
+);
+
 const HIDDEN_PARAMETER_GROUPS = /^monitor$/i;
 const visibleGroups = computed(() =>
   (props.product.parameterGroups ?? [])
@@ -41,7 +70,12 @@ const visibleGroups = computed(() =>
     .map((g) => ({
       ...g,
       parameters: (g.parameters ?? []).filter(
-        (p) => (p.name || p.label) && p.value != null,
+        (p) =>
+          (p.name || p.label) &&
+          p.value != null &&
+          !classifiedParameters.value.mediaKeys.has(
+            `${g.parameterGroupId}:${p.name}`,
+          ),
       ),
     }))
     .filter((g) => g.parameters.length > 0),
@@ -193,7 +227,53 @@ onMounted(() => {
         <h3 class="font-heading mb-4 text-2xl font-bold">
           {{ $t('product.documents') }}
         </h3>
-        <p class="text-muted-foreground text-sm">
+        <div v-if="hasDocumentsContent" class="flex flex-col gap-8">
+          <div
+            v-if="videoItems.length"
+            class="grid gap-6 sm:grid-cols-2"
+            data-testid="product-videos"
+          >
+            <div
+              v-for="video in videoItems"
+              :key="video.url"
+              class="flex flex-col gap-2"
+            >
+              <p class="text-sm font-medium">{{ video.label }}</p>
+              <div
+                class="border-border aspect-video w-full overflow-hidden rounded-lg border"
+              >
+                <iframe
+                  v-if="video.embedUrl"
+                  :src="video.embedUrl"
+                  class="h-full w-full"
+                  frameborder="0"
+                  allowfullscreen
+                  allow="autoplay; encrypted-media"
+                  :title="video.label"
+                />
+                <video v-else :src="video.url" controls class="h-full w-full" />
+              </div>
+            </div>
+          </div>
+          <div
+            v-if="documentItems.length"
+            class="grid gap-3 sm:grid-cols-2"
+            data-testid="product-documents"
+          >
+            <a
+              v-for="doc in documentItems"
+              :key="doc.url"
+              :href="doc.url"
+              target="_blank"
+              rel="noopener"
+              class="border-border hover:bg-muted/40 flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
+            >
+              <FileText class="text-muted-foreground h-5 w-5 shrink-0" />
+              <span class="truncate">{{ doc.label }}</span>
+            </a>
+          </div>
+        </div>
+        <p v-else class="text-muted-foreground text-sm">
           {{ $t('product.no_documents') }}
         </p>
       </TabsContent>
@@ -267,7 +347,50 @@ onMounted(() => {
       <AccordionItem value="documents">
         <AccordionTrigger>{{ $t('product.documents') }}</AccordionTrigger>
         <AccordionContent>
-          <p class="text-muted-foreground text-sm">
+          <div v-if="hasDocumentsContent" class="flex flex-col gap-6">
+            <div v-if="videoItems.length" class="flex flex-col gap-4">
+              <div
+                v-for="video in videoItems"
+                :key="video.url"
+                class="flex flex-col gap-2"
+              >
+                <p class="text-sm font-medium">{{ video.label }}</p>
+                <div
+                  class="border-border aspect-video w-full overflow-hidden rounded-lg border"
+                >
+                  <iframe
+                    v-if="video.embedUrl"
+                    :src="video.embedUrl"
+                    class="h-full w-full"
+                    frameborder="0"
+                    allowfullscreen
+                    allow="autoplay; encrypted-media"
+                    :title="video.label"
+                  />
+                  <video
+                    v-else
+                    :src="video.url"
+                    controls
+                    class="h-full w-full"
+                  />
+                </div>
+              </div>
+            </div>
+            <div v-if="documentItems.length" class="flex flex-col gap-3">
+              <a
+                v-for="doc in documentItems"
+                :key="doc.url"
+                :href="doc.url"
+                target="_blank"
+                rel="noopener"
+                class="border-border hover:bg-muted/40 flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
+              >
+                <FileText class="text-muted-foreground h-5 w-5 shrink-0" />
+                <span class="truncate">{{ doc.label }}</span>
+              </a>
+            </div>
+          </div>
+          <p v-else class="text-muted-foreground text-sm">
             {{ $t('product.no_documents') }}
           </p>
         </AccordionContent>
