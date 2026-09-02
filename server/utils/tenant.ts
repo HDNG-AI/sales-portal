@@ -15,6 +15,7 @@ import {
 } from './storefront-settings-defaults';
 import { KV_STORAGE_KEYS } from '#shared/constants/storage';
 import { logger } from './logger';
+import { createTenantConfigInvalidError } from './errors';
 import { clearSdkCache } from '../services/_sdk';
 import {
   createDefaultTheme,
@@ -70,6 +71,39 @@ export const DEFAULT_CMS_CONFIG: NonNullable<TenantConfig['cms']> = {
 };
 
 /**
+ * Validates and resolves `GEINS_ENVIRONMENT` for the default/fallback Geins
+ * settings below.
+ *
+ * The previous `(process.env.GEINS_ENVIRONMENT as 'production' | 'staging')
+ * || 'production'` cast trusted the env var's shape instead of checking it —
+ * the exact "a cast hides the drift" anti-pattern CLAUDE.md calls out. A
+ * typo'd value here (e.g. the SDK-style "prod" instead of our "production")
+ * used to sail through silently at boot and only surface much later as a
+ * throw from `mapEnvironment()` in server/services/_sdk.ts — on every single
+ * `getTenantSDK()` call for any tenant that falls back to these defaults
+ * (auto-created dev tenants, the "not found" placeholder), not just once.
+ * Validating here fails loud a single time, at module load (this file is
+ * imported eagerly by the `02.tenant-context` Nitro plugin, so this runs
+ * before any request is served), turning a silent-then-per-request failure
+ * into one clear boot-time error.
+ */
+function isValidGeinsEnvironment(
+  value: string,
+): value is GeinsSettings['environment'] {
+  return value === 'production' || value === 'staging';
+}
+
+export function resolveDefaultGeinsEnvironment(): GeinsSettings['environment'] {
+  const raw = process.env.GEINS_ENVIRONMENT;
+  if (!raw) return 'production';
+  if (isValidGeinsEnvironment(raw)) return raw;
+  throw createTenantConfigInvalidError(
+    `Invalid GEINS_ENVIRONMENT env var: "${raw}". Expected "production" or "staging".`,
+    { value: raw },
+  );
+}
+
+/**
  * Default GeinsSettings for auto-created and fallback tenants.
  * Single source of truth — used in fetchTenantConfig and createTenant.
  */
@@ -80,8 +114,7 @@ export const DEFAULT_GEINS_SETTINGS: GeinsSettings = {
   tld: process.env.GEINS_TLD || 'se',
   locale: process.env.GEINS_LOCALE || 'sv-SE',
   market: process.env.GEINS_MARKET || 'se',
-  environment:
-    (process.env.GEINS_ENVIRONMENT as 'production' | 'staging') || 'production',
+  environment: resolveDefaultGeinsEnvironment(),
   availableLocales: [process.env.GEINS_LOCALE || 'sv-SE'],
   availableMarkets: [process.env.GEINS_MARKET || 'se'],
 };

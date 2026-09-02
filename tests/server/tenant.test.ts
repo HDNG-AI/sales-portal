@@ -14,6 +14,7 @@ import {
   resolvePreviewTenant,
   DEFAULT_CMS_CONFIG,
   getTenantById,
+  resolveDefaultGeinsEnvironment,
 } from '../../server/utils/tenant';
 import { CMS_MENUS } from '../../shared/constants/cms';
 import { CMS_SLOTS } from '../../shared/types/cms-slots';
@@ -1661,6 +1662,63 @@ describe('Tenant utilities', () => {
       const base = { a: 'live', b: true, c: 'keep-me' };
       const override = { a: '', b: false, c: null };
       expect(mergeDeep(base, override)).toEqual({ a: '', b: false, c: null });
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // DEFAULT_GEINS_SETTINGS reads GEINS_ENVIRONMENT through
+  // resolveDefaultGeinsEnvironment(), which replaced an unchecked
+  // `process.env.GEINS_ENVIRONMENT as 'production' | 'staging'` cast — a
+  // typo'd env var used to sail through silently and only surface later as
+  // a per-request throw from mapEnvironment() in server/services/_sdk.ts.
+  // ---------------------------------------------------------------------
+  describe('resolveDefaultGeinsEnvironment', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('defaults to production when GEINS_ENVIRONMENT is unset', () => {
+      vi.stubEnv('GEINS_ENVIRONMENT', '');
+      expect(resolveDefaultGeinsEnvironment()).toBe('production');
+    });
+
+    it('accepts a valid "production" value', () => {
+      vi.stubEnv('GEINS_ENVIRONMENT', 'production');
+      expect(resolveDefaultGeinsEnvironment()).toBe('production');
+    });
+
+    it('accepts a valid "staging" value', () => {
+      vi.stubEnv('GEINS_ENVIRONMENT', 'staging');
+      expect(resolveDefaultGeinsEnvironment()).toBe('staging');
+    });
+
+    it('fails loud (throws) for an unrecognized value instead of silently defaulting', () => {
+      // SDK-style value ("prod") is a realistic operator mistake — our
+      // internal config uses "production"/"staging", the SDK uses
+      // "prod"/"qa"/"dev". The old cast would have silently accepted this.
+      // createAppError only surfaces the specific message in development —
+      // in production it's sanitized to the generic ErrorCode message (see
+      // the next test for the environment-independent assertion via
+      // `.data.code`), so stub NODE_ENV here to check the message content.
+      vi.stubEnv('NODE_ENV', 'development');
+      vi.stubEnv('GEINS_ENVIRONMENT', 'prod');
+      expect(() => resolveDefaultGeinsEnvironment()).toThrow(
+        /Invalid GEINS_ENVIRONMENT/,
+      );
+    });
+
+    it('throws an error identifiable as TENANT_CONFIG_INVALID', () => {
+      vi.stubEnv('GEINS_ENVIRONMENT', 'prod');
+      let thrown: unknown;
+      try {
+        resolveDefaultGeinsEnvironment();
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toMatchObject({
+        statusCode: 500,
+        data: { code: 'TENANT_CONFIG_INVALID' },
+      });
     });
   });
 });
