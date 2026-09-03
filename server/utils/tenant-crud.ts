@@ -59,6 +59,7 @@ export async function createTenant(
 ): Promise<TenantConfig> {
   const { hostname, tenantId, config: partialConfig } = options;
   const storage = useStorage('kv');
+  const cacheStorage = useStorage('cache');
   const finalTenantId = tenantId || hostname;
   const identity = { tenantId: finalTenantId, hostname };
 
@@ -75,22 +76,29 @@ export async function createTenant(
       identity,
     );
     await storage.setItem(tenantConfigKey(finalTenantId), updatedConfig);
-    await writeHostnameMappings(storage, updatedConfig);
-    await invalidateTenantCaches(finalTenantId, hostname, useStorage('cache'));
+    // Independent writes to unrelated storage — hostname mappings live in
+    // `kv`, cache invalidation touches the `cache` namespace/in-memory
+    // maps — neither depends on the other completing first.
+    await Promise.all([
+      writeHostnameMappings(storage, updatedConfig),
+      invalidateTenantCaches(finalTenantId, hostname, cacheStorage),
+    ]);
     return updatedConfig;
   }
 
-  const defaultTheme = createDefaultTheme(finalTenantId);
-  const defaultThemeDerived = buildDerivedTheme(defaultTheme);
-
+  // theme/css/themeHash are placeholders here — mergeTenantConfig below is
+  // the only place that actually derives them (mergeThemes(baseConfig.theme,
+  // partialConfig?.theme) followed by buildDerivedTheme), so deriving them
+  // again here would just repeat the same 32-color computation, CSS
+  // generation, and hash for no reason.
   const baseConfig: TenantConfig = {
     ...identity,
     geinsSettings: { ...DEFAULT_GEINS_SETTINGS },
     mode: 'commerce',
     checkoutMode: 'hosted',
-    theme: defaultThemeDerived.themeWithDerived,
-    css: defaultThemeDerived.css,
-    themeHash: defaultThemeDerived.themeHash,
+    theme: createDefaultTheme(finalTenantId),
+    css: '',
+    themeHash: '',
     branding: { name: finalTenantId, watermark: 'full' },
     features: {
       search: { enabled: true },
@@ -104,11 +112,13 @@ export async function createTenant(
   const finalConfig = mergeTenantConfig(baseConfig, partialConfig, identity);
 
   await storage.setItem(tenantConfigKey(finalTenantId), finalConfig);
-  await writeHostnameMappings(storage, finalConfig);
-  // Clears any negative-cache entry from a lookup that happened before this
-  // hostname was onboarded, so it resolves immediately rather than waiting
-  // out the 5-minute TTL.
-  await invalidateTenantCaches(finalTenantId, hostname, useStorage('cache'));
+  await Promise.all([
+    writeHostnameMappings(storage, finalConfig),
+    // Clears any negative-cache entry from a lookup that happened before
+    // this hostname was onboarded, so it resolves immediately rather than
+    // waiting out the 5-minute TTL.
+    invalidateTenantCaches(finalTenantId, hostname, cacheStorage),
+  ]);
   return finalConfig;
 }
 
@@ -134,8 +144,10 @@ export async function updateTenant(
   });
 
   await storage.setItem(tenantConfigKey(tid), updatedConfig);
-  await writeHostnameMappings(storage, updatedConfig);
-  await invalidateTenantCaches(tid, existing.hostname, useStorage('cache'));
+  await Promise.all([
+    writeHostnameMappings(storage, updatedConfig),
+    invalidateTenantCaches(tid, existing.hostname, useStorage('cache')),
+  ]);
   return updatedConfig;
 }
 
@@ -160,12 +172,13 @@ export async function deleteTenant(hostname: string): Promise<boolean> {
       await storage.removeItem(tenantIdKey(hostname));
     }
 
-    await storage.removeItem(tenantConfigKey(tid));
-    if (tid !== hostname) {
-      await storage.removeItem(tenantConfigKey(hostname));
-    }
-
-    await invalidateTenantCaches(tid, hostname, useStorage('cache'));
+    await Promise.all([
+      storage.removeItem(tenantConfigKey(tid)),
+      tid !== hostname
+        ? storage.removeItem(tenantConfigKey(hostname))
+        : Promise.resolve(),
+      invalidateTenantCaches(tid, hostname, useStorage('cache')),
+    ]);
     return true;
   } catch {
     return false;

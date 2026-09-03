@@ -332,8 +332,6 @@ export function mergeThemes(
     ...base,
     ...withoutUndefined(updates),
     colors: { ...base.colors, ...withoutUndefined(updates.colors ?? {}) },
-    typography:
-      updates.typography !== undefined ? updates.typography : base.typography,
   };
 }
 
