@@ -85,4 +85,64 @@ describe('CreateTenantSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('normalizes hostname and aliases to lowercase, trimmed', () => {
+    const result = CreateTenantSchema.safeParse({
+      hostname: '  MyStore.Example.com  ',
+      aliases: ['Store.Localhost'],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hostname).toBe('mystore.example.com');
+      expect(result.data.aliases).toEqual(['store.localhost']);
+    }
+  });
+
+  it('rejects an unrecognized top-level field instead of silently dropping it', () => {
+    const result = CreateTenantSchema.safeParse({
+      hostname: 'a.example.com',
+      features: { cart: { enabled: false } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts an allowUpdate flag', () => {
+    const result = CreateTenantSchema.safeParse({
+      hostname: 'a.example.com',
+      allowUpdate: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('coerces theme colors from hex to oklch instead of accepting an arbitrary string', () => {
+    const result = CreateTenantSchema.safeParse({
+      hostname: 'a.example.com',
+      theme: {
+        name: 'Acme',
+        colors: {
+          primary: '#3b82f6',
+          primaryForeground: '#ffffff',
+          secondary: '#f3f4f6',
+          secondaryForeground: '#111111',
+          background: '#ffffff',
+          foreground: '#111111',
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.theme?.colors.primary).toMatch(/^oklch\(/);
+    }
+  });
+
+  it('rejects theme colors missing one of the 6 required core colors', () => {
+    const result = CreateTenantSchema.safeParse({
+      hostname: 'a.example.com',
+      theme: {
+        name: 'Acme',
+        colors: { primary: '#3b82f6' },
+      },
+    });
+    expect(result.success).toBe(false);
+  });
 });
