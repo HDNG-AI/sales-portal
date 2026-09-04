@@ -110,6 +110,15 @@ export interface TenantConfig {
     menus?: Partial<Record<CmsMenuKey, CmsMenuConfig>>;
   };
 
+  // Product-parameter → media-kind mapping — same pattern as `cms` above.
+  // A merchant's PIM names its video/document parameters freely (see
+  // shared/constants/product-media.ts); this maps that tenant's actual
+  // parameter names onto the fixed 'video'/'document' kinds the storefront
+  // knows how to render. Missing keys inherit PRODUCT_MEDIA_PARAMETER_DEFAULTS
+  // (merged in server/utils/tenant.ts), so an unconfigured tenant behaves
+  // exactly as if this field didn't exist.
+  productMediaParameters?: Record<string, 'video' | 'document'>;
+
   // Optional sections
   seo?: {
     defaultTitle?: string | null;
@@ -175,6 +184,7 @@ export interface PublicTenantConfig {
   layout?: TenantConfig['layout'];
   features: TenantConfig['features'];
   cms?: TenantConfig['cms'];
+  productMediaParameters?: TenantConfig['productMediaParameters'];
   seo?: TenantConfig['seo'];
   contact?: TenantConfig['contact'];
   css: string;

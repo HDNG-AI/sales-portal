@@ -293,6 +293,15 @@ const CmsConfigSchema = z
   .optional();
 
 /**
+ * Product-parameter → media-kind mapping carried through the merchant
+ * API's `appSettings.productMediaParameters` block — same shape and
+ * reasoning as CmsConfigSchema above, for shared/constants/product-media.ts.
+ */
+const ProductMediaParametersSchema = z
+  .record(z.string(), z.enum(['video', 'document']))
+  .optional();
+
+/**
  * Tenant mode. Merchant admin has historically emitted both `catalog`
  * (US) and `catalogue` (UK) spellings; we normalise to `catalog` so
  * downstream code only sees one. `z.preprocess` runs before validation
@@ -324,6 +333,7 @@ export const StoreSettingsSchema = z.object({
   contact: ContactConfigSchema.nullable().optional(),
   overrides: OverrideConfigSchema,
   cms: CmsConfigSchema,
+  productMediaParameters: ProductMediaParametersSchema,
   isActive: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),

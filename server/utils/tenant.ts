@@ -2,6 +2,7 @@ import type { H3Event } from 'h3';
 import type { TenantConfig } from '#shared/types/tenant-config';
 import { CMS_SLOTS } from '#shared/types/cms-slots';
 import { CMS_MENUS } from '#shared/constants/cms';
+import { PRODUCT_MEDIA_PARAMETER_DEFAULTS } from '#shared/constants/product-media';
 import type {
   StoreSettings,
   GeinsSettings,
@@ -353,6 +354,19 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     menus: { ...DEFAULT_CMS_CONFIG.menus, ...(tenantCms?.menus ?? {}) },
   };
 
+  // Same reasoning as cms above: a flat name→kind map, so a plain spread
+  // (tenant value wins per key) is enough — no nested sub-objects to merge
+  // individually.
+  const tenantProductMediaParameters = (
+    merged as {
+      productMediaParameters?: TenantConfig['productMediaParameters'];
+    }
+  ).productMediaParameters;
+  const productMediaParameters: TenantConfig['productMediaParameters'] = {
+    ...PRODUCT_MEDIA_PARAMETER_DEFAULTS,
+    ...tenantProductMediaParameters,
+  };
+
   return {
     tenantId: merged.tenantId,
     hostname: merged.hostname,
@@ -371,6 +385,7 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     contact: merged.contact,
     overrides: merged.overrides,
     cms,
+    productMediaParameters,
     css,
     themeHash,
     isActive: merged.isActive,
@@ -844,6 +859,7 @@ export async function fetchTenantConfig(
       // see DEFAULT_CMS_CONFIG above. Tenants override by setting `cms`
       // on their stored StoreSettings.
       cms: DEFAULT_CMS_CONFIG,
+      productMediaParameters: PRODUCT_MEDIA_PARAMETER_DEFAULTS,
       isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

@@ -18,6 +18,7 @@ import {
 } from '../../server/utils/tenant';
 import { CMS_MENUS } from '../../shared/constants/cms';
 import { CMS_SLOTS } from '../../shared/types/cms-slots';
+import { PRODUCT_MEDIA_PARAMETER_DEFAULTS } from '../../shared/constants/product-media';
 import partialPayloadFixture from '../fixtures/store-settings/partial-payload.json';
 import {
   createDefaultTheme,
@@ -780,6 +781,79 @@ describe('Tenant utilities', () => {
       // A sibling default slot the tenant did not touch is still present
       expect(built.cms?.slots?.[CMS_SLOTS.PORTAL_HERO]).toEqual(
         DEFAULT_CMS_CONFIG.slots[CMS_SLOTS.PORTAL_HERO],
+      );
+    });
+  });
+
+  describe('buildTenantConfig productMediaParameters merge', () => {
+    function settingsWithProductMediaParameters(
+      productMediaParameters?: StoreSettings['productMediaParameters'],
+    ): StoreSettings {
+      return {
+        tenantId: 'tenant-media',
+        hostname: 'tenant-media.litium.store',
+        geinsSettings: {
+          apiKey: 'k',
+          accountName: 'a',
+          channel: '1',
+          tld: 'se',
+          locale: 'sv-SE',
+          market: 'se',
+          environment: 'production',
+          availableLocales: ['sv-SE'],
+          availableMarkets: ['se'],
+        },
+        mode: 'commerce',
+        checkoutMode: 'custom',
+        theme: {
+          colors: {
+            primary: 'oklch(0.5 0.1 200)',
+            primaryForeground: 'oklch(0.9 0 0)',
+            secondary: 'oklch(0.8 0 0)',
+            secondaryForeground: 'oklch(0.2 0 0)',
+            background: 'oklch(1 0 0)',
+            foreground: 'oklch(0.1 0 0)',
+          },
+        },
+        branding: { name: 'X', watermark: 'full' },
+        features: {},
+        productMediaParameters,
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+    }
+
+    it('unconfigured tenant resolves to the code defaults', () => {
+      const built = buildTenantConfig(
+        settingsWithProductMediaParameters(undefined),
+      );
+      expect(built.productMediaParameters).toEqual(
+        PRODUCT_MEDIA_PARAMETER_DEFAULTS,
+      );
+    });
+
+    it("a tenant naming a parameter differently (e.g. 'Datasheet') still inherits the untouched defaults", () => {
+      const built = buildTenantConfig(
+        settingsWithProductMediaParameters({ datasheet: 'document' }),
+      );
+      expect(built.productMediaParameters?.datasheet).toBe('document');
+      expect(built.productMediaParameters?.videourl).toBe(
+        PRODUCT_MEDIA_PARAMETER_DEFAULTS.videourl,
+      );
+      expect(built.productMediaParameters?.manual).toBe(
+        PRODUCT_MEDIA_PARAMETER_DEFAULTS.manual,
+      );
+    });
+
+    it('an explicit tenant override wins over the default for that key', () => {
+      const built = buildTenantConfig(
+        settingsWithProductMediaParameters({ manual: 'video' }),
+      );
+      expect(built.productMediaParameters?.manual).toBe('video');
+      // Sibling default remains intact
+      expect(built.productMediaParameters?.videourl).toBe(
+        PRODUCT_MEDIA_PARAMETER_DEFAULTS.videourl,
       );
     });
   });

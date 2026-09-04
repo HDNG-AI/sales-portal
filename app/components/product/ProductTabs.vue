@@ -39,17 +39,19 @@ const detailsText3 = computed(() => {
 const hasDescription = computed(
   () => !!(detailsText2.value || detailsText3.value),
 );
-// Parameters whose name/value match a known media convention (see
-// shared/constants/product-media.ts) are pulled out of the spec table and
-// rendered as embeds/download links in the Documents tab instead — a raw
-// URL in a text-value row isn't useful to a shopper.
+// Parameters whose name/value match this tenant's media convention (see
+// shared/constants/product-media.ts and tenant.productMediaParameters) are
+// pulled out of the spec table and rendered as embeds/download links in the
+// Documents tab instead — a raw URL in a text-value row isn't useful to a
+// shopper.
+const { productMediaParameters } = useTenant();
 const classifiedParameters = computed(() => {
   const videos: ProductMediaParameter[] = [];
   const documents: ProductMediaParameter[] = [];
   const mediaKeys = new Set<string>();
   for (const group of props.product.parameterGroups ?? []) {
     for (const param of group.parameters ?? []) {
-      const media = classifyMediaParameter(param);
+      const media = classifyMediaParameter(param, productMediaParameters.value);
       if (!media) continue;
       mediaKeys.add(`${group.parameterGroupId}:${param.name}`);
       (media.kind === 'video' ? videos : documents).push(media);

@@ -1,12 +1,21 @@
 /**
- * Maps known product-parameter names to a media kind.
+ * Default parameter-name → media-kind mapping, used when a tenant hasn't
+ * configured its own via `tenant.productMediaParameters` (see
+ * shared/types/tenant-config.ts). Mirrors the `cms.slots`/`cms.menus`
+ * pattern in shared/types/cms-slots.ts: parameter naming is decided by
+ * whichever backend feeds a tenant's product data (PIM / merchant admin),
+ * and Geins admin lets each merchant name their own parameters freely —
+ * hardcoding one naming convention here would break any tenant whose PIM
+ * calls the same concept something else (`Datasheet` instead of `Manual`,
+ * for example). This table is only the seed every tenant starts from;
+ * `classifyMediaParameter` always takes the tenant's resolved table
+ * (defaults merged with that tenant's overrides, computed server-side in
+ * server/utils/tenant.ts and delivered via PublicTenantConfig) as an
+ * explicit argument rather than reading this constant directly.
  *
- * Parameter naming is decided entirely by whichever backend feeds tenant
- * product data (PIM / merchant admin) — this table is the single place
- * where a new naming convention gets added as new backends or tenants are
- * onboarded. Matching is exact (case-insensitive) against the parameter's
- * technical `name`, never its localized `label` — the merchant admin this
- * was modeled on leaves `label` equal to `name` for these anyway, treating
+ * Matching is exact (case-insensitive) against a parameter's technical
+ * `name`, never its localized `label` — the merchant admin this was
+ * modeled on leaves `label` equal to `name` for these anyway, treating
  * them as keys rather than display text.
  *
  * A name match alone is not enough: `classifyMediaParameter` also requires
@@ -14,7 +23,10 @@
  * sometimes filled with plain text instead of a link falls through to a
  * normal spec row automatically.
  */
-export const PRODUCT_MEDIA_PARAMETERS: Record<string, 'video' | 'document'> = {
+export const PRODUCT_MEDIA_PARAMETER_DEFAULTS: Record<
+  string,
+  'video' | 'document'
+> = {
   videourl: 'video',
   manual: 'document',
   productspec: 'document',
@@ -65,18 +77,29 @@ export function resolveVideoEmbedUrl(url: string): string | null {
 
 /**
  * Classifies a product parameter as video/document media, or returns null
- * when it isn't one — either its name isn't in the known table, or its
- * value doesn't look like a URL.
+ * when it isn't one — either its name isn't in `parameters`, or its value
+ * doesn't look like a URL.
+ *
+ * @param parameters - The tenant's resolved name→kind table (defaults
+ *   merged with that tenant's own overrides). Falls back to
+ *   PRODUCT_MEDIA_PARAMETER_DEFAULTS when omitted, for callers that don't
+ *   have tenant context (e.g. standalone tests).
  */
-export function classifyMediaParameter(param: {
-  name?: string;
-  label?: string;
-  value?: string;
-}): ProductMediaParameter | null {
+export function classifyMediaParameter(
+  param: {
+    name?: string;
+    label?: string;
+    value?: string;
+  },
+  parameters: Record<
+    string,
+    ProductMediaKind
+  > = PRODUCT_MEDIA_PARAMETER_DEFAULTS,
+): ProductMediaParameter | null {
   const key = param.name?.trim().toLowerCase();
   if (!key) return null;
 
-  const kind = PRODUCT_MEDIA_PARAMETERS[key];
+  const kind = parameters[key];
   if (!kind || !isUrlValue(param.value)) return null;
 
   const url = param.value.trim();
