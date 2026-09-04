@@ -14,8 +14,13 @@ const adminAuthRateLimiter = new RateLimiter({
  * buffers, so a length mismatch returns false before reaching it — leaking
  * the two values' length isn't the property this protects; leaking how
  * many leading bytes matched is.
+ *
+ * Exported so this decision logic is directly unit-testable, independent
+ * of the H3/Nitro plumbing (rate limiter, headers, runtime config) around
+ * it in requireAdminAuth below — and so other secret-gated endpoints (see
+ * server/api/health.get.ts) can reuse it instead of a plain `!==`.
  */
-function timingSafeStringEqual(a: string, b: string): boolean {
+export function timingSafeStringEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;
