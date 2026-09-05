@@ -270,7 +270,7 @@ export const OverrideConfigSchema = z
  * block. Loosely typed here (record-of-record) — the strict shape lives in
  * `shared/types/cms-slots.ts` and `shared/constants/cms.ts`.
  */
-const CmsConfigSchema = z
+export const CmsConfigSchema = z
   .object({
     slots: z
       .record(

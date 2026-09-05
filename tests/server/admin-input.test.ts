@@ -160,4 +160,39 @@ describe('CreateTenantSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts a cms slot pointing at a real Geins Studio family/areaName', () => {
+    const result = CreateTenantSchema.safeParse({
+      hostname: 'a.example.com',
+      cms: {
+        slots: {
+          frontpage_content: {
+            family: 'Frontpage',
+            areaName: 'The front page area',
+          },
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cms?.slots?.frontpage_content).toEqual({
+        family: 'Frontpage',
+        areaName: 'The front page area',
+      });
+    }
+  });
+
+  it('accepts a payload with cms omitted (a tenant without CMS wiring just gets the empty-state fallback)', () => {
+    const result = CreateTenantSchema.safeParse({ hostname: 'a.example.com' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.cms).toBeUndefined();
+  });
+
+  it('rejects a cms slot missing its required family or areaName', () => {
+    const result = CreateTenantSchema.safeParse({
+      hostname: 'a.example.com',
+      cms: { slots: { frontpage_content: { family: 'Frontpage' } } },
+    });
+    expect(result.success).toBe(false);
+  });
 });

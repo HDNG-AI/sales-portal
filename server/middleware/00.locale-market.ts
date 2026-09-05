@@ -1,5 +1,6 @@
 import { COOKIE_NAMES } from '#shared/constants/storage';
 import { ROUTE_PATHS } from '#shared/constants/route-paths';
+import { sendTenantErrorPage } from '../utils/tenant-error-response';
 
 const TYPE_PREFIX_SEGMENTS = new Set(
   Object.values(ROUTE_PATHS).map((p) => p.slice(1)),
@@ -27,6 +28,12 @@ const TYPE_PREFIX_SEGMENTS = new Set(
  * Does NOT validate market/locale against the resolved tenant config —
  * that's `app/middleware/locale-market.client.ts`'s job (runs after the
  * tenant context plugin).
+ *
+ * Also responds directly (via sendTenantErrorPage) when
+ * server/plugins/02.tenant-context.ts flagged the request with
+ * `event.context.tenantResolutionError` — same reasoning as sendRedirect
+ * above: that plugin's `request` hook runs before route-rules apply their
+ * headers, so only middleware (this file) can safely send that response.
  */
 function isTwoLetterCode(segment: string): boolean {
   return /^[a-z]{2}$/.test(segment);
@@ -42,6 +49,16 @@ export default defineEventHandler((event) => {
     fullPath.startsWith('/__nuxt')
   ) {
     return;
+  }
+
+  // server/plugins/02.tenant-context.ts's `request` hook fires before
+  // route-rules apply their headers, so it can't safely send a response
+  // itself (see sendTenantErrorPage's comment) — it only flags the
+  // failure. This middleware runs after route-rules, so it's the safe
+  // place to actually respond.
+  if (event.context.tenantResolutionError) {
+    const { statusCode, message } = event.context.tenantResolutionError;
+    return sendTenantErrorPage(event, statusCode, message);
   }
 
   const queryIndex = fullPath.indexOf('?');

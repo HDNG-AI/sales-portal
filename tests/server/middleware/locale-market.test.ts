@@ -4,11 +4,16 @@ import type { H3Event } from 'h3';
 const getCookieMock = vi.fn();
 const setCookieMock = vi.fn();
 const sendRedirectMock = vi.fn();
+const sendTenantErrorPageMock = vi.fn();
 
 vi.stubGlobal('getCookie', getCookieMock);
 vi.stubGlobal('setCookie', setCookieMock);
 vi.stubGlobal('sendRedirect', sendRedirectMock);
 vi.stubGlobal('defineEventHandler', (fn: (e: H3Event) => unknown) => fn);
+
+vi.mock('../../../server/utils/tenant-error-response', () => ({
+  sendTenantErrorPage: (...args: unknown[]) => sendTenantErrorPageMock(...args),
+}));
 
 vi.mock('#shared/constants/storage', () => ({
   COOKIE_NAMES: {
@@ -128,5 +133,44 @@ describe('00.locale-market middleware', () => {
   it('does not redirect URLs that are neither root nor type-prefixed', () => {
     handler(makeEvent('/about-us'));
     expect(sendRedirectMock).not.toHaveBeenCalled();
+  });
+
+  describe('tenantResolutionError flagged by server/plugins/02.tenant-context.ts', () => {
+    it('responds via sendTenantErrorPage instead of the normal redirect logic', () => {
+      const event = makeEvent('/');
+      event.context.tenantResolutionError = {
+        statusCode: 404,
+        message: 'This site is not available.',
+      };
+      handler(event);
+      expect(sendTenantErrorPageMock).toHaveBeenCalledWith(
+        event,
+        404,
+        'This site is not available.',
+      );
+      // Must not also run the root-path redirect this path would normally hit.
+      expect(sendRedirectMock).not.toHaveBeenCalled();
+    });
+
+    it('takes priority even on a type-prefixed path that would otherwise redirect', () => {
+      const event = makeEvent('/p/foo/bar');
+      event.context.tenantResolutionError = {
+        statusCode: 400,
+        message: 'Missing host header',
+      };
+      handler(event);
+      expect(sendTenantErrorPageMock).toHaveBeenCalledWith(
+        event,
+        400,
+        'Missing host header',
+      );
+      expect(sendRedirectMock).not.toHaveBeenCalled();
+    });
+
+    it('is not triggered when the flag is absent (regression guard)', () => {
+      const event = makeEvent('/');
+      handler(event);
+      expect(sendTenantErrorPageMock).not.toHaveBeenCalled();
+    });
   });
 });

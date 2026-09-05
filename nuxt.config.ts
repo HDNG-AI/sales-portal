@@ -31,6 +31,41 @@ function createPrefixedRoutes(pages: NuxtPage[], depth = 0): NuxtPage[] {
   return result;
 }
 
+/**
+ * Resolves the Nitro `storage.kv` mount from NUXT_STORAGE_DRIVER /
+ * NUXT_STORAGE_REDIS_URL. This is the mount `useStorage('kv')` actually
+ * reads/writes tenant config through everywhere in server/ — the
+ * `runtimeConfig.storage` block further down is display-only (read once,
+ * in server/api/health.get.ts, purely to report the configured driver
+ * back in the health response); it was never wired to anything that
+ * configures the real mount, so setting NUXT_STORAGE_DRIVER=redis alone
+ * silently did nothing and every tenant kept living in that one process's
+ * memory regardless — on Railway too, since this file is evaluated at
+ * build time and baked into the image.
+ *
+ * Accepts either a full `redis://user:pass@host:port` URL or a bare
+ * `host:port` (unstorage's redis driver's `url` option requires the
+ * `redis://` scheme to parse correctly; a bare host:port is split into
+ * discrete host/port fields instead).
+ */
+function resolveKvStorageMount():
+  | { driver: 'memory' }
+  | Record<string, unknown> {
+  if (process.env.NUXT_STORAGE_DRIVER !== 'redis') {
+    return { driver: 'memory' };
+  }
+  const raw = process.env.NUXT_STORAGE_REDIS_URL ?? '';
+  if (raw.includes('://')) {
+    return { driver: 'redis', url: raw };
+  }
+  const [host, port] = raw.split(':');
+  return {
+    driver: 'redis',
+    host: host || 'localhost',
+    port: Number(port) || 6379,
+  };
+}
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   // Off when E2E=1: the DevTools frame intercepts taps at phone viewports.
@@ -326,9 +361,7 @@ export default defineNuxtConfig({
 
   nitro: {
     storage: {
-      kv: {
-        driver: 'memory',
-      },
+      kv: resolveKvStorageMount(),
     },
     // Enable compression
     compressPublicAssets: true,

@@ -1,3 +1,9 @@
+// createError is an explicit h3 import, not an auto-import global, matching
+// server/error.ts's own choice: it collides with a same-named Nuxt app-side
+// composable (nuxt/dist/app/composables/error) — the auto-import resolver
+// picks that one over h3's server-side export in some tooling contexts,
+// constructing an unthrown app-side error object instead of the real thing.
+import { createError } from 'h3';
 import { COOKIE_NAMES } from '#shared/constants/storage';
 import { resolveLocaleMarket } from '#shared/utils/locale-market';
 import { resolveTenant, resolvePreviewTenant } from '../utils/tenant';
@@ -27,6 +33,21 @@ export default defineNitroPlugin((nitroApp) => {
       return;
     }
 
+    // For page routes, a thrown error — or a response sent directly from
+    // this plugin's `request` hook — flows through Nitro's HTML renderer
+    // (app/error.vue) before route-rules have applied their headers, both
+    // of which crash (see server/utils/tenant-error-response.ts's comment).
+    // So for page routes this plugin only stashes the failure on
+    // event.context.tenantResolutionError; server/middleware/00.locale-market.ts
+    // is what actually calls sendTenantErrorPage, since middleware runs
+    // after route-rules and after this plugin's i18n-context-registering
+    // sibling. API/asset routes are fine with the normal throw; h3
+    // serializes it as JSON without touching that renderer.
+    const isPageRoute =
+      !path.startsWith('/api/') &&
+      !path.startsWith('/_nuxt/') &&
+      !path.startsWith('/__nuxt');
+
     // Get the request host for dynamic request routing
     // without considering the `X-Forwarded-Host` header which could be spoofed.
     const rawHostname = getRequestHost(event, { xForwardedHost: false });
@@ -35,6 +56,13 @@ export default defineNitroPlugin((nitroApp) => {
     // Validate hostname is present to prevent empty tenant IDs
     // polluting cache keys and storage
     if (!hostname) {
+      if (isPageRoute) {
+        event.context.tenantResolutionError = {
+          statusCode: 400,
+          message: 'Missing host header',
+        };
+        return;
+      }
       throw createError({ statusCode: 400, message: 'Missing host header' });
     }
 
@@ -51,20 +79,17 @@ export default defineNitroPlugin((nitroApp) => {
     // For page routes, eagerly resolve the tenant and cache the tenantId in a cookie.
     // resolveTenant() returns null for both missing and inactive tenants.
     // Static assets and API routes are excluded.
-    if (
-      !path.startsWith('/api/') &&
-      !path.startsWith('/_nuxt/') &&
-      !path.startsWith('/__nuxt')
-    ) {
+    if (isPageRoute) {
       const tenant = isStoreSettingsPreview
         ? await resolvePreviewTenant(hostname, event)
         : await resolveTenant(hostname, event);
       if (!tenant) {
-        throw createError({
+        event.context.tenantResolutionError = {
           statusCode: 404,
-          statusMessage: 'Not Found',
-          message: `This site is not available. If you believe this is an error, please contact support.`,
-        });
+          message:
+            'This site is not available. If you believe this is an error, please contact support.',
+        };
+        return;
       }
 
       // Store the real tenantId and full config in context

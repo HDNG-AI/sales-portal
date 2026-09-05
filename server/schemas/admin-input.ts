@@ -6,6 +6,7 @@ import {
   ThemeColorsSchema,
   TenantModeSchema,
   TimezoneSchema,
+  CmsConfigSchema,
 } from './store-settings';
 
 /**
@@ -49,6 +50,11 @@ export const CreateTenantSchema = z
       })
       .optional(),
     branding: BrandingConfigSchema.partial({ watermark: true }).optional(),
+    // CMS slot/menu wiring — maps this tenant's real Geins Studio
+    // family/areaName values onto the storefront's named slots (see
+    // docs/patterns/cms-config.md). Optional: a tenant without this
+    // configured just gets the empty-state fallback on CMS-driven pages.
+    cms: CmsConfigSchema,
     geinsSettings: GeinsSettingsSchema.omit({
       availableLocales: true,
       availableMarkets: true,

@@ -86,6 +86,67 @@ describe('POST /api/admin/tenants', () => {
     });
   });
 
+  it('falls back to the placeholder DEFAULT_GEINS_SETTINGS for a brand-new tenant with no geinsSettings provided', async () => {
+    mockBody();
+    mockResolveTenant.mockResolvedValue(null);
+    const handler = (await import('../../../../server/api/admin/tenants.post'))
+      .default;
+    await handler(mockEvent);
+    const [{ config }] = mockCreateTenant.mock.calls[0] as [
+      { config: { geinsSettings?: unknown } },
+    ];
+    expect(config.geinsSettings).toEqual(
+      expect.objectContaining({ apiKey: 'dev', accountName: 'dev' }),
+    );
+  });
+
+  it('preserves an existing tenant real geinsSettings when updating without providing new ones (regression: omitting geinsSettings must never blank out real credentials)', async () => {
+    // Reproduces the bug found live on 2026-09-05: updating boattools'
+    // cms.menus without resending geinsSettings silently reset its real
+    // Geins API key back to the DEFAULT_GEINS_SETTINGS placeholder,
+    // breaking every live product/CMS call for that tenant.
+    mockBody({ allowUpdate: true, cms: { slots: {} } });
+    mockResolveTenant.mockResolvedValue({
+      tenantId: 'existing-shop',
+      hostname: 'shop.example.com',
+      geinsSettings: { apiKey: 'real-boattools-key', accountName: 'boattools' },
+    });
+    const handler = (await import('../../../../server/api/admin/tenants.post'))
+      .default;
+    await handler(mockEvent);
+    const [{ config }] = mockCreateTenant.mock.calls[0] as [
+      { config: { geinsSettings?: unknown } },
+    ];
+    expect(config.geinsSettings).toBeUndefined();
+  });
+
+  it('still applies newly-provided geinsSettings on an update when they are explicitly sent', async () => {
+    mockBody({
+      allowUpdate: true,
+      geinsSettings: {
+        apiKey: 'rotated-key',
+        accountName: 'boattools',
+        channel: '1',
+        tld: 'se',
+        locale: 'sv-SE',
+        market: 'se',
+        environment: 'production',
+      },
+    });
+    mockResolveTenant.mockResolvedValue({
+      tenantId: 'existing-shop',
+      hostname: 'shop.example.com',
+      geinsSettings: { apiKey: 'old-key', accountName: 'boattools' },
+    });
+    const handler = (await import('../../../../server/api/admin/tenants.post'))
+      .default;
+    await handler(mockEvent);
+    const [{ config }] = mockCreateTenant.mock.calls[0] as [
+      { config: { geinsSettings?: { apiKey?: string } } },
+    ];
+    expect(config.geinsSettings?.apiKey).toBe('rotated-key');
+  });
+
   it('rejects when the hostname already resolves to a tenant and allowUpdate is not set', async () => {
     mockBody();
     mockResolveTenant.mockResolvedValue({

@@ -25,10 +25,21 @@ vi.stubGlobal('sendRedirect', mockSendRedirect);
 vi.stubGlobal('getCookie', mockGetCookie);
 vi.stubGlobal('deleteCookie', mockDeleteCookie);
 vi.stubGlobal('getRequestHost', mockGetRequestHost);
-vi.stubGlobal('createError', mockCreateError);
 vi.stubGlobal('getTenantCookie', mockGetTenantCookie);
 vi.stubGlobal('setTenantCookie', mockSetTenantCookie);
 vi.stubGlobal('getQuery', mockGetQuery);
+
+// createError is an explicit `h3` import in the plugin (see its own comment
+// on that import), not an auto-import global, because it collides with a
+// same-named Nuxt app-side composable — so it's mocked via vi.mock('h3')
+// here instead of vi.stubGlobal.
+vi.mock('h3', async (importActual) => {
+  const actual = await importActual<typeof import('h3')>();
+  return {
+    ...actual,
+    createError: mockCreateError,
+  };
+});
 
 vi.stubGlobal('defineNitroPlugin', (fn: (nitroApp: unknown) => void) => {
   const hooks: Record<string, (event: unknown) => unknown> = {};
@@ -512,6 +523,56 @@ describe('server/plugins/02.tenant-context — locale/market validation', () => 
 
       expect(mockResolveTenant).not.toHaveBeenCalled();
       expect(mockSendRedirect).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tenant resolution failure — page routes flag it instead of throwing', () => {
+    // This plugin's `request` hook fires before Nitro applies route-rule
+    // headers (see server/utils/tenant-error-response.ts), so it must not
+    // send a response itself — only stash the failure on
+    // event.context.tenantResolutionError. server/middleware/00.locale-market.ts
+    // (tested separately) is what actually calls sendTenantErrorPage.
+
+    it('unresolved tenant on a page route: flags a 404 without throwing or responding', async () => {
+      mockResolveTenant.mockResolvedValue(null);
+      const event = createEvent('/se/sv/products', {
+        correlationId: 'corr-123',
+      });
+
+      await handler(event);
+
+      expect(mockCreateError).not.toHaveBeenCalled();
+      expect(event.context.tenantResolutionError).toEqual({
+        statusCode: 404,
+        message:
+          'This site is not available. If you believe this is an error, please contact support.',
+      });
+    });
+
+    it('missing Host header on a page route: flags a 400 without throwing', async () => {
+      mockGetRequestHost.mockReturnValue('');
+      const event = createEvent('/se/sv/products', {});
+
+      await handler(event);
+
+      expect(mockCreateError).not.toHaveBeenCalled();
+      expect(mockResolveTenant).not.toHaveBeenCalled();
+      expect(event.context.tenantResolutionError).toEqual({
+        statusCode: 400,
+        message: 'Missing host header',
+      });
+    });
+
+    it('missing Host header on an API route: still throws (unchanged behavior — only page routes get flagged)', async () => {
+      mockGetRequestHost.mockReturnValue('');
+      const event = createEvent('/api/config', {});
+
+      await expect(handler(event)).rejects.toThrow();
+
+      expect(mockCreateError).toHaveBeenCalledWith(
+        expect.objectContaining({ statusCode: 400 }),
+      );
+      expect(event.context.tenantResolutionError).toBeUndefined();
     });
   });
 });

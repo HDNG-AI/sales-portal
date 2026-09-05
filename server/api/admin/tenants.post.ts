@@ -58,17 +58,25 @@ export default defineEventHandler(async (event) => {
       mode: body.mode,
       checkoutMode: body.checkoutMode,
       timezone: body.timezone,
+      cms: body.cms,
       theme: body.theme,
       branding: body.branding
         ? { watermark: 'none', ...body.branding }
         : undefined,
+      // Omitting geinsSettings must never blank out a tenant's real
+      // credentials on an update (the same "omit = leave untouched"
+      // guarantee theme/branding already get from mergeTenantConfig) —
+      // only fall back to the placeholder default for a genuinely new
+      // tenant that doesn't have any geinsSettings yet.
       geinsSettings: body.geinsSettings
         ? {
             availableLocales: [body.geinsSettings.locale],
             availableMarkets: [body.geinsSettings.market],
             ...body.geinsSettings,
           }
-        : { ...DEFAULT_GEINS_SETTINGS },
+        : existingViaHostname
+          ? undefined
+          : { ...DEFAULT_GEINS_SETTINGS },
     },
   });
 
