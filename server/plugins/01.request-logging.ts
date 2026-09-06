@@ -85,6 +85,43 @@ function sanitizeHeaders(
   return sanitized;
 }
 
+/**
+ * Query-param names to redact from a logged path (case-insensitive) — the
+ * query-string counterpart to sensitiveHeaders above. A route that accepts
+ * a sensitive value via query string (e.g. ?key=) needs its param name
+ * added here, the same way a new sensitive header gets added above.
+ */
+const SENSITIVE_QUERY_PARAMS = [
+  'key',
+  'token',
+  'secret',
+  'password',
+  'apikey',
+  'api_key',
+  'access_token',
+];
+
+/**
+ * Redacts sensitive query-param values from a path before it's logged.
+ * event.path includes the query string, and unlike headers it is logged
+ * unconditionally (not gated behind verboseRequests), so a secret passed
+ * via query string would otherwise reach the log sink in plaintext on
+ * every request.
+ */
+export function sanitizeUrl(path: string): string {
+  const [pathname, search] = path.split('?', 2);
+  if (!search) return path;
+
+  const params = new URLSearchParams(search);
+  const names = new Set(params.keys());
+  for (const name of names) {
+    if (SENSITIVE_QUERY_PARAMS.includes(name.toLowerCase())) {
+      params.set(name, '[REDACTED]');
+    }
+  }
+  return `${pathname}?${params.toString()}`;
+}
+
 export default defineNitroPlugin((nitroApp) => {
   // Request start: Initialize logging context
   nitroApp.hooks.hook('request', (event: H3Event) => {
@@ -109,7 +146,7 @@ export default defineNitroPlugin((nitroApp) => {
     const context: LogContext = {
       correlationId,
       method: event.method,
-      path: event.path,
+      path: sanitizeUrl(event.path),
       tenantId: event.context.tenant?.tenantId,
       hostname: event.context.tenant?.hostname,
       ip: getClientIp(event),
@@ -173,7 +210,7 @@ export default defineNitroPlugin((nitroApp) => {
       const context: LogContext = {
         correlationId: event.context.correlationId,
         method: event.method,
-        path: event.path,
+        path: sanitizeUrl(event.path),
         statusCode,
         duration,
         tenantId: event.context.tenant?.tenantId,
@@ -198,7 +235,7 @@ export default defineNitroPlugin((nitroApp) => {
         value: duration,
         unit: 'ms',
         dimensions: {
-          path: event.path,
+          path: sanitizeUrl(event.path),
           method: event.method,
           statusCode: String(statusCode),
         },
@@ -218,7 +255,7 @@ export default defineNitroPlugin((nitroApp) => {
     const context: LogContext = {
       correlationId: h3Event?.context?.correlationId,
       method: h3Event?.method,
-      path: h3Event?.path,
+      path: h3Event?.path ? sanitizeUrl(h3Event.path) : undefined,
       duration,
       tenantId: (h3Event?.context?.tenant as { id?: string })?.id,
     };
@@ -244,7 +281,7 @@ export default defineNitroPlugin((nitroApp) => {
       value: 1,
       unit: 'count',
       dimensions: {
-        path: h3Event?.path || 'unknown',
+        path: h3Event?.path ? sanitizeUrl(h3Event.path) : 'unknown',
         errorType: errorWithMeta?.name || 'Error',
       },
     });
