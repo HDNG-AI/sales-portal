@@ -72,14 +72,17 @@ async function getEnvironment(event: H3Event): Promise<string> {
  * without a configured directory, we report as 'degraded' rather than 'unhealthy'
  * since the app can function without KV storage for many use cases.
  */
-async function checkStorage(event: H3Event): Promise<ComponentHealth> {
+async function checkStorage(): Promise<ComponentHealth> {
   const timer = createTimer();
-  const config = useRuntimeConfig(event);
-  const storageDriver = config.storage?.driver || 'fs';
+  const storage = useStorage('kv');
+  // Ask the mounted driver, not runtimeConfig. The env var behind that
+  // config value is overridable at runtime, so it will happily report
+  // 'redis' for a build whose mount was frozen as memory — the one failure
+  // this check exists to catch. Read outside the try so the failure path
+  // can report which driver it was that failed.
+  const storageDriver = storage.getMount().driver.name ?? 'unknown';
 
   try {
-    const storage = useStorage('kv');
-
     // Try to read and write a test key
     const testKey = '_health_check';
     const testValue = Date.now().toString();
@@ -98,18 +101,20 @@ async function checkStorage(event: H3Event): Promise<ComponentHealth> {
       };
     }
 
-    // get number of items in the storage
-    const storageKeys = await storage.keys();
-
-    const storageItems = storageKeys.length;
+    // Only counted for in-process storage. Over Redis this is a full
+    // keyspace scan, and container probes run it every 30s against a
+    // keyspace that only grows — the webhook dedup keys are written with
+    // no TTL. The key list itself is never returned: it enumerates every
+    // tenant id in the deployment.
+    const storageItems =
+      storageDriver === 'memory' ? (await storage.keys()).length : undefined;
 
     return {
       status: 'healthy',
       latency,
       details: {
         driver: storageDriver,
-        storageItems: storageItems,
-        storageKeys,
+        ...(storageItems === undefined ? {} : { storageItems }),
       },
     };
   } catch (error) {
@@ -235,7 +240,7 @@ export default defineEventHandler(
     const [storageHealth, memoryHealth] = await Promise.all([
       quickMode
         ? Promise.resolve({ status: 'healthy' as const })
-        : checkStorage(event),
+        : checkStorage(),
       Promise.resolve(checkMemory(event)),
     ]);
 
