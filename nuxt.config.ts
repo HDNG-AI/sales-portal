@@ -3,6 +3,45 @@ import type { Environment } from './shared/types/common';
 import type { NuxtPage } from 'nuxt/schema';
 
 /**
+ * Resolves the 'kv' storage mount (tenant configs, webhook dedup — see
+ * server/utils/tenant.ts, server/utils/webhook-handler.ts) from raw
+ * process.env. This runs once when nitro.config is built, not per-request,
+ * so it must read process.env directly — useRuntimeConfig() only exists
+ * inside the running server, not at config-build time.
+ *
+ * Fails fast on misconfiguration rather than silently falling back to
+ * memory: an unset NUXT_STORAGE_DRIVER in production would otherwise look
+ * identical to a working deployment right up until the next restart wipes
+ * every admin-onboarded tenant.
+ */
+function resolveKvStorageMount() {
+  const driver = process.env.NUXT_STORAGE_DRIVER || 'memory';
+
+  if (driver === 'memory') {
+    return { driver: 'memory' as const };
+  }
+
+  if (driver === 'redis') {
+    const url = process.env.NUXT_STORAGE_REDIS_URL;
+    if (!url) {
+      throw new Error(
+        'NUXT_STORAGE_DRIVER=redis but NUXT_STORAGE_REDIS_URL is not set. ' +
+          'Refusing to silently fall back to in-memory storage in this mode — ' +
+          'set the URL or unset NUXT_STORAGE_DRIVER.',
+      );
+    }
+    // Nitro resolves storage drivers by name internally (unstorage is its
+    // own dependency, not this app's) — pass the shape it expects rather
+    // than importing and pre-instantiating the driver ourselves.
+    return { driver: 'redis' as const, url, base: 'kv' };
+  }
+
+  throw new Error(
+    `Unknown NUXT_STORAGE_DRIVER: "${driver}". Expected "memory" or "redis".`,
+  );
+}
+
+/**
  * Recursively create /:market/:locale-prefixed copies of page routes.
  * Each prefixed route uses the same component file but with the market/locale
  * segments as route params, so Vue Router matches /se/sv/search natively.
@@ -247,11 +286,14 @@ export default defineNuxtConfig({
       tenantApiUrl: 'https://merchantapi.geins.io/store-settings',
     },
 
-    // Storage configuration (memory for dev, redis for production)
-    // Azure: NUXT_STORAGE_DRIVER=redis, NUXT_STORAGE_REDIS_URL=redis://...
+    // Diagnostic label only, read by server/api/health.get.ts — the mount
+    // itself is decided in resolveKvStorageMount() above from the same
+    // NUXT_STORAGE_DRIVER env var, at config-build time (before
+    // useRuntimeConfig() exists, so that function can't read it from here).
+    // redisUrl is deliberately not mirrored into runtimeConfig — no reader
+    // needs the connection string outside resolveKvStorageMount() itself.
     storage: {
       driver: 'memory',
-      redisUrl: '',
     },
 
     // Secret for accessing detailed health check metrics
@@ -317,9 +359,7 @@ export default defineNuxtConfig({
 
   nitro: {
     storage: {
-      kv: {
-        driver: 'memory',
-      },
+      kv: resolveKvStorageMount(),
     },
     // Enable compression
     compressPublicAssets: true,
