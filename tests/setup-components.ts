@@ -10,6 +10,7 @@ import { vi, beforeEach } from 'vitest';
 import { ref, computed, type Ref } from 'vue';
 import type { PublicTenantConfig } from '#shared/types/tenant-config';
 import { createPinia, setActivePinia } from 'pinia';
+import { PRODUCT_MEDIA_PARAMETER_DEFAULTS } from '../shared/constants/product-media';
 
 // Exported ref so individual component tests can toggle catalog mode
 // without duplicating the full useTenant mock.
@@ -230,7 +231,13 @@ vi.mock('../app/composables/useTenant', () => {
       ),
       mode: computed(() => tenant.value?.mode ?? 'commerce'),
       isCatalogMode: computed(() => mockIsCatalogMode.value),
+      timezone: computed(() => tenant.value?.timezone ?? 'UTC'),
       watermark: computed(() => tenant.value?.branding?.watermark ?? 'full'),
+      productMediaParameters: computed(
+        () =>
+          tenant.value?.productMediaParameters ??
+          PRODUCT_MEDIA_PARAMETER_DEFAULTS,
+      ),
       availableLocales: computed(() => ['sv']),
       availableMarkets: computed(() => []),
       market: computed(() => ''),

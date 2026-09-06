@@ -258,6 +258,112 @@ describe('ProductTabs', () => {
     expect(specContent.text()).toContain('Ledarantal');
   });
 
+  it('renders a VideoURL parameter as an embedded video, not a spec row', () => {
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'VideoURL',
+              label: 'VideoURL',
+              value: 'https://www.youtube.com/watch?v=abc123',
+              show: true,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    const iframe = docsContent.find('[data-testid="product-videos"] iframe');
+    expect(iframe.exists()).toBe(true);
+    expect(iframe.attributes('src')).toBe(
+      'https://www.youtube.com/embed/abc123',
+    );
+
+    const specContent = wrapper.find(
+      '.tabs-content[data-value="specifications"]',
+    );
+    expect(specContent.exists()).toBe(false);
+  });
+
+  it('renders Manual and ProductSpec parameters as document links', () => {
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'Manual',
+              label: 'Manual',
+              value: 'https://cdn.example.com/manual.pdf',
+              show: true,
+            },
+            {
+              name: 'ProductSpec',
+              label: 'ProductSpec',
+              value: 'https://cdn.example.com/spec.pdf',
+              show: true,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    const links = docsContent.findAll('[data-testid="product-documents"] a');
+    expect(links.length).toBe(2);
+    expect(links[0]!.attributes('href')).toBe(
+      'https://cdn.example.com/manual.pdf',
+    );
+    expect(links[0]!.text()).toContain('Manual');
+    expect(links[1]!.text()).toContain('Product Spec');
+  });
+
+  it('falls back to a normal spec row when a known media name has a non-URL value', () => {
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            { name: 'ProductSpec', value: 'See page 4', show: true },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    expect(docsContent.text()).toContain('product.no_documents');
+
+    const specContent = wrapper.find(
+      '.tabs-content[data-value="specifications"]',
+    );
+    expect(specContent.text()).toContain('ProductSpec');
+    expect(specContent.text()).toContain('See page 4');
+  });
+
+  it('shows the no-documents message when no media parameters exist', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(), related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    expect(docsContent.text()).toContain('product.no_documents');
+  });
+
   it('renders RelatedProducts inside the related tab', () => {
     const wrapper = mountComponent(ProductTabs, {
       props: {
