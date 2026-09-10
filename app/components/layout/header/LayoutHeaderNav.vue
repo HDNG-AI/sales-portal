@@ -22,14 +22,14 @@ withDefaults(defineProps<{ variant?: 'grey' | 'white' }>(), {
   variant: 'grey',
 });
 
-// Resolves the menuLocationId from `tenant.cms.menus[HEADER_MAIN]`.
-// Falls back gracefully to "no nav bar shown" when the tenant hasn't
-// configured the slot — the header still has the logo + search + cart.
-const { menu } = useCmsMenuData(CMS_MENUS.HEADER_MAIN);
+// CMS remains authoritative. If the configured main menu is empty, keep one
+// generic catalogue entry so the storefront never loses its primary route.
+const { menu, pending } = useCmsMenuData(CMS_MENUS.HEADER_MAIN);
 const currentHost = computed(() => useRequestURL().host);
 const { localePath } = useLocaleMarket();
 
 const visibleItems = computed(() => getVisibleItems(menu.value?.menuItems));
+const productsHref = computed(() => localePath('/products'));
 
 function visibleChildren(item: MenuItemType): MenuItemType[] {
   return getVisibleItems(item.children);
@@ -74,7 +74,6 @@ function linkAttrs(item: MenuItemType): Record<string, string | undefined> {
             :key="item.id"
             :class="visibleChildren(item).length ? '!static' : ''"
           >
-            <!-- Item with children: trigger + mega menu -->
             <template v-if="visibleChildren(item).length">
               <NavigationMenuTrigger
                 class="bg-transparent underline-offset-4 hover:bg-transparent hover:underline focus:bg-transparent data-[state=open]:bg-transparent data-[state=open]:underline data-[state=open]:hover:bg-transparent data-[state=open]:focus:bg-transparent"
@@ -84,14 +83,6 @@ function linkAttrs(item: MenuItemType): Record<string, string | undefined> {
               <NavigationMenuContent
                 class="!absolute !top-full !left-0 !mt-0 !w-screen !max-w-none !rounded-none !border-x-0 !border-t-0"
               >
-                <!--
-                  Cap the open mega menu and scroll its contents internally so a
-                  category with many submenus never pushes links below the fold
-                  (which would scroll the page instead). 500px is the design
-                  target; calc(100vh - 11rem) subtracts the sticky header
-                  (topbar 40px + main 80px + nav 48px + 8px gap) so the panel
-                  stays inside the viewport on short screens too.
-                -->
                 <div
                   class="mx-auto max-h-[min(500px,calc(100vh_-_11rem))] max-w-7xl overflow-y-auto px-4 py-6 lg:px-6"
                 >
@@ -129,7 +120,6 @@ function linkAttrs(item: MenuItemType): Record<string, string | undefined> {
               </NavigationMenuContent>
             </template>
 
-            <!-- Item without children: plain link -->
             <template v-else>
               <NavigationMenuLink
                 as-child
@@ -143,6 +133,22 @@ function linkAttrs(item: MenuItemType): Record<string, string | undefined> {
           </NavigationMenuItem>
         </NavigationMenuList>
       </NavigationMenu>
+    </div>
+  </nav>
+
+  <nav
+    v-else-if="!pending"
+    class="bg-nav-bar-background relative hidden h-12 items-center border-b lg:flex"
+    :aria-label="$t('layout.main_navigation')"
+    data-testid="fallback-main-navigation"
+  >
+    <div class="mx-auto w-full max-w-7xl px-4 lg:px-6">
+      <NuxtLink
+        :to="productsHref"
+        class="inline-flex h-9 items-center rounded-md px-4 py-2 text-sm font-medium underline-offset-4 hover:underline"
+      >
+        {{ $t('nav.products') }}
+      </NuxtLink>
     </div>
   </nav>
 </template>
