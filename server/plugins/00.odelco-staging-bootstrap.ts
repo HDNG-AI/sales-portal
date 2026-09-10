@@ -1,4 +1,6 @@
 import { createTenant } from '../utils/tenant-crud';
+import { DEFAULT_CMS_CONFIG } from '../utils/tenant';
+import { STOREFRONT_SETTINGS_DEFAULTS } from '../utils/storefront-settings-defaults';
 import { logger } from '../utils/logger';
 
 const STAGING_HOSTNAME = 'staging-odelco.hdng.ai';
@@ -11,6 +13,12 @@ const STAGING_TENANT_ID = 'odelco-staging-local';
  * STAGING_HOSTNAME. Geins remains the intended hostname/tenant authority.
  *
  * This plugin is opt-in and must never affect odelco.se or arbitrary hosts.
+ *
+ * The local tenant intentionally inherits the Sales Portal's CURRENT canonical
+ * CMS registry and baseline feature defaults. This lets staging render whatever
+ * the current Geins account exposes through the new portal without depending on
+ * the legacy Ralph storefront configuration. Merchant-gated features such as
+ * orderPlacement/priceVisibility/stockStatus keep their canonical safe defaults.
  */
 export default defineNitroPlugin(async () => {
   if (process.env.ODELCO_STAGING_BOOTSTRAP !== '1') return;
@@ -41,9 +49,10 @@ export default defineNitroPlugin(async () => {
         watermark: 'full',
       },
       features: {
+        ...STOREFRONT_SETTINGS_DEFAULTS.features,
         search: { enabled: true },
-        cart: { enabled: true },
       },
+      cms: DEFAULT_CMS_CONFIG,
       geinsSettings: {
         apiKey,
         accountName,
@@ -63,6 +72,6 @@ export default defineNitroPlugin(async () => {
   });
 
   logger.warn(
-    `[odelco-staging-bootstrap] ENABLED host=${STAGING_HOSTNAME} tenant=${STAGING_TENANT_ID}; temporary local KV authority`,
+    `[odelco-staging-bootstrap] ENABLED host=${STAGING_HOSTNAME} tenant=${STAGING_TENANT_ID}; current Sales Portal CMS/default features; temporary local KV authority`,
   );
 });
