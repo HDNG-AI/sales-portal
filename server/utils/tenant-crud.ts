@@ -1,4 +1,7 @@
-import type { TenantConfig } from '#shared/types/tenant-config';
+import type {
+  TenantConfig,
+  CmsConfigUpdate,
+} from '#shared/types/tenant-config';
 import {
   createDefaultTheme,
   mergeThemes,
@@ -16,10 +19,62 @@ import {
 } from './tenant';
 import { withoutUndefined } from './object';
 
+/**
+ * A partial tenant update as accepted by createTenant/updateTenant: every
+ * field is optional like `Partial<TenantConfig>`, except `cms`, whose
+ * update shape additionally allows `null` per slot/menu key to mean
+ * "remove this key" — see CmsConfigUpdate.
+ */
+export type TenantConfigUpdate = Omit<Partial<TenantConfig>, 'cms'> & {
+  cms?: CmsConfigUpdate;
+};
+
 export interface CreateTenantOptions {
   hostname: string;
   tenantId?: string;
-  config?: Partial<TenantConfig>;
+  config?: TenantConfigUpdate;
+}
+
+/**
+ * Merges a `cms` update onto a base `cms` config, per slot/menu key:
+ * a key present in `partial` overwrites that key alone (siblings and the
+ * other of slots/menus are untouched), a key set to `null` removes it,
+ * and an absent `partial` (or an absent `slots`/`menus` sub-object)
+ * leaves the corresponding base entirely unchanged — the same
+ * omit-means-untouched contract every other tenant config field gets
+ * from mergeTenantConfig, just applied one level deeper since `cms` is
+ * itself a keyed map rather than a fixed set of named fields.
+ */
+export function mergeCmsConfig(
+  base: TenantConfig['cms'],
+  partial: CmsConfigUpdate | undefined,
+): TenantConfig['cms'] {
+  if (!partial) return base;
+
+  function mergeMap<T>(
+    baseMap: Partial<Record<string, T>> | undefined,
+    partialMap: Partial<Record<string, T | null>> | undefined,
+  ): Partial<Record<string, T>> | undefined {
+    if (!partialMap) return baseMap;
+    const result: Partial<Record<string, T>> = { ...baseMap };
+    for (const [key, value] of Object.entries(partialMap)) {
+      if (value === null) {
+        Reflect.deleteProperty(result, key);
+      } else if (value !== undefined) {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  const slots = mergeMap(base?.slots, partial.slots);
+  const menus = mergeMap(base?.menus, partial.menus);
+
+  if (slots === undefined && menus === undefined) return base;
+  return {
+    ...(slots !== undefined ? { slots } : {}),
+    ...(menus !== undefined ? { menus } : {}),
+  };
 }
 
 /**
@@ -31,10 +86,15 @@ export interface CreateTenantOptions {
  * only place base+partial tenant configs get merged — every call site
  * (fresh create, existing-tenant update here, and updateTenant below) goes
  * through it so the undefined-stripping can't be forgotten at a future one.
+ *
+ * `cms` is carved out of the generic shallow spread and merged separately
+ * via mergeCmsConfig — a plain `...partial` would replace the entire `cms`
+ * object (both slots AND menus) the moment a caller touches either one,
+ * silently dropping every key it didn't mention.
  */
 function mergeTenantConfig(
   base: TenantConfig,
-  partial: Partial<TenantConfig> | undefined,
+  partial: TenantConfigUpdate | undefined,
   identity: Pick<TenantConfig, 'tenantId' | 'hostname'>,
 ): TenantConfig {
   const mergedTheme = mergeThemes(base.theme, partial?.theme);
@@ -48,6 +108,7 @@ function mergeTenantConfig(
     theme: themeWithDerived,
     css: themeChanged ? css : base.css,
     themeHash,
+    cms: mergeCmsConfig(base.cms, partial?.cms),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -152,7 +213,7 @@ export async function createTenant(
  */
 export async function updateTenant(
   hostname: string,
-  updates: Partial<TenantConfig>,
+  updates: TenantConfigUpdate,
   event?: import('h3').H3Event,
 ): Promise<TenantConfig | null> {
   const storage = useStorage('kv');
