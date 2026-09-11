@@ -25,6 +25,7 @@
 
 import type { H3Event } from 'h3';
 import { createTimer, logger } from '../utils/logger';
+import { timingSafeStringEqual } from '../utils/admin-auth';
 
 /**
  * Health check result for individual components
@@ -216,12 +217,16 @@ export default defineEventHandler(
     const config = useRuntimeConfig(event);
     const query = getQuery(event);
 
-    // Check if authorized for detailed metrics (secret key provided)
+    // Check if authorized for detailed metrics (secret key provided).
+    // Stays a query param (unlike the admin-write endpoint) — this only
+    // gates a read, and being bookmarkable/shareable for on-call dashboards
+    // is useful. Constant-time compare costs nothing to add now that
+    // timingSafeStringEqual exists for the admin endpoint.
     const providedKey = query.key as string | undefined;
     const isAuthorized =
       !!config.healthCheckSecret &&
       !!providedKey &&
-      providedKey === config.healthCheckSecret;
+      timingSafeStringEqual(providedKey, config.healthCheckSecret);
 
     // Quick mode: Skip storage check for faster response during startup/load balancer checks
     // This is useful for Azure App Service health probes that need fast responses

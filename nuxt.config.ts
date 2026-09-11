@@ -273,6 +273,7 @@ export default defineNuxtConfig({
    * │ NUXT_STORAGE_DRIVER             │ SENTRY_PROJECT                       │
    * │ NUXT_STORAGE_REDIS_URL          │                                      │
    * │ NUXT_HEALTH_CHECK_SECRET        │                                      │
+   * │ NUXT_ADMIN_SECRET               │                                      │
    * │ NUXT_EXTERNAL_API_BASE_URL      │                                      │
    * │ NUXT_SENTRY_DSN                 │                                      │
    * │ NUXT_WEBHOOK_SECRET              │                                      │
@@ -306,6 +307,12 @@ export default defineNuxtConfig({
     // Secret for accessing detailed health check metrics
     // Azure: NUXT_HEALTH_CHECK_SECRET=your-secret-here
     healthCheckSecret: '',
+
+    // Secret for the one-off tenant-creation admin endpoint
+    // (server/api/admin/tenants.post.ts) — separate from healthCheckSecret
+    // since this one gates a write action, not read-only diagnostics.
+    // Azure: NUXT_ADMIN_SECRET=your-secret-here
+    adminSecret: '',
 
     // External API base URL for the proxy
     // Azure: NUXT_EXTERNAL_API_BASE_URL=https://your-external-api.com
