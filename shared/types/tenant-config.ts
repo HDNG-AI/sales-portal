@@ -168,6 +168,20 @@ export interface TenantConfig {
 }
 
 /**
+ * Shape of `cms` in a partial tenant update (admin create/update input),
+ * as opposed to `TenantConfig['cms']` itself (the stored/resolved shape,
+ * which never contains `null`). A slot or menu key set to `null` here
+ * means "remove this key" rather than "set it to null" — see
+ * mergeCmsConfig in server/utils/tenant-crud.ts, which is the only place
+ * that interprets it. Omitting a key (the normal `Partial` case) leaves
+ * it untouched, same as every other tenant config field.
+ */
+export interface CmsConfigUpdate {
+  slots?: Partial<Record<CmsSlotKey, CmsSlotConfig | null>>;
+  menus?: Partial<Record<CmsMenuKey, CmsMenuConfig | null>>;
+}
+
+/**
  * Public tenant config sent to the client via /api/config.
  * Strips geinsSettings, overrides, themeHash. Adds locale fields.
  */

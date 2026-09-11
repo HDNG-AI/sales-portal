@@ -4,6 +4,7 @@ import {
   createTenant,
   updateTenant,
   deleteTenant,
+  mergeCmsConfig,
 } from '../../server/utils/tenant-crud';
 import {
   tenantConfigKey,
@@ -377,6 +378,242 @@ describe('updateTenant', () => {
     // geinsSettings wasn't part of this update — must survive untouched.
     expect(updated?.geinsSettings).toEqual(GEINS_SETTINGS);
     expect(mockClearSdkCache).toHaveBeenCalledWith('a-tenant');
+  });
+
+  it('updating one cms slot through the real update path does not wipe sibling slots or menus', async () => {
+    await createTenant({
+      hostname: 'a.example.com',
+      tenantId: 'a-tenant',
+      config: {
+        isActive: true,
+        geinsSettings: GEINS_SETTINGS,
+        cms: {
+          slots: {
+            frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+            product_detail: { family: 'Product', areaName: 'Below Details' },
+          },
+          menus: { header_main: { menuLocationId: 'main' } },
+        },
+      },
+    });
+
+    const updated = await updateTenant('a.example.com', {
+      cms: {
+        slots: {
+          frontpage_content: {
+            family: 'Frontpage',
+            areaName: 'The front page area',
+          },
+        },
+      },
+    });
+
+    expect(updated?.cms?.slots).toEqual({
+      frontpage_content: {
+        family: 'Frontpage',
+        areaName: 'The front page area',
+      },
+      product_detail: { family: 'Product', areaName: 'Below Details' },
+    });
+    // menus wasn't part of this update — must survive untouched, same as
+    // geinsSettings does for the plain-field case above.
+    expect(updated?.cms?.menus).toEqual({
+      header_main: { menuLocationId: 'main' },
+    });
+  });
+
+  it('setting a cms slot to null through the real update path removes just that key', async () => {
+    await createTenant({
+      hostname: 'a.example.com',
+      tenantId: 'a-tenant',
+      config: {
+        isActive: true,
+        geinsSettings: GEINS_SETTINGS,
+        cms: {
+          slots: {
+            frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+            product_detail: { family: 'Product', areaName: 'Below Details' },
+          },
+        },
+      },
+    });
+
+    const updated = await updateTenant('a.example.com', {
+      cms: { slots: { product_detail: null } },
+    });
+
+    expect(updated?.cms?.slots).toEqual({
+      frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+    });
+  });
+});
+
+describe('mergeCmsConfig', () => {
+  it('returns undefined when neither base nor partial has a cms config', () => {
+    expect(mergeCmsConfig(undefined, undefined)).toBeUndefined();
+  });
+
+  it('returns base unchanged when partial is undefined', () => {
+    const base = {
+      slots: { frontpage_content: { family: 'F', areaName: 'A' } },
+    };
+    expect(mergeCmsConfig(base, undefined)).toBe(base);
+  });
+
+  it('creates a slots map from nothing when base is undefined', () => {
+    const result = mergeCmsConfig(undefined, {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+      },
+    });
+    expect(result).toEqual({
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+      },
+    });
+  });
+
+  it('adds a new key without touching existing keys', () => {
+    const base = {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+      },
+    };
+    const result = mergeCmsConfig(base, {
+      slots: {
+        product_detail: { family: 'Product', areaName: 'Below Details' },
+      },
+    });
+    expect(result?.slots).toEqual({
+      frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+      product_detail: { family: 'Product', areaName: 'Below Details' },
+    });
+  });
+
+  it('overwrites an existing key without touching others', () => {
+    const base = {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+        product_detail: { family: 'Product', areaName: 'Below Details' },
+      },
+    };
+    const result = mergeCmsConfig(base, {
+      slots: {
+        frontpage_content: {
+          family: 'Frontpage',
+          areaName: 'The front page area',
+        },
+      },
+    });
+    expect(result?.slots).toEqual({
+      frontpage_content: {
+        family: 'Frontpage',
+        areaName: 'The front page area',
+      },
+      product_detail: { family: 'Product', areaName: 'Below Details' },
+    });
+  });
+
+  it('removes a key when its update value is null, leaving siblings intact', () => {
+    const base = {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+        product_detail: { family: 'Product', areaName: 'Below Details' },
+      },
+    };
+    const result = mergeCmsConfig(base, { slots: { product_detail: null } });
+    expect(result?.slots).toEqual({
+      frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+    });
+  });
+
+  it('deleting a key that was never present is a no-op, not an error', () => {
+    const base = {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+      },
+    };
+    const result = mergeCmsConfig(base, { slots: { product_detail: null } });
+    expect(result?.slots).toEqual({
+      frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+    });
+  });
+
+  it('an empty slots object in partial changes nothing', () => {
+    const base = {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+      },
+    };
+    const result = mergeCmsConfig(base, { slots: {} });
+    expect(result?.slots).toEqual(base.slots);
+  });
+
+  it('updating slots leaves menus untouched, and vice versa', () => {
+    const base = {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+      },
+      menus: { header_main: { menuLocationId: 'main' } },
+    };
+    const slotsUpdated = mergeCmsConfig(base, {
+      slots: {
+        product_detail: { family: 'Product', areaName: 'Below Details' },
+      },
+    });
+    expect(slotsUpdated?.menus).toEqual(base.menus);
+
+    const menusUpdated = mergeCmsConfig(base, {
+      menus: { footer: { menuLocationId: 'footer-1' } },
+    });
+    expect(menusUpdated?.slots).toEqual(base.slots);
+  });
+
+  it('handles add, overwrite, and delete together in one call', () => {
+    const base = {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+        product_list_top: { family: 'Productlist', areaName: 'Above List' },
+        product_detail: { family: 'Product', areaName: 'Below Details' },
+      },
+    };
+    const result = mergeCmsConfig(base, {
+      slots: {
+        // overwrite
+        frontpage_content: {
+          family: 'Frontpage',
+          areaName: 'The front page area',
+        },
+        // delete
+        product_list_top: null,
+        // add
+        product_list_bottom: {
+          family: 'Productlist',
+          areaName: 'The bottom part of the product list',
+        },
+      },
+    });
+    expect(result?.slots).toEqual({
+      frontpage_content: {
+        family: 'Frontpage',
+        areaName: 'The front page area',
+      },
+      product_detail: { family: 'Product', areaName: 'Below Details' },
+      product_list_bottom: {
+        family: 'Productlist',
+        areaName: 'The bottom part of the product list',
+      },
+    });
+  });
+
+  it('deleting every key leaves an empty slots object, not undefined', () => {
+    const base = {
+      slots: {
+        frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+      },
+    };
+    const result = mergeCmsConfig(base, { slots: { frontpage_content: null } });
+    expect(result?.slots).toEqual({});
   });
 });
 
