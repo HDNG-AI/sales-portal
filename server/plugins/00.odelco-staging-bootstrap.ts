@@ -2,6 +2,7 @@ import { createTenant } from '../utils/tenant-crud';
 import { DEFAULT_CMS_CONFIG } from '../utils/tenant';
 import { STOREFRONT_SETTINGS_DEFAULTS } from '../utils/storefront-settings-defaults';
 import { logger } from '../utils/logger';
+import { CMS_SLOTS } from '#shared/types/cms-slots';
 
 const STAGING_HOSTNAME = 'staging-odelco.hdng.ai';
 const STAGING_TENANT_ID = 'odelco-staging-local';
@@ -15,9 +16,10 @@ const STAGING_TENANT_ID = 'odelco-staging-local';
  * This plugin is opt-in and must never affect odelco.se or arbitrary hosts.
  *
  * The local tenant intentionally inherits the Sales Portal's CURRENT canonical
- * CMS registry and baseline feature defaults. This lets staging render whatever
- * the current Geins account exposes through the new portal without depending on
- * the legacy Ralph storefront configuration. Merchant-gated features such as
+ * CMS registry and baseline feature defaults. Odelco's Geins CMS uses tenant-
+ * specific area names for the existing Frontpage/Product content, so those two
+ * logical slots are overridden here without changing global Sales Portal
+ * defaults for any other tenant. Merchant-gated features such as
  * orderPlacement/priceVisibility/stockStatus keep their canonical safe defaults.
  */
 export default defineNitroPlugin(async () => {
@@ -52,7 +54,21 @@ export default defineNitroPlugin(async () => {
         ...STOREFRONT_SETTINGS_DEFAULTS.features,
         search: { enabled: true },
       },
-      cms: DEFAULT_CMS_CONFIG,
+      cms: {
+        ...DEFAULT_CMS_CONFIG,
+        slots: {
+          ...DEFAULT_CMS_CONFIG.slots,
+          [CMS_SLOTS.FRONTPAGE_CONTENT]: {
+            family: 'Frontpage',
+            areaName: 'The front page area',
+          },
+          [CMS_SLOTS.PRODUCT_DETAIL]: {
+            family: 'Product',
+            areaName: 'Product detail page',
+          },
+        },
+        menus: { ...DEFAULT_CMS_CONFIG.menus },
+      },
       geinsSettings: {
         apiKey,
         accountName,
@@ -72,6 +88,6 @@ export default defineNitroPlugin(async () => {
   });
 
   logger.warn(
-    `[odelco-staging-bootstrap] ENABLED host=${STAGING_HOSTNAME} tenant=${STAGING_TENANT_ID}; current Sales Portal CMS/default features; temporary local KV authority`,
+    `[odelco-staging-bootstrap] ENABLED host=${STAGING_HOSTNAME} tenant=${STAGING_TENANT_ID}; Odelco CMS area overrides + current Sales Portal defaults; temporary local KV authority`,
   );
 });
