@@ -72,6 +72,13 @@ function createPrefixedRoutes(pages: NuxtPage[], depth = 0): NuxtPage[] {
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
+  // Nuxt's core builder watcher (pages/components/composables auto-scan) —
+  // separate from vite.server.watch and nitro.watchOptions below — was the
+  // one actually driving EMFILE: it holds a handle per node_modules entry
+  // it walks (thousands, via pnpm's symlink-heavy layout), independent of
+  // process ulimit. All three watch.ignore/ignore configs are needed since
+  // each covers a distinct watcher instance.
+  ignore: ['**/node_modules/**', '**/.git/**'],
   // Off when E2E=1: the DevTools frame intercepts taps at phone viewports.
   devtools: { enabled: !process.env.E2E },
 
@@ -369,6 +376,12 @@ export default defineNuxtConfig({
     // surfaces the real message, correlation ID, tenantId, and stack
     // (stack only when NUXT_DEBUG_ERRORS=true). See server/error.ts.
     errorHandler: '~~/server/error',
+    // Dev-server watcher otherwise holds a handle open per file under
+    // node_modules (thousands of them), climbing on every rebuild until it
+    // hits EMFILE — framework defaults weren't excluding it here.
+    watchOptions: {
+      ignored: ['**/node_modules/**', '**/.git/**'],
+    },
   },
 
   components: [
@@ -446,6 +459,9 @@ export default defineNuxtConfig({
   vite: {
     server: {
       allowedHosts: ['.litium.portal'],
+      watch: {
+        ignored: ['**/node_modules/**', '**/.git/**'],
+      },
     },
   },
 });

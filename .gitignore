@@ -3,7 +3,7 @@
 .temp
 .vscode
 .plans
-.worktrees
+.claude/worktrees/
 docs/plans/
 local-docs/
 
