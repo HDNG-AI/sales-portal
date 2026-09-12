@@ -266,12 +266,6 @@ onMounted(() => {
             >
               {{ group.name }}
             </h4>
-            <p
-              v-if="group.parameters?.[0]?.description"
-              class="text-muted-foreground text-sm"
-            >
-              {{ group.parameters[0].description }}
-            </p>
             <table class="w-full text-sm" data-testid="spec-table">
               <tbody>
                 <tr
