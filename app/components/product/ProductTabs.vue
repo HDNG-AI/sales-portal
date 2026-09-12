@@ -45,16 +45,33 @@ const hasDescription = computed(
 // Documents tab instead — a raw URL in a text-value row isn't useful to a
 // shopper.
 const { productMediaParameters } = useTenant();
+
+// Groups the catalogue marks as internal. Applied before classification, not
+// only before the spec table: media lives on parameters like any other value,
+// so classifying the unfiltered list published a hidden group's documents in
+// the public Documents tab while its spec rows stayed correctly hidden.
+const HIDDEN_PARAMETER_GROUPS = /^monitor$/i;
+const shownGroups = computed(() =>
+  (props.product.parameterGroups ?? []).filter(
+    (g) => !HIDDEN_PARAMETER_GROUPS.test(g.name ?? ''),
+  ),
+);
+
 const classifiedParameters = computed(() => {
   const videos: ProductMediaParameter[] = [];
   const documents: ProductMediaParameter[] = [];
   const mediaKeys = new Set<string>();
-  for (const group of props.product.parameterGroups ?? []) {
+  for (const group of shownGroups.value) {
     for (const param of group.parameters ?? []) {
+      // One parameter can carry several files, so this is 0-n entries —
+      // an empty result means the parameter isn't media and stays in the
+      // spec table below.
       const media = classifyMediaParameter(param, productMediaParameters.value);
-      if (!media) continue;
+      if (media.length === 0) continue;
       mediaKeys.add(`${group.parameterGroupId}:${param.name}`);
-      (media.kind === 'video' ? videos : documents).push(media);
+      for (const entry of media) {
+        (entry.kind === 'video' ? videos : documents).push(entry);
+      }
     }
   }
   return { videos, documents, mediaKeys };
@@ -65,10 +82,8 @@ const hasDocumentsContent = computed(
   () => videoItems.value.length > 0 || documentItems.value.length > 0,
 );
 
-const HIDDEN_PARAMETER_GROUPS = /^monitor$/i;
 const visibleGroups = computed(() =>
-  (props.product.parameterGroups ?? [])
-    .filter((g) => !HIDDEN_PARAMETER_GROUPS.test(g.name ?? ''))
+  shownGroups.value
     .map((g) => ({
       ...g,
       parameters: (g.parameters ?? []).filter(
@@ -84,6 +99,17 @@ const visibleGroups = computed(() =>
 );
 const hasSpecs = computed(() => visibleGroups.value.length > 0);
 const hasRelated = computed(() => (props.related?.length ?? 0) > 0);
+
+// Every trigger is conditional, so a product with nothing to show still
+// rendered an empty TabsList — a bare underline rule across the page, with
+// no tab above it. Gate the whole control, not each trigger.
+const hasAnyTab = computed(
+  () =>
+    hasDescription.value ||
+    hasSpecs.value ||
+    hasDocumentsContent.value ||
+    hasRelated.value,
+);
 
 const defaultTab = computed(() => {
   if (hasDescription.value) return 'description';
@@ -133,7 +159,7 @@ onMounted(() => {
 <template>
   <div data-testid="product-tabs">
     <!-- Desktop: Tabs (hidden below md via CSS to avoid SSR/client flash) -->
-    <Tabs class="hidden md:block" :default-value="defaultTab">
+    <Tabs v-if="hasAnyTab" class="hidden md:block" :default-value="defaultTab">
       <TabsList variant="underline">
         <TabsTrigger v-if="hasDescription" value="description">
           {{ $t('product.details') }}
@@ -236,8 +262,8 @@ onMounted(() => {
             data-testid="product-videos"
           >
             <div
-              v-for="video in videoItems"
-              :key="video.url"
+              v-for="(video, idx) in videoItems"
+              :key="`${video.url}:${idx}`"
               class="flex flex-col gap-2"
             >
               <p class="text-sm font-medium">{{ video.label }}</p>
@@ -263,8 +289,8 @@ onMounted(() => {
             data-testid="product-documents"
           >
             <a
-              v-for="doc in documentItems"
-              :key="doc.url"
+              v-for="(doc, idx) in documentItems"
+              :key="`${doc.url}:${idx}`"
               :href="doc.url"
               target="_blank"
               rel="noopener"
@@ -296,7 +322,7 @@ onMounted(() => {
     <!-- Mobile: Accordion (hidden at md+ via CSS to avoid SSR/client flash).
          Print uses the desktop tabs branch (md+ media query active in the
          print preview), so this accordion stays hidden when printing. -->
-    <Accordion class="md:hidden print:hidden" type="multiple">
+    <Accordion v-if="hasAnyTab" class="md:hidden print:hidden" type="multiple">
       <AccordionItem v-if="hasDescription" value="description">
         <AccordionTrigger>{{ $t('product.details') }}</AccordionTrigger>
         <AccordionContent>
@@ -352,8 +378,8 @@ onMounted(() => {
           <div v-if="hasDocumentsContent" class="flex flex-col gap-6">
             <div v-if="videoItems.length" class="flex flex-col gap-4">
               <div
-                v-for="video in videoItems"
-                :key="video.url"
+                v-for="(video, idx) in videoItems"
+                :key="`${video.url}:${idx}`"
                 class="flex flex-col gap-2"
               >
                 <p class="text-sm font-medium">{{ video.label }}</p>
@@ -380,8 +406,8 @@ onMounted(() => {
             </div>
             <div v-if="documentItems.length" class="flex flex-col gap-3">
               <a
-                v-for="doc in documentItems"
-                :key="doc.url"
+                v-for="(doc, idx) in documentItems"
+                :key="`${doc.url}:${idx}`"
                 :href="doc.url"
                 target="_blank"
                 rel="noopener"

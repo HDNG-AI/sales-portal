@@ -44,6 +44,15 @@ export interface ProductMediaParameter {
 
 const URL_PATTERN = /^https?:\/\//i;
 
+/**
+ * Separator for a parameter holding several files (two manuals, a spec
+ * sheet plus a CAD drawing). RFC 3986 excludes `|` from the characters a
+ * URL may carry unencoded — it has to appear as `%7C` — so splitting on it
+ * can never cut a well-formed URL in half, which is why it's preferred
+ * over a comma or semicolon here.
+ */
+const MULTI_VALUE_SEPARATOR = '|';
+
 function isUrlValue(value: string | undefined): value is string {
   return !!value && URL_PATTERN.test(value.trim());
 }
@@ -76,9 +85,18 @@ export function resolveVideoEmbedUrl(url: string): string | null {
 }
 
 /**
- * Classifies a product parameter as video/document media, or returns null
- * when it isn't one — either its name isn't in `parameters`, or its value
- * doesn't look like a URL.
+ * Classifies one product parameter into the media entries it carries.
+ *
+ * Returns an entry per URL in the value, so a parameter holding several
+ * files (see MULTI_VALUE_SEPARATOR) yields several, and one holding a
+ * single URL yields exactly one. Returns an empty array when the parameter
+ * isn't media at all — its name isn't in `parameters`, or no piece of its
+ * value is URL-shaped — which is also what makes "no video configured"
+ * render as nothing rather than an empty player.
+ *
+ * Pieces are validated individually, so a value that's part URLs and part
+ * prose contributes the URLs it does have instead of being discarded
+ * whole.
  *
  * @param parameters - The tenant's resolved identifier→kind table (defaults
  *   merged with that tenant's own overrides). Falls back to
@@ -106,7 +124,7 @@ export function classifyMediaParameter(
     string,
     ProductMediaKind
   > = PRODUCT_MEDIA_PARAMETER_DEFAULTS,
-): ProductMediaParameter | null {
+): ProductMediaParameter[] {
   // `identifier` is the parameter's language-invariant key — Geins documents
   // it as the same across every language and stable when the display name
   // changes. `name` is the display string, so keying on it would classify
@@ -114,7 +132,7 @@ export function classifyMediaParameter(
   // dumping a raw URL into the spec table instead. Falls back to `name` only
   // because the field is nullable in the schema.
   const key = (param.identifier || param.name)?.trim().toLowerCase();
-  if (!key) return null;
+  if (!key) return [];
 
   // The table is merchant-supplied, so its keys arrive in whatever case the
   // admin typed. Normalizing the whole table rather than probing it for a
@@ -123,13 +141,18 @@ export function classifyMediaParameter(
   // lookup would find the default first and return 'document' forever.
   // Collapsing to lowercase lets the later entry win, as a spread implies.
   const kind = normalizeParameterTable(parameters)[key];
-  if (!kind || !isUrlValue(param.value)) return null;
+  if (!kind || !param.value) return [];
 
-  const url = param.value.trim();
-  return {
-    kind,
-    label: formatParameterLabel(param.label || param.name || ''),
-    url,
-    embedUrl: kind === 'video' ? resolveVideoEmbedUrl(url) : null,
-  };
+  const label = formatParameterLabel(param.label || param.name || '');
+
+  return param.value
+    .split(MULTI_VALUE_SEPARATOR)
+    .map((piece) => piece.trim())
+    .filter(isUrlValue)
+    .map((url) => ({
+      kind,
+      label,
+      url,
+      embedUrl: kind === 'video' ? resolveVideoEmbedUrl(url) : null,
+    }));
 }
