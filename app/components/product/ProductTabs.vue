@@ -81,6 +81,17 @@ const hasDescription = computed(
 // pulled out of the spec table and rendered as embeds/download links in the
 // Documents tab instead — a raw URL in a text-value row isn't useful to a
 // shopper.
+/**
+ * `show: false` is the merchant admin saying "don't display this on the
+ * storefront" — it applies equally to a spec row and to a media parameter,
+ * so it's checked once here before a parameter is classified at all.
+ * Treated as visible when the flag is absent: an unknown value shouldn't
+ * blank out a product's whole spec table.
+ */
+function isVisibleParameter(param: { show?: boolean }): boolean {
+  return param.show !== false;
+}
+
 const { productMediaParameters } = useTenant();
 const classifiedParameters = computed(() => {
   const videos: ProductMediaParameter[] = [];
@@ -88,6 +99,7 @@ const classifiedParameters = computed(() => {
   const mediaKeys = new Set<string>();
   for (const group of props.product.parameterGroups ?? []) {
     for (const param of group.parameters ?? []) {
+      if (!isVisibleParameter(param)) continue;
       // One parameter can carry several files, so this is 0-n entries —
       // an empty result means the parameter isn't media and stays in the
       // spec table below.
@@ -129,7 +141,8 @@ const visibleGroups = computed(() =>
       ...g,
       parameters: (g.parameters ?? []).filter(
         (p) =>
-          (p.name || p.label) &&
+          isVisibleParameter(p) &&
+          (p.label || p.name) &&
           p.value != null &&
           !classifiedParameters.value.mediaKeys.has(
             `${g.parameterGroupId}:${p.name}`,
@@ -267,7 +280,7 @@ onMounted(() => {
                   class="border-border odd:bg-muted/40 border-b"
                 >
                   <td class="text-muted-foreground px-3 py-3 pr-4">
-                    {{ param.name ?? param.label ?? '' }}
+                    {{ param.label || param.name || '' }}
                   </td>
                   <td class="px-3 py-3 text-right">{{ param.value }}</td>
                 </tr>
@@ -414,7 +427,7 @@ onMounted(() => {
                     class="border-border border-b"
                   >
                     <td class="text-muted-foreground py-2 pr-4">
-                      {{ param.name ?? param.label ?? '' }}
+                      {{ param.label || param.name || '' }}
                     </td>
                     <td class="py-2">{{ param.value }}</td>
                   </tr>
