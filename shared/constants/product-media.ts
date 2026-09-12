@@ -77,6 +77,16 @@ export interface ProductMediaParameter {
    * is worth signalling differently to a shopper deciding whether to click.
    */
   fileType: ProductMediaFileType | null;
+  /**
+   * The file's own name, or null when the URL doesn't end in one.
+   *
+   * `label` comes from the parameter, so every entry of a multi-value
+   * parameter shares it — three files under `Manual` all read "Manual".
+   * The file name is the only thing that differs per entry, so it's what
+   * lets a shopper tell them apart. Opaque names (`5590_1.pdf`) still
+   * distinguish even when they don't describe.
+   */
+  fileName: string | null;
 }
 
 const URL_PATTERN = /^https?:\/\//i;
@@ -172,6 +182,24 @@ function resolveFileType(url: string): ProductMediaFileType | null {
   return FILE_TYPE_BY_EXTENSION[fileExtension(url)] ?? null;
 }
 
+/**
+ * The URL's last path segment when it looks like a file, decoded so an
+ * encoded name (`Installations%20manual.pdf`) reads normally. Null for a
+ * URL that ends in a directory or a route rather than a file — there is
+ * nothing useful to show a shopper in that case.
+ */
+function resolveFileName(url: string): string | null {
+  const path = url.split(/[?#]/)[0] ?? '';
+  const lastSegment = path.split('/').pop() ?? '';
+  if (!lastSegment.includes('.')) return null;
+  try {
+    return decodeURIComponent(lastSegment);
+  } catch {
+    // Malformed percent-encoding: the raw segment still identifies the file.
+    return lastSegment;
+  }
+}
+
 /** True when the URL points at a video file a browser can play directly. */
 function isDirectVideoFile(url: string): boolean {
   return resolveFileType(url) === 'video';
@@ -263,6 +291,7 @@ export function classifyMediaParameter(
         embedUrl,
         display: resolveDisplay(kind, url, embedUrl),
         fileType: resolveFileType(url),
+        fileName: resolveFileName(url),
       };
     });
 }

@@ -280,3 +280,46 @@ describe('classifyMediaParameter — file type', () => {
     expect(fileTypeOf('https://x.example/')).toBeNull();
   });
 });
+
+describe('classifyMediaParameter — file name', () => {
+  const fileNameOf = (value: string, name = 'Manual') =>
+    classifyMediaParameter({ name, value })[0]?.fileName;
+
+  it('exposes the file name so several files under one parameter can be told apart', () => {
+    // The label comes from the parameter, so every entry of a multi-value
+    // parameter shares it; the file name is the only per-entry identity.
+    const entries = classifyMediaParameter({
+      name: 'Manual',
+      value: 'https://x.example/5590_1.pdf|https://x.example/5590_2.pdf',
+    });
+    expect(entries.map((e) => e.label)).toEqual(['Manual', 'Manual']);
+    expect(entries.map((e) => e.fileName)).toEqual([
+      '5590_1.pdf',
+      '5590_2.pdf',
+    ]);
+  });
+
+  it('takes the last path segment, ignoring query and fragment', () => {
+    expect(fileNameOf('https://x.example/files/manual-sv.pdf?token=abc')).toBe(
+      'manual-sv.pdf',
+    );
+    expect(fileNameOf('https://x.example/files/manual-sv.pdf#page=2')).toBe(
+      'manual-sv.pdf',
+    );
+  });
+
+  it('decodes a percent-encoded name', () => {
+    expect(fileNameOf('https://x.example/Installations%20manual.pdf')).toBe(
+      'Installations manual.pdf',
+    );
+  });
+
+  it('is null when the URL has no file name to show', () => {
+    // A page rather than a file: there is nothing meaningful to display.
+    expect(fileNameOf('https://x.example/downloads/12345')).toBeNull();
+    expect(fileNameOf('https://x.example/')).toBeNull();
+    expect(
+      fileNameOf('https://www.youtube.com/watch?v=abc123', 'VideoURL'),
+    ).toBeNull();
+  });
+});

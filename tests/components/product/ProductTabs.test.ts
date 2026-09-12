@@ -332,6 +332,37 @@ describe('ProductTabs', () => {
     expect(links[1]!.text()).toContain('Product Spec');
   });
 
+  it('gives the mobile accordion the same media handling as the desktop tabs', () => {
+    // The two views are separate markup; every media fix has to land in
+    // both. Tests scoped only to .tabs-content let them drift apart.
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'VideoURL',
+              value: 'https://www.loom.com/share/abc123',
+              show: true,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const mobile = wrapper.find('.accordion');
+    expect(mobile.exists()).toBe(true);
+    // A provider page URL can't play in a <video>; both views must link out.
+    expect(mobile.findAll('video').length).toBe(0);
+    expect(
+      mobile.findAll('a[href="https://www.loom.com/share/abc123"]').length,
+    ).toBe(1);
+  });
+
   it('hides a media parameter the merchant marked show:false', () => {
     // `show: false` has to mean the same thing for a video as for a spec
     // row, otherwise hiding a parameter removes it from the table but

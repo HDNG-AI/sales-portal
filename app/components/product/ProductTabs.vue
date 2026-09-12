@@ -303,7 +303,15 @@ onMounted(() => {
               :key="video.url"
               class="flex flex-col gap-2"
             >
-              <p class="text-sm font-medium">{{ video.label }}</p>
+              <p class="text-sm font-medium">
+                {{ video.label }}
+                <small
+                  v-if="video.fileName"
+                  class="text-muted-foreground ml-1 font-normal"
+                >
+                  {{ video.fileName }}
+                </small>
+              </p>
               <div
                 class="border-border aspect-video w-full overflow-hidden rounded-lg border"
               >
@@ -357,7 +365,15 @@ onMounted(() => {
                 :is="documentIcon(doc.fileType)"
                 class="text-muted-foreground h-5 w-5 shrink-0"
               />
-              <span class="truncate">{{ doc.label }}</span>
+              <span class="min-w-0 truncate">
+                {{ doc.label }}
+                <small
+                  v-if="doc.fileName"
+                  class="text-muted-foreground ml-1 font-normal"
+                >
+                  {{ doc.fileName }}
+                </small>
+              </span>
             </a>
           </div>
         </div>
@@ -442,7 +458,15 @@ onMounted(() => {
                 :key="video.url"
                 class="flex flex-col gap-2"
               >
-                <p class="text-sm font-medium">{{ video.label }}</p>
+                <p class="text-sm font-medium">
+                  {{ video.label }}
+                  <small
+                    v-if="video.fileName"
+                    class="text-muted-foreground ml-1 font-normal"
+                  >
+                    {{ video.fileName }}
+                  </small>
+                </p>
                 <div
                   class="border-border aspect-video w-full overflow-hidden rounded-lg border"
                 >
@@ -456,11 +480,21 @@ onMounted(() => {
                     :title="video.label"
                   />
                   <video
-                    v-else
+                    v-else-if="video.display === 'file'"
                     :src="video.url"
                     controls
                     class="h-full w-full"
                   />
+                  <a
+                    v-else
+                    :href="video.url"
+                    target="_blank"
+                    rel="noopener"
+                    class="hover:bg-muted/40 flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-sm transition-colors"
+                  >
+                    <Play class="text-muted-foreground h-6 w-6" />
+                    <span class="underline">{{ linkHost(video.url) }}</span>
+                  </a>
                 </div>
               </div>
             </div>
@@ -473,8 +507,19 @@ onMounted(() => {
                 rel="noopener"
                 class="border-border hover:bg-muted/40 flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
               >
-                <FileText class="text-muted-foreground h-5 w-5 shrink-0" />
-                <span class="truncate">{{ doc.label }}</span>
+                <component
+                  :is="documentIcon(doc.fileType)"
+                  class="text-muted-foreground h-5 w-5 shrink-0"
+                />
+                <span class="min-w-0 truncate">
+                  {{ doc.label }}
+                  <small
+                    v-if="doc.fileName"
+                    class="text-muted-foreground ml-1 font-normal"
+                  >
+                    {{ doc.fileName }}
+                  </small>
+                </span>
               </a>
             </div>
           </div>
