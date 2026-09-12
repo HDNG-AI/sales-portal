@@ -34,15 +34,30 @@ export const PRODUCT_MEDIA_PARAMETER_DEFAULTS: Record<
 
 export type ProductMediaKind = 'video' | 'document';
 
+/**
+ * How an entry should be presented.
+ *
+ * The distinction exists because a `<video>` element can only play a URL
+ * that points at an actual video file. Handing it a provider *page* URL
+ * (a Shorts link, a Loom share link) renders a player that silently plays
+ * nothing, so anything neither embeddable nor a file has to degrade to a
+ * link the shopper can follow instead.
+ */
+export type ProductMediaDisplay = 'embed' | 'file' | 'link';
+
 export interface ProductMediaParameter {
   kind: ProductMediaKind;
   label: string;
   url: string;
-  /** Iframe-embeddable URL for known video providers; null for a direct file link (e.g. .mp4). */
+  /** Iframe-embeddable URL for known video providers; null otherwise. */
   embedUrl: string | null;
+  display: ProductMediaDisplay;
 }
 
 const URL_PATTERN = /^https?:\/\//i;
+
+/** Extensions a browser can play directly in a `<video>` element. */
+const VIDEO_FILE_PATTERN = /\.(mp4|webm|ogv|ogg|mov|m4v)$/i;
 
 /**
  * Separator for a parameter holding several files (two manuals, a spec
@@ -65,14 +80,38 @@ function formatParameterLabel(raw: string): string {
     .trim();
 }
 
+/** True when the URL points at a video file a browser can play directly. */
+function isDirectVideoFile(url: string): boolean {
+  // Test the path only: a signed CDN link (`clip.mp4?token=…`) is still a
+  // direct file, and the extension never survives into the query string.
+  const path = url.split(/[?#]/)[0] ?? '';
+  return VIDEO_FILE_PATTERN.test(path);
+}
+
+/**
+ * Picks how one entry should be rendered. Documents are always links — a
+ * link degrades safely whatever it points at. Videos prefer a provider
+ * embed, fall back to the browser's own player for a direct file, and
+ * otherwise become a link rather than a player that cannot play.
+ */
+function resolveDisplay(
+  kind: ProductMediaKind,
+  url: string,
+  embedUrl: string | null,
+): ProductMediaDisplay {
+  if (kind === 'document') return 'link';
+  if (embedUrl) return 'embed';
+  return isDirectVideoFile(url) ? 'file' : 'link';
+}
+
 /**
  * Resolves a raw video URL to an embeddable iframe src for known providers.
- * Returns null for anything else (e.g. a direct .mp4 link), which callers
- * should render with a native <video> element instead.
+ * Returns null for anything else — a direct file (played in a `<video>`
+ * element) or a provider we don't recognize (rendered as a link).
  */
 export function resolveVideoEmbedUrl(url: string): string | null {
   const youtubeMatch = url.match(
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/,
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]+)/,
   );
   if (youtubeMatch?.[1]) {
     return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
@@ -126,10 +165,14 @@ export function classifyMediaParameter(
     .split(MULTI_VALUE_SEPARATOR)
     .map((piece) => piece.trim())
     .filter(isUrlValue)
-    .map((url) => ({
-      kind,
-      label,
-      url,
-      embedUrl: kind === 'video' ? resolveVideoEmbedUrl(url) : null,
-    }));
+    .map((url) => {
+      const embedUrl = kind === 'video' ? resolveVideoEmbedUrl(url) : null;
+      return {
+        kind,
+        label,
+        url,
+        embedUrl,
+        display: resolveDisplay(kind, url, embedUrl),
+      };
+    });
 }
