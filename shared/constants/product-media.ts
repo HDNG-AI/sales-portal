@@ -77,6 +77,16 @@ export interface ProductMediaParameter {
    * is worth signalling differently to a shopper deciding whether to click.
    */
   fileType: ProductMediaFileType | null;
+  /**
+   * The file's own name, or null when the URL doesn't end in one.
+   *
+   * `label` comes from the parameter, so every entry of a multi-value
+   * parameter shares it — three files under `Manual` all read "Manual".
+   * The file name is the only thing that differs per entry, so it's what
+   * lets a shopper tell them apart. Opaque names (`5590_1.pdf`) still
+   * distinguish even when they don't describe.
+   */
+  fileName: string | null;
 }
 
 const URL_PATTERN = /^https?:\/\//i;
@@ -161,15 +171,46 @@ function formatParameterLabel(raw: string): string {
  * none. Query and fragment are stripped first: a signed CDN link
  * (`clip.mp4?token=…`) is still a direct file.
  */
+/**
+ * The URL's path, without the origin. Splitting the raw string on '/' instead
+ * would hand back the host for a URL that has no path, so `https://demo.mov`
+ * reads as a .mov file and renders a <video> pointed at an HTML page — the
+ * dead player `display: 'link'` exists to avoid. Every caller runs after
+ * isUrlValue, so the value is an absolute http(s) URL and parses.
+ */
+function urlPath(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return '';
+  }
+}
+
 function fileExtension(url: string): string {
-  const path = url.split(/[?#]/)[0] ?? '';
-  const lastSegment = path.split('/').pop() ?? '';
+  const lastSegment = urlPath(url).split('/').pop() ?? '';
   const dot = lastSegment.lastIndexOf('.');
   return dot === -1 ? '' : lastSegment.slice(dot + 1).toLowerCase();
 }
 
 function resolveFileType(url: string): ProductMediaFileType | null {
   return FILE_TYPE_BY_EXTENSION[fileExtension(url)] ?? null;
+}
+
+/**
+ * The URL's last path segment when it looks like a file, decoded so an
+ * encoded name (`Installations%20manual.pdf`) reads normally. Null for a
+ * URL that ends in a directory or a route rather than a file — there is
+ * nothing useful to show a shopper in that case.
+ */
+function resolveFileName(url: string): string | null {
+  const lastSegment = urlPath(url).split('/').pop() ?? '';
+  if (!lastSegment.includes('.')) return null;
+  try {
+    return decodeURIComponent(lastSegment);
+  } catch {
+    // Malformed percent-encoding: the raw segment still identifies the file.
+    return lastSegment;
+  }
 }
 
 /** True when the URL points at a video file a browser can play directly. */
@@ -286,6 +327,7 @@ export function classifyMediaParameter(
         embedUrl,
         display: resolveDisplay(kind, url, embedUrl),
         fileType: resolveFileType(url),
+        fileName: resolveFileName(url),
       };
     });
 }
