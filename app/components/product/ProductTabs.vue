@@ -8,11 +8,48 @@ import {
   AccordionTrigger,
 } from '~/components/ui/accordion';
 import { adminText } from '~/utils/product-texts';
-import { FileText, Play } from 'lucide-vue-next';
+import {
+  ExternalLink,
+  FileArchive,
+  FileAudio,
+  FileAxis3d,
+  FileCode,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  FileVideoCamera,
+  Play,
+} from 'lucide-vue-next';
 import {
   classifyMediaParameter,
+  type ProductMediaFileType,
   type ProductMediaParameter,
 } from '#shared/constants/product-media';
+
+/**
+ * The icon set carries no brand marks, so `pdf` and `text` share one —
+ * these are format families, not exact formats.
+ */
+const DOCUMENT_ICONS = {
+  pdf: FileText,
+  text: FileText,
+  spreadsheet: FileSpreadsheet,
+  archive: FileArchive,
+  image: FileImage,
+  video: FileVideoCamera,
+  audio: FileAudio,
+  cad: FileAxis3d,
+  code: FileCode,
+} as const;
+
+/**
+ * A null fileType means the URL has no file extension to go on, so it
+ * opens a page rather than downloading something — worth showing
+ * differently so a shopper knows what a click will do.
+ */
+function documentIcon(fileType: ProductMediaFileType | null) {
+  return fileType ? DOCUMENT_ICONS[fileType] : ExternalLink;
+}
 
 const props = defineProps<{
   product: DetailProduct;
@@ -309,7 +346,10 @@ onMounted(() => {
               rel="noopener"
               class="border-border hover:bg-muted/40 flex items-center gap-3 rounded-lg border p-3 text-sm transition-colors"
             >
-              <FileText class="text-muted-foreground h-5 w-5 shrink-0" />
+              <component
+                :is="documentIcon(doc.fileType)"
+                class="text-muted-foreground h-5 w-5 shrink-0"
+              />
               <span class="truncate">{{ doc.label }}</span>
             </a>
           </div>

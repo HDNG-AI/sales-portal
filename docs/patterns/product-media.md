@@ -142,6 +142,7 @@ entries. Each entry carries:
 - `url` — one URL
 - `embedUrl` — an iframe src for recognized providers, otherwise `null`
 - `display` — `embed`, `file` or `link`; how to present this entry
+- `fileType` — format family from the extension, or `null` (see below)
 
 `display` is what the component switches on, so the decision about whether
 a URL can actually be played lives in one tested place rather than in the
@@ -150,6 +151,26 @@ it points at, so there is no equivalent failure mode on that side.
 
 Parameters that produced media are removed from the spec table, so a URL
 never appears twice on the page.
+
+### File type and the document icon
+
+`fileType` is derived from the extension of the URL's last path segment
+(query and fragment ignored, so a signed CDN link still resolves): `pdf`,
+`text`, `spreadsheet`, `archive`, `image`, `video`, `audio`, `cad` or
+`code`. It drives which icon a document link gets.
+
+`null` means the URL carries no recognizable file extension — a
+SharePoint page, a manufacturer's product page, an opaque `/downloads/123`
+route. Those render with an external-link icon rather than a file icon, so
+a shopper can tell "opens a page" from "downloads a file" before clicking.
+
+The icon set carries no brand marks, so there is no PDF or Word glyph;
+`pdf` and `text` share one icon today. `fileType` still distinguishes them
+because it describes the data, not the icon — if a distinct treatment ever
+arrives, only the component's lookup table changes.
+
+The same extension table decides which URLs a `<video>` element can play
+(everything mapped to `video`), so the two can't drift apart.
 
 ## Related files
 

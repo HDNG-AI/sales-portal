@@ -45,6 +45,25 @@ export type ProductMediaKind = 'video' | 'document';
  */
 export type ProductMediaDisplay = 'embed' | 'file' | 'link';
 
+/**
+ * Format family derived from the URL's extension, used to pick an icon.
+ * Deliberately a family rather than a specific format: the icon set has no
+ * brand marks (no PDF/Word/Excel glyphs), so `doc` and `txt` land on the
+ * same icon anyway. `pdf` stays its own value despite currently sharing an
+ * icon with `text`, since it's the dominant format here and the likeliest
+ * to earn distinct treatment later.
+ */
+export type ProductMediaFileType =
+  | 'pdf'
+  | 'text'
+  | 'spreadsheet'
+  | 'archive'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'cad'
+  | 'code';
+
 export interface ProductMediaParameter {
   kind: ProductMediaKind;
   label: string;
@@ -52,12 +71,69 @@ export interface ProductMediaParameter {
   /** Iframe-embeddable URL for known video providers; null otherwise. */
   embedUrl: string | null;
   display: ProductMediaDisplay;
+  /**
+   * Format family, or null when the URL carries no recognizable file
+   * extension — those open a page rather than downloading something, which
+   * is worth signalling differently to a shopper deciding whether to click.
+   */
+  fileType: ProductMediaFileType | null;
 }
 
 const URL_PATTERN = /^https?:\/\//i;
 
-/** Extensions a browser can play directly in a `<video>` element. */
-const VIDEO_FILE_PATTERN = /\.(mp4|webm|ogv|ogg|mov|m4v)$/i;
+/**
+ * Extension → format family. Also the single source of truth for which
+ * extensions a browser can play in a `<video>` element (everything mapped
+ * to `video`), so the two never drift apart.
+ */
+const FILE_TYPE_BY_EXTENSION: Record<string, ProductMediaFileType> = {
+  pdf: 'pdf',
+  doc: 'text',
+  docx: 'text',
+  odt: 'text',
+  rtf: 'text',
+  txt: 'text',
+  md: 'text',
+  xls: 'spreadsheet',
+  xlsx: 'spreadsheet',
+  ods: 'spreadsheet',
+  csv: 'spreadsheet',
+  zip: 'archive',
+  rar: 'archive',
+  '7z': 'archive',
+  tar: 'archive',
+  gz: 'archive',
+  jpg: 'image',
+  jpeg: 'image',
+  png: 'image',
+  gif: 'image',
+  webp: 'image',
+  svg: 'image',
+  bmp: 'image',
+  tiff: 'image',
+  mp4: 'video',
+  webm: 'video',
+  ogv: 'video',
+  ogg: 'video',
+  mov: 'video',
+  m4v: 'video',
+  mp3: 'audio',
+  wav: 'audio',
+  m4a: 'audio',
+  aac: 'audio',
+  flac: 'audio',
+  dwg: 'cad',
+  dxf: 'cad',
+  step: 'cad',
+  stp: 'cad',
+  iges: 'cad',
+  igs: 'cad',
+  stl: 'cad',
+  json: 'code',
+  xml: 'code',
+  yaml: 'code',
+  yml: 'code',
+};
 
 /**
  * Separator for a parameter holding several files (two manuals, a spec
@@ -80,12 +156,25 @@ function formatParameterLabel(raw: string): string {
     .trim();
 }
 
+/**
+ * Lowercased extension of the URL's last path segment, or '' when it has
+ * none. Query and fragment are stripped first: a signed CDN link
+ * (`clip.mp4?token=…`) is still a direct file.
+ */
+function fileExtension(url: string): string {
+  const path = url.split(/[?#]/)[0] ?? '';
+  const lastSegment = path.split('/').pop() ?? '';
+  const dot = lastSegment.lastIndexOf('.');
+  return dot === -1 ? '' : lastSegment.slice(dot + 1).toLowerCase();
+}
+
+function resolveFileType(url: string): ProductMediaFileType | null {
+  return FILE_TYPE_BY_EXTENSION[fileExtension(url)] ?? null;
+}
+
 /** True when the URL points at a video file a browser can play directly. */
 function isDirectVideoFile(url: string): boolean {
-  // Test the path only: a signed CDN link (`clip.mp4?token=…`) is still a
-  // direct file, and the extension never survives into the query string.
-  const path = url.split(/[?#]/)[0] ?? '';
-  return VIDEO_FILE_PATTERN.test(path);
+  return resolveFileType(url) === 'video';
 }
 
 /**
@@ -173,6 +262,7 @@ export function classifyMediaParameter(
         url,
         embedUrl,
         display: resolveDisplay(kind, url, embedUrl),
+        fileType: resolveFileType(url),
       };
     });
 }

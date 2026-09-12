@@ -242,3 +242,41 @@ describe('classifyMediaParameter — how each entry should be displayed', () => 
     expect(page?.display).toBe('link');
   });
 });
+
+describe('classifyMediaParameter — file type', () => {
+  const fileTypeOf = (value: string, name = 'Manual') =>
+    classifyMediaParameter({ name, value })[0]?.fileType;
+
+  it('derives the format from the extension', () => {
+    expect(fileTypeOf('https://x.example/a.pdf')).toBe('pdf');
+    expect(fileTypeOf('https://x.example/a.docx')).toBe('text');
+    expect(fileTypeOf('https://x.example/a.xlsx')).toBe('spreadsheet');
+    expect(fileTypeOf('https://x.example/a.csv')).toBe('spreadsheet');
+    expect(fileTypeOf('https://x.example/a.zip')).toBe('archive');
+    expect(fileTypeOf('https://x.example/a.png')).toBe('image');
+    expect(fileTypeOf('https://x.example/a.mp3')).toBe('audio');
+    expect(fileTypeOf('https://x.example/a.dwg')).toBe('cad');
+    expect(fileTypeOf('https://x.example/a.step')).toBe('cad');
+    expect(fileTypeOf('https://x.example/a.json')).toBe('code');
+    expect(fileTypeOf('https://x.example/clip.mp4', 'VideoURL')).toBe('video');
+  });
+
+  it('matches the extension case-insensitively', () => {
+    expect(fileTypeOf('https://x.example/MANUAL.PDF')).toBe('pdf');
+  });
+
+  it('sees through a query string or fragment', () => {
+    expect(fileTypeOf('https://x.example/a.pdf?token=abc')).toBe('pdf');
+    expect(fileTypeOf('https://x.example/a.pdf#page=2')).toBe('pdf');
+  });
+
+  it('is null for a URL with no recognizable file extension', () => {
+    // Nothing to download — these open a page, which the UI should signal
+    // differently from a file.
+    expect(
+      fileTypeOf('https://sharepoint.example/sites/docs/Manual.aspx'),
+    ).toBeNull();
+    expect(fileTypeOf('https://x.example/downloads/12345')).toBeNull();
+    expect(fileTypeOf('https://x.example/')).toBeNull();
+  });
+});
