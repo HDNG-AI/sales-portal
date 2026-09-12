@@ -51,10 +51,15 @@ const classifiedParameters = computed(() => {
   const mediaKeys = new Set<string>();
   for (const group of props.product.parameterGroups ?? []) {
     for (const param of group.parameters ?? []) {
+      // One parameter can carry several files, so this is 0-n entries —
+      // an empty result means the parameter isn't media and stays in the
+      // spec table below.
       const media = classifyMediaParameter(param, productMediaParameters.value);
-      if (!media) continue;
+      if (media.length === 0) continue;
       mediaKeys.add(`${group.parameterGroupId}:${param.name}`);
-      (media.kind === 'video' ? videos : documents).push(media);
+      for (const entry of media) {
+        (entry.kind === 'video' ? videos : documents).push(entry);
+      }
     }
   }
   return { videos, documents, mediaKeys };
