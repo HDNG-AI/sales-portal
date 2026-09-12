@@ -68,25 +68,24 @@ Rules the storefront applies when splitting:
 mapping, which puts a configuration change in the path of adding a fourth
 video — exactly what this design avoids.
 
-### 4. Video URLs: emit an embeddable form
+### 4. Video URLs
 
-`resolveVideoEmbedUrl` currently recognizes these, and turns them into an
-iframe embed:
+Any URL is safe to write — the storefront picks a presentation that works
+for it rather than assuming. Videos land in one of three modes:
 
-| Form                            | Recognized                         |
-| ------------------------------- | ---------------------------------- |
-| `youtube.com/watch?v=<id>`      | yes                                |
-| `youtu.be/<id>`                 | yes                                |
-| `youtube.com/embed/<id>`        | yes                                |
-| `vimeo.com/<id>`                | yes                                |
-| `youtube.com/shorts/<id>`       | **no**                             |
-| A direct file (`.mp4`, `.webm`) | n/a — plays in a `<video>` element |
+| Value                                                                                                              | Mode    | Renders as                       |
+| ------------------------------------------------------------------------------------------------------------------ | ------- | -------------------------------- |
+| `youtube.com/watch?v=<id>`, `youtu.be/<id>`, `youtube.com/embed/<id>`, `youtube.com/shorts/<id>`, `vimeo.com/<id>` | `embed` | Inline iframe player             |
+| A direct file — `.mp4`, `.webm`, `.ogv`, `.ogg`, `.mov`, `.m4v` (query strings ignored)                            | `file`  | Browser `<video>` element        |
+| Anything else                                                                                                      | `link`  | Link out, labelled with the host |
 
-Anything not recognized falls through to a `<video>` element, which only
-works for a direct video file. A YouTube _page_ URL in that branch renders
-a player that silently plays nothing — so a writer emitting YouTube links
-should normalize to the `watch?v=` form rather than passing a Shorts URL
-through.
+The `link` mode exists because a `<video>` element can only play a real
+video file: handing it a provider _page_ URL renders controls that can
+never play anything, with no error. Unrecognized providers degrade to a
+link the shopper can follow instead of a dead player.
+
+Prefer an embeddable form where you have the choice — it keeps the video
+on the page — but nothing breaks if you can't.
 
 ### 5. Absent means absent
 
@@ -141,12 +140,13 @@ entries. Each entry carries:
 - `kind` — `video` or `document`
 - `label` — the parameter name, spaced (`ProductSpec` → `Product Spec`)
 - `url` — one URL
-- `embedUrl` — an iframe src for recognized providers (YouTube, Vimeo),
-  otherwise `null`
+- `embedUrl` — an iframe src for recognized providers, otherwise `null`
+- `display` — `embed`, `file` or `link`; how to present this entry
 
-A `video` entry with an `embedUrl` renders in an iframe; one without is a
-direct file and renders in a `<video>` element. `document` entries render
-as download links.
+`display` is what the component switches on, so the decision about whether
+a URL can actually be played lives in one tested place rather than in the
+template. Documents are always `link` — an anchor degrades safely whatever
+it points at, so there is no equivalent failure mode on that side.
 
 Parameters that produced media are removed from the spec table, so a URL
 never appears twice on the page.

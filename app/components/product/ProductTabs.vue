@@ -8,7 +8,7 @@ import {
   AccordionTrigger,
 } from '~/components/ui/accordion';
 import { adminText } from '~/utils/product-texts';
-import { FileText } from 'lucide-vue-next';
+import { FileText, Play } from 'lucide-vue-next';
 import {
   classifyMediaParameter,
   type ProductMediaParameter,
@@ -76,6 +76,20 @@ const classifiedParameters = computed(() => {
   }
   return { videos, documents, mediaKeys };
 });
+/**
+ * Host shown as the text of an external video link, so a shopper can see
+ * where the link goes before following it. Falls back to the raw URL for a
+ * value too malformed to parse — it passed the `https://` prefix check but
+ * that doesn't make it a complete URL.
+ */
+function linkHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 const videoItems = computed(() => classifiedParameters.value.videos);
 const documentItems = computed(() => classifiedParameters.value.documents);
 const hasDocumentsContent = computed(
@@ -270,6 +284,8 @@ onMounted(() => {
               <div
                 class="border-border aspect-video w-full overflow-hidden rounded-lg border"
               >
+                <!-- embedUrl is non-null exactly when display is 'embed';
+                     keying the branch off it keeps the src type-safe. -->
                 <iframe
                   v-if="video.embedUrl"
                   :src="video.embedUrl"
@@ -279,7 +295,25 @@ onMounted(() => {
                   allow="autoplay; encrypted-media"
                   :title="video.label"
                 />
-                <video v-else :src="video.url" controls class="h-full w-full" />
+                <video
+                  v-else-if="video.display === 'file'"
+                  :src="video.url"
+                  controls
+                  class="h-full w-full"
+                />
+                <!-- Neither embeddable nor a playable file: a <video> here
+                     would render controls that can never play anything, so
+                     link out instead and name the host being opened. -->
+                <a
+                  v-else
+                  :href="video.url"
+                  target="_blank"
+                  rel="noopener"
+                  class="hover:bg-muted/40 flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center text-sm transition-colors"
+                >
+                  <Play class="text-muted-foreground h-6 w-6" />
+                  <span class="underline">{{ linkHost(video.url) }}</span>
+                </a>
               </div>
             </div>
           </div>

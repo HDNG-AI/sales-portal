@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   classifyMediaParameter,
+  resolveVideoEmbedUrl,
   PRODUCT_MEDIA_PARAMETER_DEFAULTS,
 } from '../../../shared/constants/product-media';
 
@@ -197,5 +198,86 @@ describe('classifyMediaParameter — multi-value parameters', () => {
       'Product Spec',
       'Product Spec',
     ]);
+  });
+});
+
+describe('resolveVideoEmbedUrl', () => {
+  it('embeds a YouTube Shorts URL', () => {
+    expect(
+      resolveVideoEmbedUrl('https://www.youtube.com/shorts/Xz4Taqin0Io'),
+    ).toBe('https://www.youtube.com/embed/Xz4Taqin0Io');
+  });
+
+  it('embeds the other YouTube and Vimeo forms', () => {
+    expect(resolveVideoEmbedUrl('https://www.youtube.com/watch?v=abc123')).toBe(
+      'https://www.youtube.com/embed/abc123',
+    );
+    expect(resolveVideoEmbedUrl('https://youtu.be/abc123')).toBe(
+      'https://www.youtube.com/embed/abc123',
+    );
+    expect(resolveVideoEmbedUrl('https://vimeo.com/123456')).toBe(
+      'https://player.vimeo.com/video/123456',
+    );
+  });
+
+  it('returns null for a URL it does not recognize', () => {
+    expect(resolveVideoEmbedUrl('https://cdn.example.com/clip.mp4')).toBeNull();
+    expect(resolveVideoEmbedUrl('https://www.loom.com/share/abc')).toBeNull();
+  });
+});
+
+describe('classifyMediaParameter — how each entry should be displayed', () => {
+  it('marks a recognized provider URL as embeddable', () => {
+    const [entry] = classifyMediaParameter({
+      name: 'VideoURL',
+      value: 'https://www.youtube.com/shorts/Xz4Taqin0Io',
+    });
+    expect(entry?.display).toBe('embed');
+    expect(entry?.embedUrl).toBe('https://www.youtube.com/embed/Xz4Taqin0Io');
+  });
+
+  it('marks a direct video file as playable in a video element', () => {
+    const [entry] = classifyMediaParameter({
+      name: 'VideoURL',
+      value: 'https://cdn.example.com/clip.mp4',
+    });
+    expect(entry?.display).toBe('file');
+    expect(entry?.embedUrl).toBeNull();
+  });
+
+  it('sees through a query string when detecting a direct video file', () => {
+    const [entry] = classifyMediaParameter({
+      name: 'VideoURL',
+      value: 'https://cdn.example.com/clip.mp4?token=abc123',
+    });
+    expect(entry?.display).toBe('file');
+  });
+
+  it('falls back to a link for a video URL that is neither embeddable nor a file', () => {
+    // A page URL on a provider we do not recognize. Rendering this in a
+    // <video> element shows a player that can never play anything, so it
+    // has to degrade to a link the shopper can actually follow.
+    const [entry] = classifyMediaParameter({
+      name: 'VideoURL',
+      value: 'https://www.loom.com/share/abc123',
+    });
+    expect(entry?.display).toBe('link');
+    expect(entry?.embedUrl).toBeNull();
+  });
+
+  it('always displays documents as links', () => {
+    const [pdf] = classifyMediaParameter({
+      name: 'Manual',
+      value: 'https://cdn.example.com/manual.pdf',
+    });
+    expect(pdf?.display).toBe('link');
+
+    // Even when the document URL happens to be a known video provider, the
+    // mapped kind decides the tab it lands in; a link is always safe.
+    const [page] = classifyMediaParameter({
+      name: 'Manual',
+      value: 'https://www.youtube.com/watch?v=abc123',
+    });
+    expect(page?.display).toBe('link');
   });
 });
