@@ -50,6 +50,8 @@ query product(
       parameterGroupId
       parameters {
         name
+        label
+        description
         value
         show
         identifier

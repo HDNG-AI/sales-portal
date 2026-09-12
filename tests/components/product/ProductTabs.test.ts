@@ -204,8 +204,11 @@ describe('ProductTabs', () => {
     expect(specContent.text()).toContain('Dimensions');
     expect(specContent.text()).toContain('Weight');
     expect(specContent.text()).toContain('500g');
-    expect(specContent.text()).toContain('Produkttyp');
-    expect(specContent.text()).toContain('Elektronik');
+    // `show: false` is the merchant saying "don't display this on the
+    // storefront" — Produkttyp/Elektronik carry it and must stay hidden.
+    expect(specContent.text()).not.toContain('Produkttyp');
+    expect(specContent.text()).not.toContain('Elektronik');
+    // Nameless/valueless rows are dropped regardless of `show`.
     expect(specContent.text()).not.toContain('empty');
   });
 
@@ -327,6 +330,71 @@ describe('ProductTabs', () => {
     );
     expect(links[0]!.text()).toContain('Manual');
     expect(links[1]!.text()).toContain('Product Spec');
+  });
+
+  it('hides a media parameter the merchant marked show:false', () => {
+    // `show: false` has to mean the same thing for a video as for a spec
+    // row, otherwise hiding a parameter removes it from the table but
+    // leaves it playing in the Documents tab.
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'VideoURL',
+              value: 'https://www.youtube.com/watch?v=abc123',
+              show: false,
+            },
+            {
+              name: 'Manual',
+              value: 'https://cdn.example.com/manual.pdf',
+              show: false,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    expect(docsContent.find('[data-testid="product-videos"]').exists()).toBe(
+      false,
+    );
+    expect(docsContent.find('[data-testid="product-documents"]').exists()).toBe(
+      false,
+    );
+  });
+
+  it('prefers the localized label over the technical name in the spec table', () => {
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Fysiska egenskaper',
+          parameterGroupId: 39,
+          parameters: [
+            {
+              name: 'InstallationDiameter',
+              label: 'Installationsdiameter',
+              value: '25 mm',
+              show: true,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const specContent = wrapper.find(
+      '.tabs-content[data-value="specifications"]',
+    );
+    expect(specContent.text()).toContain('Installationsdiameter');
+    expect(specContent.text()).not.toContain('InstallationDiameter');
   });
 
   it('falls back to a normal spec row when a known media name has a non-URL value', () => {
