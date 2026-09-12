@@ -67,9 +67,13 @@ describe('requireAdminAuth', () => {
     mockReadAdminAuthConfig.mockReturnValue({ adminSecret: 'correct-secret' });
   });
 
-  it('resolves when the header matches the configured secret', async () => {
+  it('resolves with the caller when the header matches the configured secret', async () => {
     mockGetHeader.mockReturnValue('correct-secret');
-    await expect(requireAdminAuth(mockEvent)).resolves.toBeUndefined();
+    // Returns the caller rather than void, so an endpoint can act on the
+    // scope it was given instead of only knowing the key was valid.
+    await expect(requireAdminAuth(mockEvent)).resolves.toEqual({
+      scope: 'write',
+    });
   });
 
   it('rejects a missing header', async () => {
@@ -92,5 +96,73 @@ describe('requireAdminAuth', () => {
     mockCheck.mockResolvedValue({ allowed: false, remaining: 0, resetTime: 0 });
     mockGetHeader.mockReturnValue('correct-secret');
     await expect(requireAdminAuth(mockEvent)).rejects.toThrow('RATE_LIMITED');
+  });
+});
+
+describe('requireAdminAuth — read vs write scope', () => {
+  const mockEvent = {} as H3Event;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCheck.mockResolvedValue({ allowed: true, remaining: 4, resetTime: 0 });
+    mockReadAdminAuthConfig.mockReturnValue({
+      adminSecret: 'write-secret',
+      adminReadSecret: 'read-secret',
+    });
+  });
+
+  it('tells the caller which scope their key carries', async () => {
+    mockGetHeader.mockReturnValue('write-secret');
+    await expect(requireAdminAuth(mockEvent, 'write')).resolves.toEqual({
+      scope: 'write',
+    });
+
+    mockGetHeader.mockReturnValue('read-secret');
+    await expect(requireAdminAuth(mockEvent, 'read')).resolves.toEqual({
+      scope: 'read',
+    });
+  });
+
+  it('refuses a write when the caller only holds the read key', async () => {
+    // The whole point of the separate key: a service that only needs to
+    // read a tenant's config must not be able to rewrite every tenant.
+    mockGetHeader.mockReturnValue('read-secret');
+    await expect(requireAdminAuth(mockEvent, 'write')).rejects.toThrow(
+      'UNAUTHORIZED',
+    );
+  });
+
+  it('lets the write key read, since it is the stronger credential', async () => {
+    mockGetHeader.mockReturnValue('write-secret');
+    await expect(requireAdminAuth(mockEvent, 'read')).resolves.toEqual({
+      scope: 'write',
+    });
+  });
+
+  it('defaults to requiring write, so existing callers keep their guarantee', async () => {
+    mockGetHeader.mockReturnValue('read-secret');
+    await expect(requireAdminAuth(mockEvent)).rejects.toThrow('UNAUTHORIZED');
+  });
+
+  it('rejects the read key when no read secret is configured', async () => {
+    mockReadAdminAuthConfig.mockReturnValue({
+      adminSecret: 'write-secret',
+      adminReadSecret: '',
+    });
+    mockGetHeader.mockReturnValue('read-secret');
+    await expect(requireAdminAuth(mockEvent, 'read')).rejects.toThrow(
+      'UNAUTHORIZED',
+    );
+  });
+
+  it('still accepts the write key when no read secret is configured', async () => {
+    mockReadAdminAuthConfig.mockReturnValue({
+      adminSecret: 'write-secret',
+      adminReadSecret: '',
+    });
+    mockGetHeader.mockReturnValue('write-secret');
+    await expect(requireAdminAuth(mockEvent, 'read')).resolves.toEqual({
+      scope: 'write',
+    });
   });
 });

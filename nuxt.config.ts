@@ -274,6 +274,7 @@ export default defineNuxtConfig({
    * │ NUXT_STORAGE_REDIS_URL          │                                      │
    * │ NUXT_HEALTH_CHECK_SECRET        │                                      │
    * │ NUXT_ADMIN_SECRET               │                                      │
+   * │ NUXT_ADMIN_READ_SECRET          │                                      │
    * │ NUXT_EXTERNAL_API_BASE_URL      │                                      │
    * │ NUXT_SENTRY_DSN                 │                                      │
    * │ NUXT_WEBHOOK_SECRET              │                                      │
@@ -313,6 +314,13 @@ export default defineNuxtConfig({
     // since this one gates a write action, not read-only diagnostics.
     // Azure: NUXT_ADMIN_SECRET=your-secret-here
     adminSecret: '',
+
+    // Read-only counterpart, for services that need to resolve a tenant's
+    // config without being able to rewrite it (see server/utils/admin-auth.ts).
+    // The write secret above also satisfies a read; this one does not
+    // satisfy a write. Leave unset to have no read-only credential at all.
+    // Azure: NUXT_ADMIN_READ_SECRET=your-secret-here
+    adminReadSecret: '',
 
     // External API base URL for the proxy
     // Azure: NUXT_EXTERNAL_API_BASE_URL=https://your-external-api.com
