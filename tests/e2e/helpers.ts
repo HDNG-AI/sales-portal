@@ -105,14 +105,16 @@ interface RawProduct {
 }
 
 /**
- * Candidates with a usable alias and SKU, sorted by alias — the products API
- * applies no stable ordering, so an unsorted "first one" differs per call.
+ * Candidates with a usable alias and SKU. The `sort` makes the twenty rows the
+ * same twenty every call: without it, four reads 2.5 seconds apart returned
+ * four different sets from a catalogue of 98. Not `LATEST`, which orders on a
+ * timestamp the response does not carry. The alias sort only breaks ties.
  */
 async function fetchProductCandidates(
   page: Page,
 ): Promise<DiscoveredProduct[]> {
   const response = await page.request.get('/api/product-lists/products', {
-    params: { take: '20' },
+    params: { take: '20', filter: JSON.stringify({ sort: 'ALPHABETICAL' }) },
   });
   expect(response.ok()).toBe(true);
 
@@ -377,8 +379,8 @@ function stripMarketLocalePrefix(path: string): string {
 }
 
 /**
- * Discover a category by resolving a known route pattern.
- * Falls back to fetching the menu and picking the first category link.
+ * The first category in the tenant's main menu, measured stable over four
+ * reads — unlike the product endpoint, this one needs no sort.
  *
  * Returns alias with `/c/` type prefix (e.g. `c/material`) so tests can
  * navigate with `page.goto(`/${category.alias}`)`.
@@ -798,33 +800,58 @@ export async function fetchOrder(
 }
 
 /**
- * Every order the signed-in account owns, each read in full.
+ * Twelve, from the oldest end: of the 26 orders on the account the first with
+ * several lines is 16th from the newest end and the first unrounded 18th, but
+ * 2nd and 4th from the oldest. New orders arrive at the new end.
+ */
+const ORDERS_READ_IN_FULL = 12;
+
+/**
+ * The oldest {@link ORDERS_READ_IN_FULL} orders the account owns, each read in
+ * full.
  *
  * The list endpoint carries only the inc-VAT total and no lines, so choosing
  * an order by what it contains means reading each one. It is deliberately not
  * memoised: an order placed during the run would make a cached list describe
  * a different account than the one on screen.
  *
+ * Sorted on `createdAt` rather than the order the endpoint returns, which
+ * nothing asserts.
+ *
  * Pick from the result by property — most lines, a total that does not
  * terminate in two decimals — never by a fixed id. The account is reseeded
  * from time to time and a hardcoded order is a test that rots silently.
  */
-export async function fetchOrders(page: Page): Promise<ApiOrder[]> {
+export async function fetchOrders(
+  page: Page,
+  limit = ORDERS_READ_IN_FULL,
+): Promise<ApiOrder[]> {
   const response = await page.request.get('/api/orders');
   expect(response.ok(), '/api/orders did not answer 200').toBe(true);
 
-  const orders: { publicId?: string }[] = (await response.json())?.orders ?? [];
+  const orders: { publicId?: string; createdAt?: string }[] =
+    (await response.json())?.orders ?? [];
   expect(
     orders.length,
     'the test account owns no orders, so there is nothing to compare against',
   ).toBeGreaterThan(0);
-
-  const result: ApiOrder[] = [];
   for (const order of orders) {
     expect(
       order.publicId,
       'an order arrived without a publicId, which is the key the detail endpoint takes',
     ).toBeTruthy();
+    expect(
+      order.createdAt,
+      'an order arrived without a createdAt, so the oldest ones cannot be told apart',
+    ).toBeTruthy();
+  }
+
+  const oldestFirst = [...orders]
+    .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))
+    .slice(0, limit);
+
+  const result: ApiOrder[] = [];
+  for (const order of oldestFirst) {
     result.push(await fetchOrder(page, order.publicId!));
   }
   return result;
@@ -883,7 +910,18 @@ export async function expectTestId(page: Page, testId: string) {
 }
 
 /**
- * Collect console errors during a page action, filtering out known noise.
+ * Measured the only console output on the home page in dev (Chromium rejects
+ * the COOP header over http) and none at all against the production build. The
+ * entries dropped from this list — `favicon`, `404`, `Failed to load resource`,
+ * `Content Security Policy` — caught nothing in either mode and all four name
+ * real defects.
+ */
+const EXPECTED_CONSOLE_NOISE = ['Cross-Origin-Opener-Policy'];
+
+/**
+ * Assert an action produces no console errors, through hydration: `goto`
+ * resolves at `domcontentloaded`, before the application runs. `pageerror` too,
+ * which is how WebKit reports an uncaught exception.
  */
 export async function expectNoConsoleErrors(
   page: Page,
@@ -891,50 +929,63 @@ export async function expectNoConsoleErrors(
 ) {
   const errors: string[] = [];
 
-  const handler = (msg: { type: () => string; text: () => string }) => {
+  const onConsole = (msg: { type: () => string; text: () => string }) => {
     if (msg.type() === 'error') {
       errors.push(msg.text());
     }
   };
+  const onPageError = (error: Error) => {
+    errors.push(error.message);
+  };
 
-  page.on('console', handler);
-  await action();
-  page.removeListener('console', handler);
+  page.on('console', onConsole);
+  page.on('pageerror', onPageError);
+  try {
+    await action();
+    await waitForHydration(page);
+  } finally {
+    page.removeListener('console', onConsole);
+    page.removeListener('pageerror', onPageError);
+  }
 
   const critical = errors.filter(
-    (e) =>
-      !e.includes('favicon') &&
-      !e.includes('404') &&
-      !e.includes('Failed to load resource') &&
-      !e.includes('Cross-Origin-Opener-Policy') &&
-      !e.includes('Content Security Policy'),
+    (e) => !EXPECTED_CONSOLE_NOISE.some((noise) => e.includes(noise)),
   );
 
-  expect(critical).toHaveLength(0);
+  expect(
+    critical,
+    `console errors during the action:\n${critical.join('\n')}`,
+  ).toHaveLength(0);
 }
 
 // ---------- Hydration ----------
 
 /**
- * Wait for Nuxt/Vue to hydrate the page.
- * SSR renders static HTML immediately, but event handlers and reactivity
- * are only attached after Vue hydrates on the client. We detect hydration
- * by checking for the `__vue_app__` property on the Nuxt root element,
- * then wait for a tick to allow hydration mismatch patching to complete.
+ * Wait for Nuxt/Vue to hydrate: mounted, then finished patching.
+ *
+ * The timeout belongs in the third argument — `waitForFunction(fn, arg,
+ * options)`. Passed second it set no limit at all: `actionTimeout` is 0.
  */
 export async function waitForHydration(page: Page, timeout = 15000) {
   await page.waitForFunction(
     () => {
       const nuxtRoot = document.getElementById('__nuxt');
-      return !!(
-        nuxtRoot && (nuxtRoot as unknown as Record<string, unknown>).__vue_app__
-      );
+      if (
+        !nuxtRoot ||
+        !(nuxtRoot as unknown as Record<string, unknown>).__vue_app__
+      ) {
+        return false;
+      }
+      const nuxtApp = (
+        window as unknown as {
+          useNuxtApp?: () => { isHydrating?: boolean } | undefined;
+        }
+      ).useNuxtApp?.();
+      return nuxtApp?.isHydrating === false;
     },
+    undefined,
     { timeout },
   );
-
-  // Allow Vue to finish hydration mismatch patching and re-attach event handlers
-  await page.waitForTimeout(300);
 }
 
 // ---------- Viewport ----------
