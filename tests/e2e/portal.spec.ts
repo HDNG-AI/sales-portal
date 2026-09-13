@@ -52,24 +52,16 @@ test.describe('Portal Overview', () => {
     const statGrid = page.locator('.grid.grid-cols-2.lg\\:grid-cols-4');
     await expect(statGrid).toBeVisible({ timeout: PAGE_TIMEOUT });
 
-    // Latest orders section
-    const latestOrdersHeading = page.getByText('Senaste beställningar');
-    const hasLatestOrders = await latestOrdersHeading
-      .isVisible()
-      .catch(() => false);
-    // The heading text comes from i18n — accept either translated or the section existing
-    if (!hasLatestOrders) {
-      // Fallback: the section renders PortalOrdersTable, whose wrapper sits on
-      // the non-empty branch, so assert which of the two states rendered.
-      // `hasTable || hasLatestOrders` could not fail — the second operand is
-      // false by construction inside this branch, and the wrapper used to be
-      // present at every state.
-      const ordersTable = page.locator('[data-testid="portal-orders-table"]');
-      const ordersEmpty = page.locator('[data-testid="orders-empty"]');
-      const hasTable = await ordersTable.isVisible().catch(() => false);
-      const hasEmpty = await ordersEmpty.isVisible().catch(() => false);
-      expect(hasTable).not.toBe(hasEmpty);
-    }
+    // Latest orders section. This used to sit inside `if (!hasLatestOrders)`,
+    // guarded by a lookup for the section heading — a branch that never runs,
+    // because the heading does render, so the assertion below never executed.
+    // PortalOrdersTable's wrapper sits on the non-empty branch and
+    // `orders-empty` on the other, so exactly one of the two is in the DOM.
+    const ordersTable = page.locator('[data-testid="portal-orders-table"]');
+    const ordersEmpty = page.locator('[data-testid="orders-empty"]');
+    const hasTable = await ordersTable.isVisible().catch(() => false);
+    const hasEmpty = await ordersEmpty.isVisible().catch(() => false);
+    expect(hasTable).not.toBe(hasEmpty);
 
     // Pending quotations section
     const quotationsTable = page.locator(
@@ -103,16 +95,17 @@ test.describe('Portal Overview', () => {
       expect(await rows.count()).toBeGreaterThan(0);
     }
 
-    // Purchased products section
+    // Purchased products section. The account has purchased products (measured
+    // against /api/orders/products), so the empty state is not a state this
+    // tenant reaches and `hasProducts || hasProductsEmpty` accepted it anyway.
     const productsGrid = page.locator(
       '[data-testid="purchased-products-grid"]',
     );
     const productsEmpty = page.locator(
       '[data-testid="purchased-products-empty"]',
     );
-    const hasProducts = await productsGrid.isVisible().catch(() => false);
-    const hasProductsEmpty = await productsEmpty.isVisible().catch(() => false);
-    expect(hasProducts || hasProductsEmpty).toBe(true);
+    await expect(productsGrid).toBeVisible({ timeout: PAGE_TIMEOUT });
+    await expect(productsEmpty).toBeHidden();
   });
 });
 
@@ -149,12 +142,25 @@ test.describe('Portal Orders', () => {
     // fail at all.
     expect(hasTable).not.toBe(hasEmpty);
 
-    // If table is visible, verify table headers exist
     if (hasTable) {
-      const headerCells = ordersTable.locator('thead th');
-      const count = await headerCells.count();
-      // Expected columns: Id, Skapad, Lagd av, Typ, Summa, Status, (actions)
-      expect(count).toBeGreaterThanOrEqual(6);
+      // Both responsive shapes sit in the DOM at once and CSS decides which
+      // one shows, so count what is visible. `md` is 768px (Tailwind), the
+      // same breakpoint the table's `md:hidden` / `hidden md:table` use.
+      // Without the branch, `thead th` counted the desktop headers on Mobile
+      // Chrome too, where none of them is rendered.
+      const isNarrow = (page.viewportSize()?.width ?? 1280) < 768;
+
+      const visibleRows = ordersTable.locator(
+        '[data-testid="order-row"]:visible',
+      );
+      expect(await visibleRows.count()).toBeGreaterThan(0);
+
+      if (!isNarrow) {
+        const headerCells = ordersTable.locator('thead th:visible');
+        const count = await headerCells.count();
+        // Expected columns: Id, Skapad, Lagd av, Typ, Summa, Status, (actions)
+        expect(count).toBeGreaterThanOrEqual(6);
+      }
     }
   });
 
@@ -203,25 +209,24 @@ test.describe('Portal Orders', () => {
     const actionToolbar = page.locator('[data-testid="order-action-toolbar"]');
     await expect(actionToolbar).toBeVisible({ timeout: PAGE_TIMEOUT });
 
-    // Order items table or loading should be present
+    // The detail page finishes loading. `hasDetail || hasLoading` accepted one
+    // that never did, and put the row assertion below inside `if (hasDetail)`,
+    // so a page stuck on its spinner passed without a row ever being read.
     const orderDetail = page.locator('[data-testid="order-detail"]');
     const orderLoading = page.locator('[data-testid="order-loading"]');
-    const hasDetail = await orderDetail.isVisible().catch(() => false);
-    const hasLoading = await orderLoading.isVisible().catch(() => false);
-    expect(hasDetail || hasLoading).toBe(true);
+    await expect(orderDetail).toBeVisible({ timeout: PAGE_TIMEOUT });
+    await expect(orderLoading).toBeHidden();
 
-    if (hasDetail) {
-      // The order rows live in a desktop table (`hidden lg:block`) or, below
-      // lg, behind a sheet trigger. Assert the one this project can see —
-      // before the fixture existed this branch never ran on mobile, so the
-      // desktop-only assertion looked fine.
-      // Both are in the DOM at once, so match on visibility rather than DOM
-      // order — the table comes first either way.
-      const orderRows = page.locator(
-        '[data-testid="order-items-table"]:visible, [data-testid="view-rows-trigger"]:visible',
-      );
-      await expect(orderRows.first()).toBeVisible({ timeout: PAGE_TIMEOUT });
-    }
+    // The order rows live in a desktop table (`hidden lg:block`) or, below
+    // lg, behind a sheet trigger. Assert the one this project can see —
+    // before the fixture existed this branch never ran on mobile, so the
+    // desktop-only assertion looked fine.
+    // Both are in the DOM at once, so match on visibility rather than DOM
+    // order — the table comes first either way.
+    const orderRows = page.locator(
+      '[data-testid="order-items-table"]:visible, [data-testid="view-rows-trigger"]:visible',
+    );
+    await expect(orderRows.first()).toBeVisible({ timeout: PAGE_TIMEOUT });
   });
 });
 
@@ -530,20 +535,16 @@ test.describe('Portal Purchased Products', () => {
     const loading = page.locator('[data-testid="products-loading"]');
     await expect(loading).toBeHidden({ timeout: PAGE_TIMEOUT });
 
-    // Either products table or empty state
+    // The account has purchased products, so the pagination footer is the
+    // state this tenant reaches — it renders whenever there is data, even on a
+    // single page. `hasEmpty || hasPagination` accepted the empty list too.
     const productsEmpty = page.locator('[data-testid="products-empty"]');
     const productsPagination = page.locator(
       '[data-testid="products-pagination"]',
     );
 
-    const hasEmpty = await productsEmpty.isVisible().catch(() => false);
-    const hasPagination = await productsPagination
-      .isVisible()
-      .catch(() => false);
-
-    // One of these states should be true: empty state, or content with pagination footer
-    // (pagination footer always renders when there's data, even if single page)
-    expect(hasEmpty || hasPagination).toBe(true);
+    await expect(productsPagination).toBeVisible({ timeout: PAGE_TIMEOUT });
+    await expect(productsEmpty).toBeHidden();
   });
 });
 
