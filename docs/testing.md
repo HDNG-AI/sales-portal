@@ -224,8 +224,8 @@ A test that does not run says why, or the run fails. `test.skip()` / `test.fixme
 in `tests/e2e/`; the one sanctioned way is `outOfScope(condition, reason, detail)` from
 `tests/e2e/helpers.ts`, where `reason` is a closed list (`ScopeReason`): `no-credentials`,
 `mobile-project`, `dev-server`, `fixture-missing`, `tenant-config`, `remote-target`,
-`mutation-gate`. A test that runs with part of its assertions off (no CSP header on the dev server)
-declares that with `noteOutOfScope()`.
+`feature-hidden`, `mutation-gate`. A test that runs with part of its assertions off (no CSP
+header on the dev server) declares that with `noteOutOfScope()`.
 
 The list lives in **two** files. `tests/e2e/reporters/scope-reporter.ts` keeps its own copy, because
 Playwright loads a reporter before the specs and it cannot import the spec-side type. A new reason
@@ -240,6 +240,14 @@ added to only one of them reads as undeclared and fails the run.
   ran it. The list reporter calls these "did not run"; here they are counted against the layer that
   failed.
 - **unknown** — skipped with no declaration. The run fails, even if every test that ran passed.
+
+`fixture-missing` is capped on top of that. `EXPECTED_FIXTURE_MISSING` in the reporter is how many
+such declarations a run may contain — zero — and a run above it fails even when every test that ran
+passed: each one names data the test tenant is supposed to hold, so one appearing means a green
+build that proves less than the build before it. The count spans both lists, so moving a
+declaration from `outOfScope()` to `noteOutOfScope()` does not slip under it. `mobile-project` is
+not capped; those are permanent, and a cap on the total would have to move every time a responsive
+test was added.
 
 A permanently skipped test is deleted, not parked; the decision it was waiting on goes in a ticket.
 
@@ -330,6 +338,11 @@ pnpm test:e2e:report   # View last report
 > pnpm test:e2e                                                   # the suite; orders declares itself out of scope
 > E2E_ALLOW_ORDERS_FOR=<tenant> pnpm test:e2e --project=orders     # and this places one real order
 > ```
+
+`tests/e2e/` compiles under its own `tsconfig.json`, deliberately without the Nuxt aliases so a spec
+cannot import `app/` or `server/` code. `pnpm typecheck` runs it as a second step after
+`nuxt typecheck`, so a type error in a spec, a helper or the reporter fails the same gate as the
+rest of the repo.
 
 #### Writing helpers
 
@@ -698,7 +711,7 @@ nothing deletes — every run leaves carts behind, see
 
 | Workflow · Job                                             | Trigger                                       | What                                                             |
 | ---------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------- |
-| `ci.yml` · Lint & Type Check                               | PRs into `main`/`production`, pushes to `dev` | `pnpm lint`, `pnpm typecheck`                                    |
+| `ci.yml` · Lint & Type Check                               | PRs into `main`/`production`, pushes to `dev` | `pnpm lint`, `pnpm typecheck` (app, `tests/`, `tests/e2e/`)      |
 | `ci.yml` · Unit & Component                                | same                                          | `pnpm test:coverage` (full vitest suite)                         |
 | `ci.yml` · E2E Suite                                       | PRs only                                      | **Preflight, then every spec on all three projects**             |
 | `e2e-full.yml` · E2E Suite (manual)                        | `workflow_dispatch`, any branch               | **Preflight, then every spec on all three projects**             |
