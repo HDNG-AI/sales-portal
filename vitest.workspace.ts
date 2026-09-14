@@ -58,6 +58,9 @@ export default [
         ...config.test,
         name: 'node',
         environment: 'node',
+        // Pinned so date-formatting tests are deterministic regardless of
+        // the machine/CI runner's local timezone.
+        env: { TZ: 'UTC' },
         include: [
           'tests/server/**/*.test.ts',
           'tests/unit/**/*.test.ts',
@@ -73,6 +76,10 @@ export default [
           '**/node_modules/**',
           '**/.nuxt/**',
           '**/dist/**',
+          '**/.claude/**',
+          '**/.cursor/**',
+          '**/.git/**',
+          '**/--version/**',
         ],
         setupFiles: ['./tests/setup.ts'],
         globals: true,
@@ -89,12 +96,19 @@ export default [
         ...config.test,
         name: 'components',
         environment: 'happy-dom',
+        // Pinned so date-formatting tests are deterministic regardless of
+        // the machine/CI runner's local timezone.
+        env: { TZ: 'UTC' },
         include: ['tests/components/**/*.test.ts'],
         exclude: [
           ...nuxtTestFiles,
           '**/node_modules/**',
           '**/.nuxt/**',
           '**/dist/**',
+          '**/.claude/**',
+          '**/.cursor/**',
+          '**/.git/**',
+          '**/--version/**',
         ],
         setupFiles: ['./tests/setup-components.ts'],
         globals: true,
@@ -129,6 +143,9 @@ export default [
         ...config.test,
         name: 'nuxt',
         environment: 'nuxt',
+        // Pinned so date-formatting tests are deterministic regardless of
+        // the machine/CI runner's local timezone.
+        env: { TZ: 'UTC' },
         include: nuxtTestFiles,
         setupFiles: [
           ...(config.test?.setupFiles ?? []),

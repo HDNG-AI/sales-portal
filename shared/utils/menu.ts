@@ -30,8 +30,17 @@ const GEINS_TYPE_MAP: Record<string, string> = {
  *
  * Pattern 1: /{market}/{locale}[/{type}]/{slug...}
  * Pattern 2: /{locale}/{slug...} (CMS-generated, no market)
+ *
+ * Geins' 'l' (list) type indicator is ambiguous — both categories and
+ * brands come back with canonicalUrls like `/se/sv/l/{alias}`, and
+ * GEINS_TYPE_MAP maps 'l' to our category route by default. A menu item
+ * carries its own unambiguous `type` field alongside that same URL
+ * ('brand', 'category', ...); pass it as `itemType` to override the
+ * URL-based guess when it disagrees. Without this, a brand link's alias
+ * gets looked up as a category (which the /c/ page assumes unconditionally
+ * — see app/pages/c/[...category].vue) and returns zero products.
  */
-export function stripGeinsPrefix(path: string): string {
+export function stripGeinsPrefix(path: string, itemType?: string): string {
   // Pattern 1: /xx/xx-yy/ or /xx/xx/ prefix (market + locale)
   // Then optionally a type indicator (1-2 chars) followed by /
   const fullMatch = path.match(
@@ -42,7 +51,10 @@ export function stripGeinsPrefix(path: string): string {
     const remainder = fullMatch[2]!;
 
     if (typeIndicator) {
-      const routePrefix = GEINS_TYPE_MAP[typeIndicator.toLowerCase()];
+      const routePrefix =
+        itemType === 'brand'
+          ? ROUTE_PATHS.brand
+          : GEINS_TYPE_MAP[typeIndicator.toLowerCase()];
       if (routePrefix) {
         return `${routePrefix}${remainder}`;
       }
@@ -84,10 +96,14 @@ const DANGEROUS_SCHEME_RE = /^\s*(javascript|data|vbscript|file):/i;
  *
  * Only http:, https:, mailto:, and tel: schemes are permitted.
  * Any other scheme returns '' so the link consumers fall back to '/'.
+ *
+ * `itemType` (e.g. a menu item's own `type: 'brand'`) overrides the
+ * URL-based prefix guess — see stripGeinsPrefix's comment for why.
  */
 export function normalizeMenuUrl(
   canonicalUrl: string | undefined | null,
   currentHost?: string,
+  itemType?: string,
 ): string {
   if (!canonicalUrl) return '';
 
@@ -122,7 +138,7 @@ export function normalizeMenuUrl(
     }
   }
 
-  return stripGeinsPrefix(path);
+  return stripGeinsPrefix(path, itemType);
 }
 
 /**
@@ -160,6 +176,10 @@ export function addCategoryPrefix(
     p.replace('/', ''),
   );
   if (firstSeg && knownPrefixes.includes(firstSeg)) return url;
+  // Menu item of type 'brand' from CMS — checked before the children-based
+  // category guess below, since a brand item is never expected to carry
+  // children the way a category can.
+  if (item.type === 'brand') return `${ROUTE_PATHS.brand}${url}`;
   // Menu item with children = category
   if ((item as MenuItemType).children?.length)
     return `${ROUTE_PATHS.category}${url}`;

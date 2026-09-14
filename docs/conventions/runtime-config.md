@@ -90,8 +90,11 @@ See `nuxt.config.ts` for the full runtime config. Key values:
 - `healthCheckSecret` - Secret for detailed health metrics
 - `geins.apiEndpoint` - Geins API endpoint
 - `geins.tenantApiUrl` - Tenant settings API
-- `storage.driver` - Storage driver (memory/redis)
-- `storage.redisUrl` - Redis connection URL
+- `storage.driver` - Storage driver label for `/api/health` (memory/redis). The
+  `kv` mount itself is built from `NUXT_STORAGE_DRIVER` / `NUXT_STORAGE_REDIS_URL`
+  at config-build time by `resolveKvStorageMount()` in `nuxt.config.ts`, which is
+  why the Redis URL is not mirrored into runtime config.
+- `adminSecret` - Secret gating the tenant-write admin endpoint
 - `sentry.dsn` - Sentry error tracking DSN
 - `logging.verboseRequests` - Enable verbose request logging (includes headers)
 

@@ -204,9 +204,97 @@ describe('ProductTabs', () => {
     expect(specContent.text()).toContain('Dimensions');
     expect(specContent.text()).toContain('Weight');
     expect(specContent.text()).toContain('500g');
-    expect(specContent.text()).toContain('Produkttyp');
-    expect(specContent.text()).toContain('Elektronik');
+    // `show: false` is the merchant saying "don't display this on the
+    // storefront" — Produkttyp/Elektronik carry it and must stay hidden.
+    expect(specContent.text()).not.toContain('Produkttyp');
+    expect(specContent.text()).not.toContain('Elektronik');
+    // Nameless/valueless rows are dropped regardless of `show`.
     expect(specContent.text()).not.toContain('empty');
+  });
+
+  // Length/width/height/weight live on the product record itself, not as
+  // parameters (verified against Geins 2026-09-13: ProductType exposes
+  // `dimensions` and `weight` alongside `parameterGroups`). They still belong
+  // in the spec table, so they are appended as a synthetic group. Geins stores
+  // dimensions in millimetres and weight in grams.
+  const MEASURED = {
+    dimensions: { length: 3000, width: 120, height: 45 },
+    weight: 500,
+  };
+
+  it('shows product-level measurements in the specification table', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(MEASURED), related: [] },
+      global: { stubs },
+    });
+    const text = wrapper
+      .find('.tabs-content[data-value="specifications"]')
+      .text();
+    expect(text).toContain('product.measurements');
+    expect(text).toContain('3 m');
+    expect(text).toContain('120 mm');
+    expect(text).toContain('45 mm');
+    expect(text).toContain('500 g');
+  });
+
+  it('omits measurements that are zero rather than printing "0 mm"', () => {
+    // Real data: A2K-TDC-3M has length 3000 but width/height/weight 0.
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          dimensions: { length: 3000, width: 0, height: 0 },
+          weight: 0,
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+    const text = wrapper
+      .find('.tabs-content[data-value="specifications"]')
+      .text();
+    expect(text).toContain('3 m');
+    // "3000 mm" contains the substring "0 mm", so assert on the rows that
+    // should be absent instead of on a substring of one that is present.
+    expect(text).not.toContain('product.width');
+    expect(text).not.toContain('product.height');
+    expect(text).not.toContain('product.weight');
+  });
+
+  it('omits the measurements group when the product has none', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          dimensions: { length: 0, width: 0, height: 0 },
+          weight: 0,
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+    const text = wrapper
+      .find('.tabs-content[data-value="specifications"]')
+      .text();
+    expect(text).not.toContain('product.measurements');
+  });
+
+  it('shows measurements in the mobile accordion too', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(MEASURED), related: [] },
+      global: { stubs },
+    });
+    expect(wrapper.find('.accordion').text()).toContain('3 m');
+  });
+
+  it('shows the specifications tab for a product with only measurements', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({ ...MEASURED, parameterGroups: [] }),
+        related: [],
+      },
+      global: { stubs },
+    });
+    const labels = wrapper.findAll('.tabs-trigger').map((x) => x.text());
+    expect(labels).toContain('product.specifications');
   });
 
   it('hides description tab when no text', () => {
@@ -256,6 +344,214 @@ describe('ProductTabs', () => {
     expect(specContent.text()).not.toContain('StandardUnit-Code');
     expect(specContent.text()).toContain('Kabelinfo');
     expect(specContent.text()).toContain('Ledarantal');
+  });
+
+  it('renders a VideoURL parameter as an embedded video, not a spec row', () => {
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'VideoURL',
+              label: 'VideoURL',
+              value: 'https://www.youtube.com/watch?v=abc123',
+              show: true,
+            },
+          ],
+        },
+      ],
+      // The fixture ships a product-level weight, which is now a spec row in
+      // its own right. Cleared here so the assertion below still measures
+      // "VideoURL did not become a spec row" and not "the product has a
+      // weight".
+      weight: 0,
+      dimensions: { length: 0, width: 0, height: 0 },
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    const iframe = docsContent.find('[data-testid="product-videos"] iframe');
+    expect(iframe.exists()).toBe(true);
+    expect(iframe.attributes('src')).toBe(
+      'https://www.youtube.com/embed/abc123',
+    );
+
+    const specContent = wrapper.find(
+      '.tabs-content[data-value="specifications"]',
+    );
+    expect(specContent.exists()).toBe(false);
+  });
+
+  it('renders Manual and ProductSpec parameters as document links', () => {
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'Manual',
+              label: 'Manual',
+              value: 'https://cdn.example.com/manual.pdf',
+              show: true,
+            },
+            {
+              name: 'ProductSpec',
+              label: 'ProductSpec',
+              value: 'https://cdn.example.com/spec.pdf',
+              show: true,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    const links = docsContent.findAll('[data-testid="product-documents"] a');
+    expect(links.length).toBe(2);
+    expect(links[0]!.attributes('href')).toBe(
+      'https://cdn.example.com/manual.pdf',
+    );
+    expect(links[0]!.text()).toContain('Manual');
+    expect(links[1]!.text()).toContain('Product Spec');
+  });
+
+  it('gives the mobile accordion the same media handling as the desktop tabs', () => {
+    // The two views are separate markup; every media fix has to land in
+    // both. Tests scoped only to .tabs-content let them drift apart.
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'VideoURL',
+              value: 'https://www.loom.com/share/abc123',
+              show: true,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const mobile = wrapper.find('.accordion');
+    expect(mobile.exists()).toBe(true);
+    // A provider page URL can't play in a <video>; both views must link out.
+    expect(mobile.findAll('video').length).toBe(0);
+    expect(
+      mobile.findAll('a[href="https://www.loom.com/share/abc123"]').length,
+    ).toBe(1);
+  });
+
+  it('hides a media parameter the merchant marked show:false', () => {
+    // `show: false` has to mean the same thing for a video as for a spec
+    // row, otherwise hiding a parameter removes it from the table but
+    // leaves it playing in the Documents tab.
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'VideoURL',
+              value: 'https://www.youtube.com/watch?v=abc123',
+              show: false,
+            },
+            {
+              name: 'Manual',
+              value: 'https://cdn.example.com/manual.pdf',
+              show: false,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    expect(docsContent.find('[data-testid="product-videos"]').exists()).toBe(
+      false,
+    );
+    expect(docsContent.find('[data-testid="product-documents"]').exists()).toBe(
+      false,
+    );
+  });
+
+  it('prefers the localized label over the technical name in the spec table', () => {
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Fysiska egenskaper',
+          parameterGroupId: 39,
+          parameters: [
+            {
+              name: 'InstallationDiameter',
+              label: 'Installationsdiameter',
+              value: '25 mm',
+              show: true,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const specContent = wrapper.find(
+      '.tabs-content[data-value="specifications"]',
+    );
+    expect(specContent.text()).toContain('Installationsdiameter');
+    expect(specContent.text()).not.toContain('InstallationDiameter');
+  });
+
+  it('falls back to a normal spec row when a known media name has a non-URL value', () => {
+    const product = makeProduct({
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            { name: 'ProductSpec', value: 'See page 4', show: true },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    expect(docsContent.text()).toContain('product.no_documents');
+
+    const specContent = wrapper.find(
+      '.tabs-content[data-value="specifications"]',
+    );
+    expect(specContent.text()).toContain('ProductSpec');
+    expect(specContent.text()).toContain('See page 4');
+  });
+
+  it('shows the no-documents message when no media parameters exist', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(), related: [] },
+      global: { stubs },
+    });
+    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
+    expect(docsContent.text()).toContain('product.no_documents');
   });
 
   it('renders RelatedProducts inside the related tab', () => {

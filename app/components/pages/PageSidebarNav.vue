@@ -35,7 +35,7 @@ function itemUrl(
   canonicalUrl: string | undefined,
   item?: Parameters<typeof addCategoryPrefix>[1],
 ): string {
-  let normalized = normalizeMenuUrl(canonicalUrl);
+  let normalized = normalizeMenuUrl(canonicalUrl, undefined, item?.type);
   if (normalized && item) normalized = addCategoryPrefix(normalized, item);
   return normalized ? localePath(normalized) : '';
 }

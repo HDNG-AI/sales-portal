@@ -13,9 +13,12 @@ import {
   mergeDeep,
   resolvePreviewTenant,
   DEFAULT_CMS_CONFIG,
+  getTenantById,
+  resolveDefaultGeinsEnvironment,
 } from '../../server/utils/tenant';
 import { CMS_MENUS } from '../../shared/constants/cms';
 import { CMS_SLOTS } from '../../shared/types/cms-slots';
+import { PRODUCT_MEDIA_PARAMETER_DEFAULTS } from '../../shared/constants/product-media';
 import partialPayloadFixture from '../fixtures/store-settings/partial-payload.json';
 import {
   createDefaultTheme,
@@ -49,6 +52,7 @@ const { mockLoggerWarn, mockUseRuntimeConfig, mockUseStorage } = vi.hoisted(
     })),
   }),
 );
+vi.stubGlobal('useStorage', mockUseStorage);
 vi.mock('#imports', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -304,6 +308,28 @@ describe('Tenant utilities', () => {
       expect(result.name).toBe(base.name);
       expect(result.displayName).toBe('New Display Name');
       expect(result.colors).toEqual(base.colors);
+    });
+
+    // Regression: a plain `{ ...base, ...updates }` spread copies a key
+    // present with value `undefined` too, silently blanking a real base
+    // value. `updates.displayName = undefined` here mirrors the shape
+    // tenants.post.ts produces when a caller's request omits a field
+    // (`branding: body.branding ? {...} : undefined`).
+    it('should not let an explicit undefined in updates blank a set base value', () => {
+      const base = {
+        ...createDefaultTheme('test'),
+        displayName: 'Original Display Name',
+      };
+      const result = mergeThemes(base, { displayName: undefined });
+      expect(result.displayName).toBe('Original Display Name');
+    });
+
+    it('should not let an explicit undefined color in updates blank a set base color', () => {
+      const base = createDefaultTheme('test');
+      const result = mergeThemes(base, {
+        colors: { primary: undefined },
+      });
+      expect(result.colors.primary).toBe(base.colors.primary);
     });
   });
 
@@ -759,6 +785,79 @@ describe('Tenant utilities', () => {
     });
   });
 
+  describe('buildTenantConfig productMediaParameters merge', () => {
+    function settingsWithProductMediaParameters(
+      productMediaParameters?: StoreSettings['productMediaParameters'],
+    ): StoreSettings {
+      return {
+        tenantId: 'tenant-media',
+        hostname: 'tenant-media.litium.store',
+        geinsSettings: {
+          apiKey: 'k',
+          accountName: 'a',
+          channel: '1',
+          tld: 'se',
+          locale: 'sv-SE',
+          market: 'se',
+          environment: 'production',
+          availableLocales: ['sv-SE'],
+          availableMarkets: ['se'],
+        },
+        mode: 'commerce',
+        checkoutMode: 'custom',
+        theme: {
+          colors: {
+            primary: 'oklch(0.5 0.1 200)',
+            primaryForeground: 'oklch(0.9 0 0)',
+            secondary: 'oklch(0.8 0 0)',
+            secondaryForeground: 'oklch(0.2 0 0)',
+            background: 'oklch(1 0 0)',
+            foreground: 'oklch(0.1 0 0)',
+          },
+        },
+        branding: { name: 'X', watermark: 'full' },
+        features: {},
+        productMediaParameters,
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+    }
+
+    it('unconfigured tenant resolves to the code defaults', () => {
+      const built = buildTenantConfig(
+        settingsWithProductMediaParameters(undefined),
+      );
+      expect(built.productMediaParameters).toEqual(
+        PRODUCT_MEDIA_PARAMETER_DEFAULTS,
+      );
+    });
+
+    it("a tenant naming a parameter differently (e.g. 'Datasheet') still inherits the untouched defaults", () => {
+      const built = buildTenantConfig(
+        settingsWithProductMediaParameters({ datasheet: 'document' }),
+      );
+      expect(built.productMediaParameters?.datasheet).toBe('document');
+      expect(built.productMediaParameters?.videourl).toBe(
+        PRODUCT_MEDIA_PARAMETER_DEFAULTS.videourl,
+      );
+      expect(built.productMediaParameters?.manual).toBe(
+        PRODUCT_MEDIA_PARAMETER_DEFAULTS.manual,
+      );
+    });
+
+    it('an explicit tenant override wins over the default for that key', () => {
+      const built = buildTenantConfig(
+        settingsWithProductMediaParameters({ manual: 'video' }),
+      );
+      expect(built.productMediaParameters?.manual).toBe('video');
+      // Sibling default remains intact
+      expect(built.productMediaParameters?.videourl).toBe(
+        PRODUCT_MEDIA_PARAMETER_DEFAULTS.videourl,
+      );
+    });
+  });
+
   describe('writeHostnameMappings — duplicate hostname guard', () => {
     // In-memory storage shim that mimics the subset of useStorage
     // actually used by writeHostnameMappings (getItem + setItem).
@@ -869,6 +968,49 @@ describe('Tenant utilities', () => {
       expect(storage.data.get(tenantIdKey('shared.example.com'))).toBe(
         'tenant-b',
       );
+    });
+  });
+
+  describe('getTenantById', () => {
+    it('backfills timezone on a config stored before the field existed', async () => {
+      // A raw KV read isn't re-validated against the schema, so a record
+      // written before `timezone` was added to TenantConfig comes back
+      // without it.
+      const legacy = {
+        tenantId: 'legacy-tenant',
+        hostname: 'legacy.example.com',
+        mode: 'commerce',
+        checkoutMode: 'hosted',
+        theme: { name: 'legacy-tenant', colors: {} as ThemeColors },
+        css: '',
+        branding: { name: 'Legacy', watermark: 'full' },
+        features: {},
+        isActive: true,
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+      } as unknown as TenantConfig;
+
+      mockUseStorage.mockReturnValue({
+        getItem: vi.fn(() => Promise.resolve(legacy)),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        hasItem: vi.fn(() => Promise.resolve(false)),
+      });
+
+      const result = await getTenantById('legacy-tenant');
+      expect(result?.timezone).toBe('UTC');
+    });
+
+    it('returns null for a missing config without throwing', async () => {
+      mockUseStorage.mockReturnValue({
+        getItem: vi.fn(() => Promise.resolve(null)),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        hasItem: vi.fn(() => Promise.resolve(false)),
+      });
+
+      const result = await getTenantById('nonexistent');
+      expect(result).toBeNull();
     });
   });
 
@@ -1663,6 +1805,63 @@ describe('Tenant utilities', () => {
       const base = { a: 'live', b: true, c: 'keep-me' };
       const override = { a: '', b: false, c: null };
       expect(mergeDeep(base, override)).toEqual({ a: '', b: false, c: null });
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // DEFAULT_GEINS_SETTINGS reads GEINS_ENVIRONMENT through
+  // resolveDefaultGeinsEnvironment(), which replaced an unchecked
+  // `process.env.GEINS_ENVIRONMENT as 'production' | 'staging'` cast — a
+  // typo'd env var used to sail through silently and only surface later as
+  // a per-request throw from mapEnvironment() in server/services/_sdk.ts.
+  // ---------------------------------------------------------------------
+  describe('resolveDefaultGeinsEnvironment', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('defaults to production when GEINS_ENVIRONMENT is unset', () => {
+      vi.stubEnv('GEINS_ENVIRONMENT', '');
+      expect(resolveDefaultGeinsEnvironment()).toBe('production');
+    });
+
+    it('accepts a valid "production" value', () => {
+      vi.stubEnv('GEINS_ENVIRONMENT', 'production');
+      expect(resolveDefaultGeinsEnvironment()).toBe('production');
+    });
+
+    it('accepts a valid "staging" value', () => {
+      vi.stubEnv('GEINS_ENVIRONMENT', 'staging');
+      expect(resolveDefaultGeinsEnvironment()).toBe('staging');
+    });
+
+    it('fails loud (throws) for an unrecognized value instead of silently defaulting', () => {
+      // SDK-style value ("prod") is a realistic operator mistake — our
+      // internal config uses "production"/"staging", the SDK uses
+      // "prod"/"qa"/"dev". The old cast would have silently accepted this.
+      // createAppError only surfaces the specific message in development —
+      // in production it's sanitized to the generic ErrorCode message (see
+      // the next test for the environment-independent assertion via
+      // `.data.code`), so stub NODE_ENV here to check the message content.
+      vi.stubEnv('NODE_ENV', 'development');
+      vi.stubEnv('GEINS_ENVIRONMENT', 'prod');
+      expect(() => resolveDefaultGeinsEnvironment()).toThrow(
+        /Invalid GEINS_ENVIRONMENT/,
+      );
+    });
+
+    it('throws an error identifiable as TENANT_CONFIG_INVALID', () => {
+      vi.stubEnv('GEINS_ENVIRONMENT', 'prod');
+      let thrown: unknown;
+      try {
+        resolveDefaultGeinsEnvironment();
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toMatchObject({
+        statusCode: 500,
+        data: { code: 'TENANT_CONFIG_INVALID' },
+      });
     });
   });
 });

@@ -3,6 +3,45 @@ import type { Environment } from './shared/types/common';
 import type { NuxtPage } from 'nuxt/schema';
 
 /**
+ * Resolves the 'kv' storage mount (tenant configs, webhook dedup — see
+ * server/utils/tenant.ts, server/utils/webhook-handler.ts) from raw
+ * process.env. This runs once when nitro.config is built, not per-request,
+ * so it must read process.env directly — useRuntimeConfig() only exists
+ * inside the running server, not at config-build time.
+ *
+ * Fails fast on misconfiguration rather than silently falling back to
+ * memory: an unset NUXT_STORAGE_DRIVER in production would otherwise look
+ * identical to a working deployment right up until the next restart wipes
+ * every admin-onboarded tenant.
+ */
+function resolveKvStorageMount() {
+  const driver = process.env.NUXT_STORAGE_DRIVER || 'memory';
+
+  if (driver === 'memory') {
+    return { driver: 'memory' as const };
+  }
+
+  if (driver === 'redis') {
+    const url = process.env.NUXT_STORAGE_REDIS_URL;
+    if (!url) {
+      throw new Error(
+        'NUXT_STORAGE_DRIVER=redis but NUXT_STORAGE_REDIS_URL is not set. ' +
+          'Refusing to silently fall back to in-memory storage in this mode — ' +
+          'set the URL or unset NUXT_STORAGE_DRIVER.',
+      );
+    }
+    // Nitro resolves storage drivers by name internally (unstorage is its
+    // own dependency, not this app's) — pass the shape it expects rather
+    // than importing and pre-instantiating the driver ourselves.
+    return { driver: 'redis' as const, url, base: 'kv' };
+  }
+
+  throw new Error(
+    `Unknown NUXT_STORAGE_DRIVER: "${driver}". Expected "memory" or "redis".`,
+  );
+}
+
+/**
  * Recursively create /:market/:locale-prefixed copies of page routes.
  * Each prefixed route uses the same component file but with the market/locale
  * segments as route params, so Vue Router matches /se/sv/search natively.
@@ -33,6 +72,13 @@ function createPrefixedRoutes(pages: NuxtPage[], depth = 0): NuxtPage[] {
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
+  // Nuxt's core builder watcher (pages/components/composables auto-scan) —
+  // separate from vite.server.watch and nitro.watchOptions below — was the
+  // one actually driving EMFILE: it holds a handle per node_modules entry
+  // it walks (thousands, via pnpm's symlink-heavy layout), independent of
+  // process ulimit. All three watch.ignore/ignore configs are needed since
+  // each covers a distinct watcher instance.
+  ignore: ['**/node_modules/**', '**/.git/**'],
   // Off when E2E=1: the DevTools frame intercepts taps at phone viewports.
   devtools: { enabled: !process.env.E2E },
 
@@ -227,6 +273,8 @@ export default defineNuxtConfig({
    * │ NUXT_STORAGE_DRIVER             │ SENTRY_PROJECT                       │
    * │ NUXT_STORAGE_REDIS_URL          │                                      │
    * │ NUXT_HEALTH_CHECK_SECRET        │                                      │
+   * │ NUXT_ADMIN_SECRET               │                                      │
+   * │ NUXT_ADMIN_READ_SECRET          │                                      │
    * │ NUXT_EXTERNAL_API_BASE_URL      │                                      │
    * │ NUXT_SENTRY_DSN                 │                                      │
    * │ NUXT_WEBHOOK_SECRET              │                                      │
@@ -247,16 +295,32 @@ export default defineNuxtConfig({
       tenantApiUrl: 'https://merchantapi.geins.io/store-settings',
     },
 
-    // Storage configuration (memory for dev, redis for production)
-    // Azure: NUXT_STORAGE_DRIVER=redis, NUXT_STORAGE_REDIS_URL=redis://...
+    // Diagnostic label only, read by server/api/health.get.ts — the mount
+    // itself is decided in resolveKvStorageMount() above from the same
+    // NUXT_STORAGE_DRIVER env var, at config-build time (before
+    // useRuntimeConfig() exists, so that function can't read it from here).
+    // redisUrl is deliberately not mirrored into runtimeConfig — no reader
+    // needs the connection string outside resolveKvStorageMount() itself.
     storage: {
       driver: 'memory',
-      redisUrl: '',
     },
 
     // Secret for accessing detailed health check metrics
     // Azure: NUXT_HEALTH_CHECK_SECRET=your-secret-here
     healthCheckSecret: '',
+
+    // Secret for the one-off tenant-creation admin endpoint
+    // (server/api/admin/tenants.post.ts) — separate from healthCheckSecret
+    // since this one gates a write action, not read-only diagnostics.
+    // Azure: NUXT_ADMIN_SECRET=your-secret-here
+    adminSecret: '',
+
+    // Read-only counterpart, for services that need to resolve a tenant's
+    // config without being able to rewrite it (see server/utils/admin-auth.ts).
+    // The write secret above also satisfies a read; this one does not
+    // satisfy a write. Leave unset to have no read-only credential at all.
+    // Azure: NUXT_ADMIN_READ_SECRET=your-secret-here
+    adminReadSecret: '',
 
     // External API base URL for the proxy
     // Azure: NUXT_EXTERNAL_API_BASE_URL=https://your-external-api.com
@@ -317,9 +381,7 @@ export default defineNuxtConfig({
 
   nitro: {
     storage: {
-      kv: {
-        driver: 'memory',
-      },
+      kv: resolveKvStorageMount(),
     },
     // Enable compression
     compressPublicAssets: true,
@@ -329,6 +391,12 @@ export default defineNuxtConfig({
     // surfaces the real message, correlation ID, tenantId, and stack
     // (stack only when NUXT_DEBUG_ERRORS=true). See server/error.ts.
     errorHandler: '~~/server/error',
+    // Dev-server watcher otherwise holds a handle open per file under
+    // node_modules (thousands of them), climbing on every rebuild until it
+    // hits EMFILE — framework defaults weren't excluding it here.
+    watchOptions: {
+      ignored: ['**/node_modules/**', '**/.git/**'],
+    },
   },
 
   components: [
@@ -406,6 +474,9 @@ export default defineNuxtConfig({
   vite: {
     server: {
       allowedHosts: ['.litium.portal'],
+      watch: {
+        ignored: ['**/node_modules/**', '**/.git/**'],
+      },
     },
   },
 });

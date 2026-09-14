@@ -3,7 +3,7 @@
 .temp
 .vscode
 .plans
-.worktrees
+.claude/worktrees/
 docs/plans/
 local-docs/
 
@@ -60,3 +60,6 @@ playwright/.auth/
 
 # Self-signed TLS cert for serving the production build under test (infra/scripts/local-cert.sh)
 .certs/
+
+# Local copy of the admin-write endpoint's secret — never commit
+admin-secret.txt
