@@ -17,10 +17,12 @@ const STAGING_TENANT_ID = 'odelco-staging-local';
  *
  * The local tenant intentionally inherits the Sales Portal's CURRENT canonical
  * CMS registry and baseline feature defaults. Odelco's Geins CMS uses tenant-
- * specific area names for the existing Frontpage/Product content, so those two
- * logical slots are overridden here without changing global Sales Portal
- * defaults for any other tenant. Merchant-gated features such as
- * orderPlacement/priceVisibility/stockStatus keep their canonical safe defaults.
+ * specific area names, so those logical slots are overridden here without
+ * changing global Sales Portal defaults for any other tenant. The temporary
+ * staging theme mirrors the checked-in Odelco design tokens until native Geins
+ * store-settings becomes authoritative for the staging hostname.
+ * Merchant-gated features such as orderPlacement/priceVisibility/stockStatus
+ * keep their canonical safe defaults.
  */
 export default defineNitroPlugin(async () => {
   if (process.env.ODELCO_STAGING_BOOTSTRAP !== '1') return;
@@ -49,6 +51,58 @@ export default defineNitroPlugin(async () => {
       branding: {
         name: 'Odelco',
         watermark: 'full',
+      },
+      theme: {
+        name: 'odelco',
+        displayName: 'Odelco',
+        radius: '0.25rem',
+        typography: {
+          fontFamily: 'Inter',
+          headingFontFamily: 'Roboto Slab',
+          monoFontFamily: 'JetBrains Mono',
+        },
+        colors: {
+          primary: 'oklch(0.728 0.172 56.0)',
+          primaryForeground: 'oklch(1.000 0.000 0.0)',
+          secondary: 'oklch(0.218 0.000 0.0)',
+          secondaryForeground: 'oklch(1.000 0.000 0.0)',
+          background: 'oklch(1.000 0.000 0.0)',
+          foreground: 'oklch(0.218 0.000 0.0)',
+          card: 'oklch(1.000 0.000 0.0)',
+          cardForeground: 'oklch(0.218 0.000 0.0)',
+          popover: 'oklch(1.000 0.000 0.0)',
+          popoverForeground: 'oklch(0.218 0.000 0.0)',
+          muted: 'oklch(0.985 0.003 106.4)',
+          mutedForeground: 'oklch(0.566 0.000 0.0)',
+          accent: 'oklch(0.969 0.021 72.2)',
+          accentForeground: 'oklch(0.653 0.161 53.8)',
+          destructive: 'oklch(0.540 0.177 27.0)',
+          destructiveForeground: 'oklch(1.000 0.000 0.0)',
+          border: 'oklch(0.914 0.007 80.7)',
+          input: 'oklch(0.825 0.011 81.8)',
+          ring: 'oklch(0.728 0.172 56.0)',
+          chart1: 'oklch(0.728 0.172 56.0)',
+          chart2: 'oklch(0.343 0.070 252.4)',
+          chart3: 'oklch(0.516 0.120 152.9)',
+          chart4: 'oklch(0.617 0.134 69.4)',
+          chart5: 'oklch(0.566 0.000 0.0)',
+          sidebar: 'oklch(0.985 0.003 106.4)',
+          sidebarForeground: 'oklch(0.218 0.000 0.0)',
+          sidebarPrimary: 'oklch(0.728 0.172 56.0)',
+          sidebarPrimaryForeground: 'oklch(1.000 0.000 0.0)',
+          sidebarAccent: 'oklch(0.969 0.021 72.2)',
+          sidebarAccentForeground: 'oklch(0.653 0.161 53.8)',
+          sidebarBorder: 'oklch(0.914 0.007 80.7)',
+          sidebarRing: 'oklch(0.728 0.172 56.0)',
+          topBarBackground: 'oklch(0.218 0.000 0.0)',
+          topBarText: 'oklch(1.000 0.000 0.0)',
+          footerBackground: 'oklch(0.218 0.000 0.0)',
+          footerText: 'oklch(0.985 0 0 / 0.75)',
+          navBarBackground: 'oklch(1.000 0.000 0.0)',
+          siteBackground: 'oklch(0.985 0.003 106.4)',
+          buttonBackground: 'oklch(0.218 0.000 0.0)',
+          buttonPurchaseBackground: 'oklch(0.728 0.172 56.0)',
+        },
       },
       features: {
         ...STOREFRONT_SETTINGS_DEFAULTS.features,
@@ -96,6 +150,6 @@ export default defineNitroPlugin(async () => {
   });
 
   logger.warn(
-    `[odelco-staging-bootstrap] ENABLED host=${STAGING_HOSTNAME} tenant=${STAGING_TENANT_ID}; Odelco CMS area overrides + current Sales Portal defaults; temporary local KV authority`,
+    `[odelco-staging-bootstrap] ENABLED host=${STAGING_HOSTNAME} tenant=${STAGING_TENANT_ID}; Odelco theme/CMS area overrides + current Sales Portal defaults; temporary local KV authority`,
   );
 });
