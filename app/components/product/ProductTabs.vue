@@ -251,7 +251,10 @@ const defaultTab = computed(() => {
   if (hasDescription.value) return 'description';
   if (hasSpecs.value) return 'specifications';
   if (hasRelated.value) return 'related';
-  return 'documents';
+  // Documents is conditional like the rest, so it can only be the fallback
+  // when it actually renders. A product with nothing at all shows no tabs.
+  if (hasDocumentsContent.value) return 'documents';
+  return undefined;
 });
 
 // Print expansion: radix Tabs sets the `hidden` HTML attribute on
@@ -303,7 +306,7 @@ onMounted(() => {
         <TabsTrigger v-if="hasSpecs" value="specifications">
           {{ $t('product.specifications') }}
         </TabsTrigger>
-        <TabsTrigger value="documents">
+        <TabsTrigger v-if="hasDocumentsContent" value="documents">
           {{ $t('product.documents') }}
         </TabsTrigger>
         <TabsTrigger v-if="hasRelated" value="related">
@@ -378,6 +381,7 @@ onMounted(() => {
       </TabsContent>
 
       <TabsContent
+        v-if="hasDocumentsContent"
         value="documents"
         data-print="documents"
         class="bg-card mt-6 rounded-lg border p-6"
@@ -385,7 +389,7 @@ onMounted(() => {
         <h3 class="font-heading mb-4 text-2xl font-bold">
           {{ $t('product.documents') }}
         </h3>
-        <div v-if="hasDocumentsContent" class="flex flex-col gap-8">
+        <div class="flex flex-col gap-8">
           <div
             v-if="videoItems.length"
             class="grid gap-6 sm:grid-cols-2"
@@ -470,9 +474,6 @@ onMounted(() => {
             </a>
           </div>
         </div>
-        <p v-else class="text-muted-foreground text-sm">
-          {{ $t('product.no_documents') }}
-        </p>
       </TabsContent>
 
       <TabsContent
@@ -541,10 +542,10 @@ onMounted(() => {
         </AccordionContent>
       </AccordionItem>
 
-      <AccordionItem value="documents">
+      <AccordionItem v-if="hasDocumentsContent" value="documents">
         <AccordionTrigger>{{ $t('product.documents') }}</AccordionTrigger>
         <AccordionContent>
-          <div v-if="hasDocumentsContent" class="flex flex-col gap-6">
+          <div class="flex flex-col gap-6">
             <div v-if="videoItems.length" class="flex flex-col gap-4">
               <div
                 v-for="(video, idx) in videoItems"
@@ -616,9 +617,6 @@ onMounted(() => {
               </a>
             </div>
           </div>
-          <p v-else class="text-muted-foreground text-sm">
-            {{ $t('product.no_documents') }}
-          </p>
         </AccordionContent>
       </AccordionItem>
 

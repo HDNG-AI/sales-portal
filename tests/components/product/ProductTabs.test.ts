@@ -87,8 +87,29 @@ function makeProduct(overrides: Record<string, unknown> = {}) {
 
 describe('ProductTabs', () => {
   it('renders details, specifications, documents triggers (no reviews)', () => {
+    // Documents is conditional, so the product needs a media parameter for
+    // all three triggers to be in play.
     const wrapper = mountComponent(ProductTabs, {
-      props: { product: makeProduct(), related: [] },
+      props: {
+        product: makeProduct({
+          parameterGroups: [
+            ...makeProduct().parameterGroups,
+            {
+              name: 'Dokumentation',
+              parameterGroupId: 46,
+              parameters: [
+                {
+                  name: 'Manual',
+                  label: 'Manual',
+                  value: 'https://cdn.example.com/manual.pdf',
+                  show: true,
+                },
+              ],
+            },
+          ],
+        }),
+        related: [],
+      },
       global: { stubs },
     });
     const triggers = wrapper.findAll('.tabs-trigger');
@@ -105,7 +126,23 @@ describe('ProductTabs', () => {
   it('adds related tab when related products exist', () => {
     const wrapper = mountComponent(ProductTabs, {
       props: {
-        product: makeProduct(),
+        product: makeProduct({
+          parameterGroups: [
+            ...makeProduct().parameterGroups,
+            {
+              name: 'Dokumentation',
+              parameterGroupId: 46,
+              parameters: [
+                {
+                  name: 'Manual',
+                  label: 'Manual',
+                  value: 'https://cdn.example.com/manual.pdf',
+                  show: true,
+                },
+              ],
+            },
+          ],
+        }),
         related: [makeListProduct({ productId: 2, name: 'Other' })],
       },
       global: { stubs },
@@ -324,6 +361,85 @@ describe('ProductTabs', () => {
     expect(labels).toContain('product.specifications');
   });
 
+  // A tab with nothing in it is noise. Description, specifications and
+  // related were already conditional; documents was not, so every product
+  // without media rendered a Documents tab whose only content was "no
+  // documents available".
+  const NO_CONTENT = {
+    texts: undefined,
+    parameterGroups: [],
+    weight: 0,
+    dimensions: { length: 0, width: 0, height: 0 },
+  };
+
+  it('hides the documents tab when the product has no media', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(NO_CONTENT), related: [] },
+      global: { stubs },
+    });
+    const labels = wrapper.findAll('.tabs-trigger').map((x) => x.text());
+    expect(labels).not.toContain('product.documents');
+    expect(wrapper.text()).not.toContain('product.no_documents');
+  });
+
+  it('hides the documents section in the mobile accordion too', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(NO_CONTENT), related: [] },
+      global: { stubs },
+    });
+    // Nothing to show, so the accordion is not rendered at all — which also
+    // means no documents section.
+    expect(wrapper.find('.accordion').exists()).toBe(false);
+  });
+
+  it('still shows the documents tab when the product has media', () => {
+    const product = makeProduct({
+      ...NO_CONTENT,
+      parameterGroups: [
+        {
+          name: 'Dokumentation',
+          parameterGroupId: 46,
+          parameters: [
+            {
+              name: 'Manual',
+              label: 'Manual',
+              value: 'https://example.com/manual.pdf',
+              show: true,
+            },
+          ],
+        },
+      ],
+    });
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product, related: [] },
+      global: { stubs },
+    });
+    const labels = wrapper.findAll('.tabs-trigger').map((x) => x.text());
+    expect(labels).toContain('product.documents');
+  });
+
+  it('still renders the tab strip when the product has exactly one tab', () => {
+    // The empty-strip fix must not swallow the single-tab case.
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(MEASURED), related: [] },
+      global: { stubs },
+    });
+    expect(wrapper.find('[data-testid="tabs"]').exists()).toBe(true);
+    expect(wrapper.findAll('.tabs-trigger').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('never defaults to a tab that is not rendered', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(NO_CONTENT), related: [] },
+      global: { stubs },
+    });
+    const tabs = wrapper.find('[data-testid="tabs"]');
+    // A product with nothing to show renders no tab control, rather than an
+    // empty TabsList whose underline rule is the only thing on the page.
+    expect(tabs.exists()).toBe(false);
+    expect(wrapper.findAll('.tabs-trigger')).toHaveLength(0);
+  });
+
   it('hides description tab when no text', () => {
     const wrapper = mountComponent(ProductTabs, {
       props: { product: makeProduct({ texts: undefined }), related: [] },
@@ -509,11 +625,14 @@ describe('ProductTabs', () => {
       props: { product, related: [] },
       global: { stubs },
     });
-    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
-    expect(docsContent.find('[data-testid="product-videos"]').exists()).toBe(
+    // Both media parameters were hidden, so nothing is left for the tab to
+    // show and the tab itself is gone — a stronger guarantee than an empty
+    // Documents panel.
+    expect(wrapper.find('.tabs-content[data-value="documents"]').exists()).toBe(
       false,
     );
-    expect(docsContent.find('[data-testid="product-documents"]').exists()).toBe(
+    expect(wrapper.find('[data-testid="product-videos"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="product-documents"]').exists()).toBe(
       false,
     );
   });
@@ -562,8 +681,10 @@ describe('ProductTabs', () => {
       props: { product, related: [] },
       global: { stubs },
     });
-    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
-    expect(docsContent.text()).toContain('product.no_documents');
+    // Nothing became a document, so the tab should not exist at all.
+    expect(wrapper.find('.tabs-content[data-value="documents"]').exists()).toBe(
+      false,
+    );
 
     const specContent = wrapper.find(
       '.tabs-content[data-value="specifications"]',
@@ -572,13 +693,16 @@ describe('ProductTabs', () => {
     expect(specContent.text()).toContain('See page 4');
   });
 
-  it('shows the no-documents message when no media parameters exist', () => {
+  it('hides the documents tab when parameters exist but none are media', () => {
+    // The default fixture has spec parameters (Weight, Height) and no media.
     const wrapper = mountComponent(ProductTabs, {
       props: { product: makeProduct(), related: [] },
       global: { stubs },
     });
-    const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
-    expect(docsContent.text()).toContain('product.no_documents');
+    expect(wrapper.find('.tabs-content[data-value="documents"]').exists()).toBe(
+      false,
+    );
+    expect(wrapper.text()).not.toContain('product.no_documents');
   });
 
   it('renders RelatedProducts inside the related tab', () => {
