@@ -67,6 +67,16 @@ query product(
         identifier
       }
     }
+    # Physical measurements live on the product record, not among the
+    # parameters, and the spec table renders them as their own group. Geins
+    # stores dimensions in millimetres and weight in grams, and returns 0 for
+    # "never set" rather than null — the component drops zero rows.
+    weight
+    dimensions {
+      length
+      width
+      height
+    }
     skus {
       ...Sku
     }

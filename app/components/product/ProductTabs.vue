@@ -7,6 +7,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '~/components/ui/accordion';
+import { formatLength, formatWeight } from '~/utils/measurements';
 import { adminText } from '~/utils/product-texts';
 import {
   ExternalLink,
@@ -151,7 +152,57 @@ const visibleGroups = computed(() =>
     }))
     .filter((g) => g.parameters.length > 0),
 );
-const hasSpecs = computed(() => visibleGroups.value.length > 0);
+/**
+ * Length, width, height and weight are fields on the product record, not
+ * parameters — Geins exposes `dimensions` and `weight` alongside
+ * `parameterGroups` (verified against live data 2026-09-13). They belong in
+ * the spec table all the same, so they are appended as one synthetic group;
+ * the desktop table and the mobile accordion both iterate `specGroups`, so
+ * neither template needs to know they came from somewhere else.
+ *
+ * Geins stores dimensions in millimetres and weight in grams. A zero means
+ * "never set" rather than a real measurement — most of the catalogue is 0 —
+ * so those rows are dropped rather than rendering "0 mm". Values scale up to
+ * m/kg where that reads better (see ~/utils/measurements).
+ */
+const { t, locale } = useI18n();
+const MEASUREMENT_GROUP_ID = -1;
+const measurementGroup = computed(() => {
+  const dimensions = props.product.dimensions;
+  const parameters = [
+    { key: 'length', value: dimensions?.length, format: formatLength },
+    { key: 'width', value: dimensions?.width, format: formatLength },
+    { key: 'height', value: dimensions?.height, format: formatLength },
+    { key: 'weight', value: props.product.weight, format: formatWeight },
+  ].flatMap((row) =>
+    typeof row.value === 'number' && row.value > 0
+      ? [
+          {
+            name: row.key,
+            label: t(`product.${row.key}`),
+            value: row.format(row.value, locale.value),
+            show: true,
+            // Same shape as a real parameter row so the templates can key
+            // on `identifier` without caring where the row came from.
+            identifier: `measurement-${row.key}`,
+          },
+        ]
+      : [],
+  );
+  if (parameters.length === 0) return null;
+  return {
+    name: t('product.measurements'),
+    parameterGroupId: MEASUREMENT_GROUP_ID,
+    parameters,
+  };
+});
+
+const specGroups = computed(() =>
+  measurementGroup.value
+    ? [...visibleGroups.value, measurementGroup.value]
+    : visibleGroups.value,
+);
+const hasSpecs = computed(() => specGroups.value.length > 0);
 const hasRelated = computed(() => (props.related?.length ?? 0) > 0);
 
 const defaultTab = computed(() => {
@@ -256,7 +307,7 @@ onMounted(() => {
         </h3>
         <div class="grid gap-8 md:grid-cols-2">
           <div
-            v-for="group in visibleGroups"
+            v-for="group in specGroups"
             :key="group.name ?? group.parameterGroupId"
             class="flex flex-col gap-3"
           >
@@ -424,7 +475,7 @@ onMounted(() => {
         <AccordionContent>
           <div class="flex flex-col gap-4">
             <div
-              v-for="group in visibleGroups"
+              v-for="group in specGroups"
               :key="group.name ?? group.parameterGroupId"
               class="flex flex-col gap-2"
             >

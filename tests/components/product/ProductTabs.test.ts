@@ -212,6 +212,91 @@ describe('ProductTabs', () => {
     expect(specContent.text()).not.toContain('empty');
   });
 
+  // Length/width/height/weight live on the product record itself, not as
+  // parameters (verified against Geins 2026-09-13: ProductType exposes
+  // `dimensions` and `weight` alongside `parameterGroups`). They still belong
+  // in the spec table, so they are appended as a synthetic group. Geins stores
+  // dimensions in millimetres and weight in grams.
+  const MEASURED = {
+    dimensions: { length: 3000, width: 120, height: 45 },
+    weight: 500,
+  };
+
+  it('shows product-level measurements in the specification table', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(MEASURED), related: [] },
+      global: { stubs },
+    });
+    const text = wrapper
+      .find('.tabs-content[data-value="specifications"]')
+      .text();
+    expect(text).toContain('product.measurements');
+    expect(text).toContain('3 m');
+    expect(text).toContain('120 mm');
+    expect(text).toContain('45 mm');
+    expect(text).toContain('500 g');
+  });
+
+  it('omits measurements that are zero rather than printing "0 mm"', () => {
+    // Real data: A2K-TDC-3M has length 3000 but width/height/weight 0.
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          dimensions: { length: 3000, width: 0, height: 0 },
+          weight: 0,
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+    const text = wrapper
+      .find('.tabs-content[data-value="specifications"]')
+      .text();
+    expect(text).toContain('3 m');
+    // "3000 mm" contains the substring "0 mm", so assert on the rows that
+    // should be absent instead of on a substring of one that is present.
+    expect(text).not.toContain('product.width');
+    expect(text).not.toContain('product.height');
+    expect(text).not.toContain('product.weight');
+  });
+
+  it('omits the measurements group when the product has none', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          dimensions: { length: 0, width: 0, height: 0 },
+          weight: 0,
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+    const text = wrapper
+      .find('.tabs-content[data-value="specifications"]')
+      .text();
+    expect(text).not.toContain('product.measurements');
+  });
+
+  it('shows measurements in the mobile accordion too', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: { product: makeProduct(MEASURED), related: [] },
+      global: { stubs },
+    });
+    expect(wrapper.find('.accordion').text()).toContain('3 m');
+  });
+
+  it('shows the specifications tab for a product with only measurements', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({ ...MEASURED, parameterGroups: [] }),
+        related: [],
+      },
+      global: { stubs },
+    });
+    const labels = wrapper.findAll('.tabs-trigger').map((x) => x.text());
+    expect(labels).toContain('product.specifications');
+  });
+
   it('hides description tab when no text', () => {
     const wrapper = mountComponent(ProductTabs, {
       props: { product: makeProduct({ texts: undefined }), related: [] },
@@ -277,6 +362,12 @@ describe('ProductTabs', () => {
           ],
         },
       ],
+      // The fixture ships a product-level weight, which is now a spec row in
+      // its own right. Cleared here so the assertion below still measures
+      // "VideoURL did not become a spec row" and not "the product has a
+      // weight".
+      weight: 0,
+      dimensions: { length: 0, width: 0, height: 0 },
     });
     const wrapper = mountComponent(ProductTabs, {
       props: { product, related: [] },
