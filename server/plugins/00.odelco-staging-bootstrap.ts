@@ -62,6 +62,14 @@ export default defineNitroPlugin(async () => {
             family: 'Frontpage',
             areaName: 'The front page area',
           },
+          [CMS_SLOTS.PRODUCT_LIST_TOP]: {
+            family: 'Productlist',
+            areaName: 'The top part of the product list',
+          },
+          [CMS_SLOTS.PRODUCT_LIST_BOTTOM]: {
+            family: 'Productlist',
+            areaName: 'The bottom part of the product list',
+          },
           [CMS_SLOTS.PRODUCT_DETAIL]: {
             family: 'Product',
             areaName: 'Product detail page',
