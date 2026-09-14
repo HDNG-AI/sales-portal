@@ -5,6 +5,19 @@ import { defineConfig } from 'vitest/config';
  * Test environment and file routing is handled by vitest.workspace.ts.
  */
 export default defineConfig({
+  server: {
+    watch: {
+      ignored: [
+        '**/.nuxt/**',
+        '**/.git/**',
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/.cursor/**',
+        '**/.claude/**',
+        '**/.cache/**',
+      ],
+    },
+  },
   test: {
     coverage: {
       provider: 'v8',
