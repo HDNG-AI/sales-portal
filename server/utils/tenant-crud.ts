@@ -16,6 +16,8 @@ import {
   DEFAULT_GEINS_SETTINGS,
   invalidateTenantCaches,
   withTenantConfigDefaults,
+  tenantOverrideKey,
+  type TenantPortalOverrides,
 } from './tenant';
 import { withoutUndefined } from './object';
 
@@ -75,6 +77,32 @@ export function mergeCmsConfig(
     ...(slots !== undefined ? { slots } : {}),
     ...(menus !== undefined ? { menus } : {}),
   };
+}
+
+/**
+ * Persists portal-owned CMS wiring independently from the disposable
+ * effective Geins tenant cache.
+ *
+ * A Geins config-refresh may delete tenant:config:<id>, but must never
+ * delete tenant:override:<id>.
+ */
+async function persistCmsOverride(
+  storage: ReturnType<typeof useStorage>,
+  tenantId: string,
+  update: CmsConfigUpdate | undefined,
+): Promise<void> {
+  if (!update) return;
+
+  const key = tenantOverrideKey(tenantId);
+  const existing =
+    await storage.getItem<TenantPortalOverrides>(key);
+
+  const cms = mergeCmsConfig(existing?.cms, update);
+
+  await storage.setItem(key, {
+    ...(existing ?? {}),
+    ...(cms ? { cms } : {}),
+  } satisfies TenantPortalOverrides);
 }
 
 /**
@@ -150,9 +178,17 @@ export async function createTenant(
     const updatedConfig = mergeTenantConfig(
       existingConfig,
       partialConfig,
-      identity,
+      {
+        tenantId: finalTenantId,
+        hostname: existingConfig.hostname,
+      },
     );
     await storage.setItem(tenantConfigKey(finalTenantId), updatedConfig);
+    await persistCmsOverride(
+      storage,
+      finalTenantId,
+      partialConfig.cms,
+    );
     // Independent writes to unrelated storage — hostname mappings live in
     // `kv`, cache invalidation touches the `cache` namespace/in-memory
     // maps — neither depends on the other completing first.
@@ -190,6 +226,11 @@ export async function createTenant(
   const finalConfig = mergeTenantConfig(baseConfig, partialConfig, identity);
 
   await storage.setItem(tenantConfigKey(finalTenantId), finalConfig);
+  await persistCmsOverride(
+    storage,
+    finalTenantId,
+    partialConfig?.cms,
+  );
   await Promise.all([
     writeHostnameMappings(storage, finalConfig),
     // Clears any negative-cache entry from a lookup that happened before
@@ -222,6 +263,7 @@ export async function updateTenant(
   });
 
   await storage.setItem(tenantConfigKey(tid), updatedConfig);
+  await persistCmsOverride(storage, tid, updates.cms);
   await Promise.all([
     writeHostnameMappings(storage, updatedConfig),
     invalidateTenantCaches(tid, existing.hostname, useStorage('cache')),
@@ -252,6 +294,7 @@ export async function deleteTenant(hostname: string): Promise<boolean> {
 
     await Promise.all([
       storage.removeItem(tenantConfigKey(tid)),
+      storage.removeItem(tenantOverrideKey(tid)),
       invalidateTenantCaches(tid, hostname, useStorage('cache')),
     ]);
     return true;
