@@ -92,6 +92,11 @@ export default [
   nuxtViteConfig.then((config) =>
     defineProject({
       ...config,
+      // `import.meta.dev` is a Nuxt build-time literal, so it is undefined in
+      // this tier — the components project runs bare happy-dom, not a Nuxt
+      // environment. Components that gate dev-only UI on it (CmsWidget's
+      // unknown-widget warning) would otherwise silently never render it here.
+      define: { ...config.define, 'import.meta.dev': 'true' },
       test: {
         ...config.test,
         name: 'components',

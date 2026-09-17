@@ -49,7 +49,7 @@ const resolvedComponent = computed(() => {
   return widgetRegistry[type] ?? null;
 });
 
-const isDev = import.meta.env.DEV;
+const isDev = import.meta.dev;
 
 const unknownType = computed(() => {
   const type = props.widget.config?.type;
