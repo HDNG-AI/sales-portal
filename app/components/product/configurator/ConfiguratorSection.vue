@@ -3,6 +3,7 @@ import type {
   ConfigurationChange,
   ConfigurationSection,
 } from '#shared/types/configurator';
+import { variablesSummary } from '~/utils/configurator-form';
 
 /**
  * One `ConfigurationSection` and the sections nested inside it.
@@ -24,7 +25,14 @@ const {
 
 const emit = defineEmits<{ change: [ConfigurationChange] }>();
 
+const { t } = useI18n();
+
 const heading = computed(() => `h${Math.min(level, 6)}`);
+
+/** Empty rather than a bare separator when nothing readable is set yet. */
+const summary = computed(
+  () => variablesSummary(section.variables) || undefined,
+);
 </script>
 
 <template>
@@ -34,29 +42,25 @@ const heading = computed(() => `h${Math.min(level, 6)}`);
     :data-section-id="section.id"
     class="space-y-4"
   >
-    <!-- The same grey bar the groups inside it carry, so the form reads as one
-         stack of headed blocks rather than two kinds of heading. -->
-    <div
-      class="bg-muted rounded-md px-3 py-2.5"
-      data-testid="configurator-section-header"
-    >
-      <component :is="heading" class="text-base font-medium">
+    <!-- A section is a heading, not a bar: the grey bars below it are the
+         groups and the measurements, and a section that carried one too would
+         read as another block beside them rather than what holds them.
+         The contract has no section description, so no line is written for
+         one. -->
+    <header class="mb-6" data-testid="configurator-section-header">
+      <component
+        :is="heading"
+        class="font-heading text-xl leading-tight font-bold"
+      >
         {{ section.name }}
       </component>
-    </div>
+    </header>
 
     <ConfiguratorMessages :messages="section.messages" />
 
-    <div v-if="section.variables.length" class="space-y-4">
-      <ConfiguratorVariableField
-        v-for="variable in section.variables"
-        :key="variable.id"
-        :variable="variable"
-        :disabled="disabled"
-        @change="emit('change', $event)"
-      />
-    </div>
-
+    <!-- Choices first, measurements last. The contract puts variables and
+         option groups in two lists and says nothing about which comes first,
+         so the order follows the design reference until it does. -->
     <ConfiguratorOptionGroup
       v-for="group in section.optionGroups"
       :key="group.id"
@@ -65,6 +69,27 @@ const heading = computed(() => `h${Math.min(level, 6)}`);
       :disabled="disabled"
       @change="emit('change', $event)"
     />
+
+    <!-- The measurements are one headed block of their own, like a group, and
+         two columns where there is room: a column of lone fields under the
+         choices reads as leftovers. -->
+    <ConfiguratorFoldable
+      v-if="section.variables.length"
+      name="configurator-measurements"
+      :title="t('configurator.measurements')"
+      :summary="summary"
+      :level="level + 1"
+    >
+      <div class="grid gap-4 sm:grid-cols-2">
+        <ConfiguratorVariableField
+          v-for="variable in section.variables"
+          :key="variable.id"
+          :variable="variable"
+          :disabled="disabled"
+          @change="emit('change', $event)"
+        />
+      </div>
+    </ConfiguratorFoldable>
 
     <ConfiguratorSection
       v-for="nested in section.sections"
