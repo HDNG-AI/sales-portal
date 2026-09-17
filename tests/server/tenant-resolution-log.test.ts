@@ -684,7 +684,7 @@ describe.sequential('getTenantById', () => {
     // an assertion about the field rather than about the lookup.
     const active = kvConfig('t-flag', 't-flag.example', { isActive: true });
     memoryStorage({ [tenantConfigKey('t-flag')]: active });
-    await expect(getTenantById('t-flag')).resolves.toBe(active);
+    await expect(getTenantById('t-flag')).resolves.toMatchObject(active);
 
     resetStorage();
 

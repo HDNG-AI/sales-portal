@@ -46,7 +46,8 @@ const { mockLoggerWarn, mockUseRuntimeConfig, mockUseStorage } = vi.hoisted(
       geins: { tenantApiUrl: 'https://merchant.example/api/tenant' },
     })),
     mockUseStorage: vi.fn(() => ({
-      getItem: vi.fn(() => Promise.resolve(null)),
+      // Widened so tests can hand back a real config, not just null.
+      getItem: vi.fn((): Promise<unknown> => Promise.resolve(null)),
       setItem: vi.fn(),
       removeItem: vi.fn(),
       hasItem: vi.fn(() => Promise.resolve(false)),
@@ -412,6 +413,7 @@ describe('Tenant utilities', () => {
     const baseSettings: StoreSettings = {
       tenantId: 'delta',
       hostname: 'delta.litium.store',
+      timezone: 'UTC',
       geinsSettings: {
         apiKey: 'k',
         accountName: 'delta',
@@ -502,6 +504,7 @@ describe('Tenant utilities', () => {
     const baseSettings: StoreSettings = {
       tenantId: 'tenant-x',
       hostname: 'tenant-x.litium.store',
+      timezone: 'UTC',
       geinsSettings: {
         apiKey: 'k',
         accountName: 'tenant-x',
@@ -591,6 +594,7 @@ describe('Tenant utilities', () => {
     const retiredSettings: StoreSettings = {
       tenantId: 'tenant-r',
       hostname: 'tenant-r.litium.store',
+      timezone: 'UTC',
       geinsSettings: {
         apiKey: 'k',
         accountName: 'tenant-r',
@@ -758,6 +762,7 @@ describe('Tenant utilities', () => {
       return {
         tenantId: 'tenant-defaults',
         hostname: 'tenant-defaults.litium.store',
+        timezone: 'UTC',
         geinsSettings: {
           apiKey: 'k',
           accountName: 'a',
@@ -911,6 +916,7 @@ describe('Tenant utilities', () => {
       return {
         tenantId: 'tenant-cms',
         hostname: 'tenant-cms.litium.store',
+        timezone: 'UTC',
         geinsSettings: {
           apiKey: 'k',
           accountName: 'a',
@@ -1019,6 +1025,7 @@ describe('Tenant utilities', () => {
       return {
         tenantId: 'tenant-media',
         hostname: 'tenant-media.litium.store',
+        timezone: 'UTC',
         geinsSettings: {
           apiKey: 'k',
           accountName: 'a',

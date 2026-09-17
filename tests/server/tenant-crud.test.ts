@@ -95,6 +95,8 @@ const GEINS_SETTINGS = {
   locale: 'sv-SE',
   market: 'se',
   environment: 'production' as const,
+  availableLocales: ['sv-SE'],
+  availableMarkets: ['se'],
 };
 
 beforeEach(() => {
