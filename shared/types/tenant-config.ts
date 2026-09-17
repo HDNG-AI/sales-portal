@@ -61,9 +61,13 @@ export interface TenantConfig {
   // offset — offsets don't survive DST. Anchors record-type timestamps
   // (order placed, invoice date) to the tenant's own operating timezone
   // rather than the server's OS timezone or each viewer's browser.
-  // Defaults to 'UTC' — deliberately not a tenant-specific guess; see
-  // docs/lessons-learned.md for why defaults here must stay generic.
-  timezone: string;
+  // Optional on the stored shape: configs written before this field existed
+  // have no timezone, and the merchant admin has no way to know it was added.
+  // withTenantConfigDefaults() fills 'UTC' on read — deliberately not a
+  // tenant-specific guess; see docs/lessons-learned.md for why defaults here
+  // must stay generic. PublicTenantConfig below requires it, because the
+  // builder always resolves one.
+  timezone?: string;
 
   // Theme
   theme: {
