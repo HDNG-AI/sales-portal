@@ -8,6 +8,11 @@
  */
 import graphqlFiles from '#graphql-queries';
 
+// The generated module is intentionally a dynamic path → query map.
+// Nuxt may infer its concrete generated keys during typecheck, so widen it
+// back to the public contract exposed by modules/graphql-loader.ts.
+const graphqlFileMap: Record<string, string> = graphqlFiles;
+
 const cache = new Map<string, string>();
 
 /**
@@ -37,7 +42,7 @@ function loadFragments(): void {
   if (fragmentCache.size > 0) return;
 
   for (const [name, path] of Object.entries(FRAGMENT_NAMES)) {
-    const content = graphqlFiles[path];
+    const content = graphqlFileMap[path];
     if (content) {
       fragmentCache.set(name, content);
     }
@@ -102,7 +107,7 @@ export function loadQuery(relativePath: string): string {
   if (cached) return cached;
 
   const key = `./${relativePath}`;
-  const raw = graphqlFiles[key];
+  const raw = graphqlFileMap[key];
 
   if (!raw) {
     throw new Error(`GraphQL file not found: ${relativePath}`);

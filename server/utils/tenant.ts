@@ -275,6 +275,47 @@ export function tenantConfigKey(tenantId: string): string {
   return `${KV_STORAGE_KEYS.TENANT_CONFIG_PREFIX}${tenantId}`;
 }
 
+export function tenantOverrideKey(tenantId: string): string {
+  return `${KV_STORAGE_KEYS.TENANT_OVERRIDE_PREFIX}${tenantId}`;
+}
+
+/**
+ * Persistent portal-owned configuration.
+ *
+ * This is deliberately stored separately from tenant:config:*.
+ * tenant:config is a disposable effective cache of Geins StoreSettings,
+ * while these values survive Geins config-refresh invalidation.
+ *
+ * CMS is the first portal-owned field. Extend this shape when another
+ * setting is proven to belong to Sales Portal rather than Geins.
+ */
+export interface TenantPortalOverrides {
+  cms?: TenantConfig['cms'];
+}
+
+export function mergeTenantPortalOverrides(
+  base: TenantConfig,
+  overrides: TenantPortalOverrides | null | undefined,
+): TenantConfig {
+  if (!overrides?.cms) return base;
+
+  return {
+    ...base,
+    cms: {
+      ...base.cms,
+      ...overrides.cms,
+      slots: {
+        ...(base.cms?.slots ?? {}),
+        ...(overrides.cms.slots ?? {}),
+      },
+      menus: {
+        ...(base.cms?.menus ?? {}),
+        ...(overrides.cms.menus ?? {}),
+      },
+    },
+  };
+}
+
 export interface TenantCacheStorage {
   removeItem(key: string): Promise<void>;
 }
@@ -1048,7 +1089,12 @@ export async function resolvePreviewTenant(
 
   const settings = parseStoreSettingsResilient(merged, hostname);
   if (!settings) return null;
-  return buildTenantConfig(settings);
+
+  const built = buildTenantConfig(settings);
+  const overrides = await useStorage('kv').getItem<TenantPortalOverrides>(
+    tenantOverrideKey(built.tenantId),
+  );
+  return mergeTenantPortalOverrides(built, overrides);
 }
 
 // ---------------------------------------------------------------------------
@@ -1186,10 +1232,15 @@ async function resolveTenantTraced(
 
   if (newConfig.isActive) {
     const tid = newConfig.tenantId || hostname;
-    await storage.setItem(tenantConfigKey(tid), newConfig);
-    await writeHostnameMappings(storage, newConfig);
+    const overrides = await storage.getItem<TenantPortalOverrides>(
+      tenantOverrideKey(tid),
+    );
+    const effectiveConfig = mergeTenantPortalOverrides(newConfig, overrides);
+
+    await storage.setItem(tenantConfigKey(tid), effectiveConfig);
+    await writeHostnameMappings(storage, effectiveConfig);
     trace.tenantId = tid;
-    return newConfig;
+    return effectiveConfig;
   }
 
   // Registered but switched off in the merchant admin: does not resolve.

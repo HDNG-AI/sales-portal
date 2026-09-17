@@ -28,6 +28,12 @@ FROM node:20-alpine AS builder
 
 # Build argument for commit SHA (injected at build time)
 ARG COMMIT_SHA=n/a
+ARG NUXT_STORAGE_DRIVER=memory
+ARG NUXT_STORAGE_REDIS_URL=
+
+# Nitro storage mounts are resolved while Nuxt is built.
+ENV NUXT_STORAGE_DRIVER=${NUXT_STORAGE_DRIVER}
+ENV NUXT_STORAGE_REDIS_URL=${NUXT_STORAGE_REDIS_URL}
 
 WORKDIR /app
 
@@ -82,7 +88,7 @@ EXPOSE 3000
 # - timeout: Allow more time for response during cold starts
 # - retries: Be more tolerant of transient failures
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
 
 # Start the Nuxt server
 CMD ["node", ".output/server/index.mjs"]
