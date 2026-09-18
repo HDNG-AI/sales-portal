@@ -21,10 +21,8 @@ const props = withDefaults(
     returnTo?: string;
   }>(),
   {
-    showVat: undefined,
     showDiscount: true,
     fromPrice: false,
-    returnTo: undefined,
   },
 );
 
