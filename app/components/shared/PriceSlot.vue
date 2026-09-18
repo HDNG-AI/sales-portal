@@ -5,7 +5,7 @@ import type {
   ProductDiscountType,
 } from '#shared/types/commerce';
 
-export type PriceSlotMode = 'contract' | 'list' | 'hidden' | 'quote';
+type PriceSlotMode = 'contract' | 'list' | 'hidden' | 'quote';
 
 const props = withDefaults(
   defineProps<{
