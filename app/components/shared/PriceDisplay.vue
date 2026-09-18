@@ -6,6 +6,7 @@ import type {
 } from '#shared/types/commerce';
 import { formatPrice } from '#shared/types/commerce';
 import { BADGE_DESTRUCTIVE, BADGE_INFO } from '~/lib/badge-styles';
+import { useAuthStore } from '~/stores/auth';
 
 const props = withDefaults(
   defineProps<{
