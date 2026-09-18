@@ -19,11 +19,18 @@ import redisDriver from 'unstorage/drivers/redis';
  * silent fallback in production is indistinguishable from a working
  * deployment right up until a restart wipes every onboarded tenant.
  */
-export default defineNitroPlugin(() => {
-  const driver = process.env.NUXT_STORAGE_DRIVER || 'memory';
+/** What the environment asks the kv namespace to be mounted on. */
+export type KvMount = { driver: 'memory' } | { driver: 'redis'; url: string };
 
-  // nitro.storage already mounts 'kv' as memory, so there is nothing to do.
-  if (driver === 'memory') return;
+/**
+ * Reads the mount out of an environment, separately from applying it, so the
+ * decision — including both refusals — is testable without a live Redis or a
+ * booted Nitro.
+ */
+export function resolveKvMount(env: NodeJS.ProcessEnv): KvMount {
+  const driver = env.NUXT_STORAGE_DRIVER || 'memory';
+
+  if (driver === 'memory') return { driver: 'memory' };
 
   if (driver !== 'redis') {
     throw new Error(
@@ -31,7 +38,7 @@ export default defineNitroPlugin(() => {
     );
   }
 
-  const url = process.env.NUXT_STORAGE_REDIS_URL;
+  const url = env.NUXT_STORAGE_REDIS_URL;
   if (!url) {
     throw new Error(
       'NUXT_STORAGE_DRIVER=redis but NUXT_STORAGE_REDIS_URL is not set. ' +
@@ -40,6 +47,15 @@ export default defineNitroPlugin(() => {
     );
   }
 
+  return { driver: 'redis', url };
+}
+
+export default defineNitroPlugin(() => {
+  const mount = resolveKvMount(process.env);
+
+  // nitro.storage already mounts 'kv' as memory, so there is nothing to do.
+  if (mount.driver === 'memory') return;
+
   // `base` is the Redis key prefix, unrelated to the 'kv' mount point.
-  useStorage().mount('kv', redisDriver({ url, base: 'kv' }));
+  useStorage().mount('kv', redisDriver({ url: mount.url, base: 'kv' }));
 });

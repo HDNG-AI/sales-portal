@@ -115,8 +115,8 @@ The `deploy.yml` workflow passes GitHub variables to Bicep, which sets these in 
 | `NODE_ENV`                       | Set by Bicep based on environment | `process.env.NODE_ENV`                    |
 | `NUXT_GEINS_API_ENDPOINT`        | `vars.GEINS_API_ENDPOINT`         | `runtimeConfig.geins.apiEndpoint`         |
 | `NUXT_GEINS_TENANT_API_URL`      | `vars.GEINS_TENANT_API_URL`       | `runtimeConfig.geins.tenantApiUrl`        |
-| `NUXT_STORAGE_DRIVER`            | `vars.STORAGE_DRIVER`             | `runtimeConfig.storage.driver`            |
-| `NUXT_STORAGE_REDIS_URL`         | `secrets.REDIS_URL`               | `nitro.storage.kv` (build time)           |
+| `NUXT_STORAGE_DRIVER`            | `vars.STORAGE_DRIVER`             | read at startup by `00.kv-storage.ts`     |
+| `NUXT_STORAGE_REDIS_URL`         | `secrets.REDIS_URL`               | read at startup by `00.kv-storage.ts`     |
 | `NUXT_PUBLIC_FEATURES_ANALYTICS` | `vars.ENABLE_ANALYTICS`           | `runtimeConfig.public.features.analytics` |
 | `NUXT_CONFIGURATOR_BACKEND`      | `vars.CONFIGURATOR_BACKEND`       | `runtimeConfig.configurator.backend`      |
 | `NUXT_SENTRY_DSN`                | `secrets.SENTRY_DSN`              | `runtimeConfig.sentry.dsn` (server-only)  |

@@ -66,11 +66,13 @@ async function getEnvironment(event: H3Event): Promise<string> {
 }
 
 /**
- * Check storage connectivity (KV store)
+ * Check storage connectivity (KV store).
  *
- * Note: Storage check is optional - if using filesystem storage in production
- * without a configured directory, we report as 'degraded' rather than 'unhealthy'
- * since the app can function without KV storage for many use cases.
+ * Reports 'degraded' rather than 'unhealthy' when the store cannot be
+ * reached: most of the app keeps working without KV, and failing the probe
+ * would restart a container that a transient Redis blip would otherwise
+ * ride out. A driver the app does not support never reaches here — the
+ * mount refuses to start in server/plugins/00.kv-storage.ts.
  */
 async function checkStorage(): Promise<ComponentHealth> {
   const timer = createTimer();
