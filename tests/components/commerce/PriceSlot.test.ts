@@ -74,13 +74,11 @@ describe('PriceSlot', () => {
     });
 
     const slot = wrapper.find('[data-testid="price-slot"]');
-    const link = wrapper.findComponent({ name: 'NuxtLink' });
+    const link = wrapper.find('[data-testid="price-login"]');
     expect(link.exists()).toBe(true);
     expect(wrapper.text()).toContain('product.login_for_prices');
-    expect(link.props('to')).toEqual({
-      path: '/se/en/login',
-      query: { redirect: '/se/sv/p/test-product' },
-    });
+    expect(link.attributes('data-path')).toBe('/se/en/login');
+    expect(link.attributes('data-redirect')).toBe('/se/sv/p/test-product');
     expect(slot.classes()).toContain('h-16');
   });
 
