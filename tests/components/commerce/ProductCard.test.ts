@@ -70,6 +70,16 @@ const stubs = {
     template: '<span class="price-display" />',
     props: ['price'],
   },
+  PriceSlot: {
+    template:
+      '<span class="price-slot" :data-mode="mode"><span v-if="mode === \'list\' || mode === \'contract\'" class="price-display" /><span v-else-if="mode === \'hidden\'" class="price-login" /></span>',
+    props: ['mode', 'price', 'returnTo', 'lowestPrice', 'discountType', 'campaignNames'],
+  },
+  SharedPriceSlot: {
+    template:
+      '<span class="price-slot" :data-mode="mode"><span v-if="mode === \'list\' || mode === \'contract\'" class="price-display" /><span v-else-if="mode === \'hidden\'" class="price-login" /></span>',
+    props: ['mode', 'price', 'returnTo', 'lowestPrice', 'discountType', 'campaignNames'],
+  },
   StockBadge: {
     template: '<span class="stock-badge" />',
     props: ['stock', 'size'],
@@ -128,6 +138,9 @@ describe('ProductCard', () => {
     mockAddItem.mockReset();
     mockToggle.mockReset();
     mockIsFavorite.mockReset().mockReturnValue(false);
+    mockCanAccess.mockReset().mockReturnValue(true);
+    mockIsAuthenticated.value = true;
+    tenant.value.features = {};
   });
 
   it('renders product name', () => {
@@ -244,6 +257,29 @@ describe('ProductCard', () => {
       global: { stubs },
     });
     expect(wrapper.find('[data-testid="wishlist-button"]').exists()).toBe(true);
+  });
+
+  it('keeps wishlist available while anonymous so the local list survives login', () => {
+    tenant.value.features = { wishlist: { enabled: true } };
+    mockIsAuthenticated.value = false;
+    const wrapper = mountComponent(ProductCard, {
+      props: { product: makeProduct() },
+      global: { stubs },
+    });
+    expect(wrapper.find('[data-testid="wishlist-button"]').exists()).toBe(true);
+  });
+
+  it('renders the hidden-price login slot when price access requires authentication', () => {
+    tenant.value.features = {
+      priceVisibility: { enabled: true, access: 'authenticated' },
+    };
+    mockCanAccess.mockReturnValue(false);
+    const wrapper = mountComponent(ProductCard, {
+      props: { product: makeProduct() },
+      global: { stubs },
+    });
+    expect(wrapper.find('.price-login').exists()).toBe(true);
+    expect(wrapper.find('.price-display').exists()).toBe(false);
   });
 
   it('applies grid variant by default', () => {
