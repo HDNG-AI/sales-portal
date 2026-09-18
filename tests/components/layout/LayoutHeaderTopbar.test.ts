@@ -54,22 +54,12 @@ describe('LayoutHeaderTopbar', () => {
     applyResolvedRef.value = true;
   });
 
-  it('renders login link when not authenticated', () => {
-    const wrapper = shallowMountComponent(LayoutHeaderTopbar);
-    expect(wrapper.text()).toContain('auth.login');
-  });
-
-  it('shows the apply-for-account link when not authenticated and feature enabled', () => {
+  it('does not render anonymous login or account-application actions', () => {
     authStoreState.isAuthenticated = false;
     const wrapper = shallowMountComponent(LayoutHeaderTopbar);
-    expect(wrapper.text()).toContain('layout.apply_for_account');
-  });
-
-  it('hides the apply-for-account link when authenticated', () => {
-    authStoreState.isAuthenticated = true;
-    authStoreState.displayName = 'ada@example.com';
-    const wrapper = shallowMountComponent(LayoutHeaderTopbar);
+    expect(wrapper.text()).not.toContain('auth.login');
     expect(wrapper.text()).not.toContain('layout.apply_for_account');
+    expect(wrapper.find('[data-testid="topbar-login"]').exists()).toBe(false);
   });
 
   it('shows the Customer portal link (not the buyer email) when authenticated', () => {
@@ -126,36 +116,11 @@ describe('LayoutHeaderTopbar', () => {
     expect(contactAnchor.exists()).toBe(false);
   });
 
-  it('(c) apply anchor href equals CMS-resolved value when applyForAccount enabled and not authenticated', () => {
+  it('does not render the account-application anchor in the utility topbar', () => {
     authStoreState.isAuthenticated = false;
     applyToRef.value = '/se/sv/ansok-om-konto';
     applyResolvedRef.value = true;
     const wrapper = shallowMountComponent(LayoutHeaderTopbar);
-    const applyAnchor = wrapper.find('a[href="/se/sv/ansok-om-konto"]');
-    expect(applyAnchor.exists()).toBe(true);
-  });
-
-  it('apply anchor is absent when isResolved false, even with feature enabled and not authenticated', () => {
-    authStoreState.isAuthenticated = false;
-    applyToRef.value = null;
-    applyResolvedRef.value = false;
-    const wrapper = shallowMountComponent(LayoutHeaderTopbar);
-    // Assert on the anchor element, not just text: the apply NuxtLink must be
-    // removed by v-if, not rendered as a hrefless anchor.
-    const applyAnchor = wrapper
-      .findAll('a')
-      .find((a) => a.text().includes('layout.apply_for_account'));
-    expect(applyAnchor).toBeUndefined();
-  });
-
-  it('(c2) apply anchor is absent when authenticated, regardless of useCmsPageLink value', () => {
-    authStoreState.isAuthenticated = true;
-    authStoreState.displayName = 'Ada';
-    applyToRef.value = '/se/sv/ansok-om-konto';
-    applyResolvedRef.value = true;
-    const wrapper = shallowMountComponent(LayoutHeaderTopbar);
-    // The apply link is gated by !authStore.isAuthenticated
-    const applyText = wrapper.text();
-    expect(applyText).not.toContain('layout.apply_for_account');
+    expect(wrapper.find('a[href="/se/sv/ansok-om-konto"]').exists()).toBe(false);
   });
 });
