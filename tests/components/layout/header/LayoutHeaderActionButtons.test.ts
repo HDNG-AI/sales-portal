@@ -30,11 +30,13 @@ describe('LayoutHeaderActionButtons anonymous conversion actions', () => {
 
   it('keeps login visually primary and account application outlined', () => {
     const applyIndex = source.indexOf('data-testid="header-apply"');
-    const applyContext = source.slice(Math.max(0, applyIndex - 500), applyIndex);
+    const applyStart = source.lastIndexOf('<Button', applyIndex);
+    const applyContext = source.slice(applyStart, applyIndex);
     expect(applyContext).toContain('variant="outline"');
 
     const loginIndex = source.indexOf('data-testid="header-login"');
-    const loginContext = source.slice(Math.max(0, loginIndex - 500), loginIndex);
+    const loginStart = source.lastIndexOf('<Button', loginIndex);
+    const loginContext = source.slice(loginStart, loginIndex);
     expect(loginContext).not.toContain('variant="outline"');
   });
 });
