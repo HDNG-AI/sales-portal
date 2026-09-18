@@ -384,3 +384,30 @@ describe('a URL with no path', () => {
     expect(entry?.fileName).toBe('manual.pdf');
   });
 });
+
+describe('resolveVideoEmbedUrl host anchoring', () => {
+  it('embeds the real providers', () => {
+    expect(resolveVideoEmbedUrl('https://www.youtube.com/watch?v=abc123')).toBe(
+      'https://www.youtube.com/embed/abc123',
+    );
+    expect(resolveVideoEmbedUrl('https://youtu.be/abc123')).toBe(
+      'https://www.youtube.com/embed/abc123',
+    );
+    expect(resolveVideoEmbedUrl('https://vimeo.com/12345')).toBe(
+      'https://player.vimeo.com/video/12345',
+    );
+  });
+
+  it('refuses a lookalike host that merely contains the provider name', () => {
+    // `youtube.com/watch?v=` occurs inside `evil-youtube.com/watch?v=`, so an
+    // unanchored substring test presents an unrelated host's link as though
+    // the provider vouched for it.
+    expect(
+      resolveVideoEmbedUrl('https://evil-youtube.com/watch?v=abc123'),
+    ).toBeNull();
+    expect(resolveVideoEmbedUrl('https://notvimeo.com/12345')).toBeNull();
+    expect(
+      resolveVideoEmbedUrl('https://example.com/youtube.com/watch?v=abc'),
+    ).toBeNull();
+  });
+});

@@ -13,12 +13,12 @@
  * server/utils/tenant.ts and delivered via PublicTenantConfig) as an
  * explicit argument rather than reading this constant directly.
  *
- * Matching is exact (case-insensitive) against a parameter's technical
- * `name`, never its localized `label` — the merchant admin this was
- * modeled on leaves `label` equal to `name` for these anyway, treating
- * them as keys rather than display text.
+ * Keys are matched case-insensitively against a parameter's `identifier`,
+ * which Geins documents as the same across every language and stable when
+ * the display name changes, falling back to `name` only where a parameter
+ * carries no identifier. Never the localized `label`.
  *
- * A name match alone is not enough: `classifyMediaParameter` also requires
+ * A key match alone is not enough: `classifyMediaParameter` also requires
  * the value to look like a URL, so a parameter like `ProductSpec` that's
  * sometimes filled with plain text instead of a link falls through to a
  * normal spec row automatically.
@@ -239,17 +239,59 @@ function resolveDisplay(
  * Returns null for anything else — a direct file (played in a `<video>`
  * element) or a provider we don't recognize (rendered as a link).
  */
+const YOUTUBE_HOSTS = new Set([
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'youtube-nocookie.com',
+  'www.youtube-nocookie.com',
+]);
+const YOUTUBE_SHORT_HOSTS = new Set(['youtu.be', 'www.youtu.be']);
+const VIMEO_HOSTS = new Set(['vimeo.com', 'www.vimeo.com', 'player.vimeo.com']);
+
+/** The id in a /embed/{id}, /shorts/{id} or /v/{id} path, or null. */
+function pathId(pathname: string, prefixes: string[]): string | null {
+  for (const prefix of prefixes) {
+    if (!pathname.startsWith(prefix)) continue;
+    const id = pathname.slice(prefix.length).split('/')[0] ?? '';
+    if (/^[\w-]+$/.test(id)) return id;
+  }
+  return null;
+}
+
 export function resolveVideoEmbedUrl(url: string): string | null {
-  const youtubeMatch = url.match(
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]+)/,
-  );
-  if (youtubeMatch?.[1]) {
-    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+  // Matched against the parsed hostname, never the raw string: a substring
+  // test treats `https://evil-youtube.com/watch?v=abc` as YouTube, because
+  // `youtube.com/watch?v=` really does occur inside that host. The rebuilt
+  // embed URL keeps the iframe on youtube.com either way, but the page still
+  // presents an unrelated host's link as though the provider vouched for it.
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
   }
-  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
-  if (vimeoMatch?.[1]) {
-    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+
+  const host = parsed.hostname.toLowerCase();
+
+  if (YOUTUBE_HOSTS.has(host)) {
+    const watch = parsed.searchParams.get('v');
+    const id =
+      (watch && /^[\w-]+$/.test(watch) ? watch : null) ??
+      pathId(parsed.pathname, ['/embed/', '/shorts/', '/v/']);
+    return id ? `https://www.youtube.com/embed/${id}` : null;
   }
+
+  if (YOUTUBE_SHORT_HOSTS.has(host)) {
+    const id = pathId(parsed.pathname, ['/']);
+    return id ? `https://www.youtube.com/embed/${id}` : null;
+  }
+
+  if (VIMEO_HOSTS.has(host)) {
+    const id = parsed.pathname.split('/').filter(Boolean).pop() ?? '';
+    return /^\d+$/.test(id) ? `https://player.vimeo.com/video/${id}` : null;
+  }
+
   return null;
 }
 
