@@ -294,8 +294,20 @@ describe('PriceDisplay', () => {
       expect(wrapper.text()).toContain('199,00 kr');
     });
 
-    it('renders nothing when pricing feature denies access', () => {
+    it('shows a login CTA when auth can unlock a hidden price', () => {
       tenant.value.features = { priceVisibility: { enabled: true } };
+      mockCanAccess.mockReturnValue(false);
+      const wrapper = mountComponent(PriceDisplay, {
+        props: { price: makePrice() },
+      });
+      expect(wrapper.text()).toContain('product.login_for_prices');
+      expect(wrapper.text()).not.toContain('199,00 kr');
+      expect(wrapper.find('[data-testid="login-for-price"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="price-slot"]').classes()).toContain('min-h-6');
+    });
+
+    it('does not show a login CTA when pricing is disabled rather than auth-gated', () => {
+      tenant.value.features = { priceVisibility: { enabled: false } };
       mockCanAccess.mockReturnValue(false);
       const wrapper = mountComponent(PriceDisplay, {
         props: { price: makePrice() },
