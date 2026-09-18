@@ -14,7 +14,6 @@ import {
 } from 'lucide-vue-next';
 import { useCartStore } from '~/stores/cart';
 import { useFavoritesStore } from '~/stores/favorites';
-import { useAuthStore } from '~/stores/auth';
 import {
   productPath as buildProductPath,
   categoryPath,
@@ -166,7 +165,6 @@ const quantity = ref(1);
 
 const cartStore = useCartStore();
 const favoritesStore = useFavoritesStore();
-const authStore = useAuthStore();
 const { hasFeature, isCatalogMode } = useTenant();
 const { buildProductImageAlt } = useProductImageAlt();
 const { canAccess } = useFeatureAccess();
@@ -754,7 +752,6 @@ useSchemaOrg([
               </span>
             </button>
             <button
-              v-if="authStore.isAuthenticated"
               type="button"
               class="text-muted-foreground hover:text-foreground flex items-center gap-2 py-2.5 text-left text-[13px] transition-colors"
               data-testid="pdp-add-to-lists"
