@@ -149,6 +149,8 @@ export function deriveThemeColors(colors: ThemeColors): FullThemeColors {
       colors.destructiveForeground,
       'oklch(0.985 0 0)',
     ),
+    success: pick(colors.success, 'oklch(0.527 0.154 150.069)'),
+    warning: pick(colors.warning, 'oklch(0.555 0.163 48.998)'),
     border: pick(colors.border, borderColor),
     input: pick(colors.input, borderColor),
     ring: pick(colors.ring, ringColor),
