@@ -28,11 +28,10 @@ const props = defineProps<{
 const slug = computed(() => props.alias);
 
 const { localeQuery, localePath } = useLocaleMarket();
-// Visibility flags gate the price/stock blocks in the top area. PriceDisplay
-// and StockBadge render an empty root when hidden, so without these the empty
-// containers still take gap-6 spacing and leave a gap above the variant
-// selector. Gating here keeps those blocks out of the layout entirely.
-const { showPrice } = usePriceVisibility();
+// Visibility flags gate price/stock output. PriceSlot deliberately remains in
+// the layout when an authenticated price can be unlocked, replacing the old
+// empty hole with an in-context login action while keeping geometry stable.
+const { showPrice, canUnlockByAuth } = usePriceVisibility();
 const { showStock } = useStockVisibility();
 
 const {
@@ -345,7 +344,9 @@ const variantProductsByAlias = computed<
   for (const p of siblingProducts.value?.products ?? []) {
     if (!p?.alias) continue;
     map[p.alias] = {
-      priceFormatted: p.unitPrice?.sellingPriceIncVatFormatted ?? null,
+      priceFormatted: showPrice.value
+        ? (p.unitPrice?.sellingPriceIncVatFormatted ?? null)
+        : null,
       articleNumber: p.articleNumber ?? null,
       name: p.name ?? null,
     };
@@ -422,6 +423,13 @@ const visibleCampaigns = computed(() =>
   filterVisibleCampaigns(product.value?.discountCampaigns ?? []),
 );
 
+const priceSlotMode = computed<'contract' | 'list' | 'hidden' | null>(() => {
+  if (showPrice.value) {
+    return product.value?.discountType === 'EXTERNAL' ? 'contract' : 'list';
+  }
+  return canUnlockByAuth.value ? 'hidden' : null;
+});
+
 // Breadcrumbs
 const { t } = useI18n();
 
@@ -492,7 +500,7 @@ useSchemaOrg([
         : undefined,
     sku: () => resolvedSku.value?.skuId?.toString() ?? '',
     offers: () =>
-      product.value?.unitPrice
+      showPrice.value && product.value?.unitPrice
         ? {
             '@type': 'Offer' as const,
             price: product.value.unitPrice.sellingPriceIncVat ?? 0,
@@ -583,7 +591,7 @@ useSchemaOrg([
             <!-- Article number -->
             <p
               v-if="product.articleNumber"
-              class="text-muted-foreground text-[20px]"
+              class="text-muted-foreground font-mono text-[20px]"
               data-testid="product-article-number"
             >
               Art nr. {{ product.articleNumber }}
@@ -601,8 +609,12 @@ useSchemaOrg([
 
           <!-- Price: sits above the long-form description so the dominant
              commerce signal anchors the column. -->
-          <PriceDisplay
-            v-if="product.unitPrice && showPrice"
+          <PriceSlot
+            v-if="
+              priceSlotMode &&
+              (product.unitPrice || priceSlotMode === 'hidden')
+            "
+            :mode="priceSlotMode"
             :price="product.unitPrice"
             :lowest-price="product.lowestPrice"
             :discount-type="product.discountType"
@@ -636,7 +648,7 @@ useSchemaOrg([
 
           <!-- Negotiated price info banner -->
           <div
-            v-if="product.discountType === 'EXTERNAL'"
+            v-if="product.discountType === 'EXTERNAL' && showPrice"
             class="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800"
             data-testid="negotiated-price-banner"
           >
@@ -662,7 +674,9 @@ useSchemaOrg([
             :product-images="product.productImages ?? []"
             :product-name="product.name ?? ''"
             :price-formatted="
-              product.unitPrice?.sellingPriceIncVatFormatted ?? null
+              showPrice
+                ? (product.unitPrice?.sellingPriceIncVatFormatted ?? null)
+                : null
             "
             :product-article-number="product.articleNumber ?? null"
             :variant-products="variantProductsByAlias"
@@ -724,7 +738,7 @@ useSchemaOrg([
               <span>{{ $t('product.download_data_sheet') }}</span>
             </button>
             <button
-              v-if="hasFeature('wishlist') && authStore.isAuthenticated"
+              v-if="hasFeature('wishlist')"
               type="button"
               class="text-muted-foreground hover:text-foreground flex items-center gap-2 py-2.5 text-left text-[13px] transition-colors"
               data-testid="pdp-save-favourite"
