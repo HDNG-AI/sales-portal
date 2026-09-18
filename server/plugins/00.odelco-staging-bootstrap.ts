@@ -107,6 +107,12 @@ export default defineNitroPlugin(async () => {
       features: {
         ...STOREFRONT_SETTINGS_DEFAULTS.features,
         search: { enabled: true },
+        // Odelco's anonymous storefront qualifies rather than sells:
+        // stock is public, while customer-specific prices and ordering
+        // unlock after authentication.
+        stockStatus: { enabled: true, access: 'all' },
+        priceVisibility: { enabled: true, access: 'authenticated' },
+        orderPlacement: { enabled: true, access: 'authenticated' },
       },
       cms: {
         ...DEFAULT_CMS_CONFIG,
