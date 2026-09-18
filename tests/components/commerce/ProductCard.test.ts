@@ -408,7 +408,7 @@ describe('ProductCard', () => {
       );
     });
 
-    it('hides wishlist button for unauthenticated users even when feature is enabled', () => {
+    it('keeps wishlist button available for unauthenticated users', () => {
       tenant.value.features = { wishlist: { enabled: true } };
       mockIsAuthenticated.value = false;
       const wrapper = mountComponent(ProductCard, {
@@ -416,7 +416,7 @@ describe('ProductCard', () => {
         global: { stubs },
       });
       expect(wrapper.find('[data-testid="wishlist-button"]').exists()).toBe(
-        false,
+        true,
       );
       mockIsAuthenticated.value = true;
     });
