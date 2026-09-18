@@ -495,11 +495,7 @@ async function addToCart() {
             </Button>
           </template>
           <Button
-            v-if="
-              productAlias &&
-              hasFeature('wishlist') &&
-              authStore.isAuthenticated
-            "
+            v-if="productAlias && hasFeature('wishlist')"
             variant="ghost"
             size="icon-sm"
             data-testid="wishlist-button"
