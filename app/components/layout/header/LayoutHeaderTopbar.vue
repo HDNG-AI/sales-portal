@@ -5,13 +5,9 @@ import { CMS_TAGS } from '#shared/constants/cms';
 
 const authStore = useAuthStore();
 const { localePath } = useLocaleMarket();
-const { hasFeature } = useTenant();
 const { logout } = useLogout();
 const { to: contactTo, isResolved: contactResolved } = useCmsPageLink(
   CMS_TAGS.CONTACT_PAGE,
-);
-const { to: applyTo, isResolved: applyResolved } = useCmsPageLink(
-  CMS_TAGS.APPLY_PAGE,
 );
 </script>
 
@@ -50,53 +46,28 @@ const { to: applyTo, isResolved: applyResolved } = useCmsPageLink(
         {{ $config.public.environment }}
       </div>
 
-      <!-- Right: Apply + Login -->
-      <div class="flex items-center gap-4">
+      <!-- Right: authenticated account utilities only. Anonymous login and
+           account application are promoted to the main header. -->
+      <div v-if="authStore.isAuthenticated" class="flex items-center gap-4">
         <NuxtLink
-          v-if="
-            hasFeature('applyForAccount') &&
-            !authStore.isAuthenticated &&
-            applyResolved
-          "
-          :to="applyTo"
-          class="hidden hover:underline sm:inline"
-        >
-          {{ $t('layout.apply_for_account') }}
-        </NuxtLink>
-        <button
-          v-if="!authStore.isAuthenticated"
-          type="button"
-          :aria-label="$t('auth.login')"
+          :to="localePath('/portal')"
+          :aria-label="$t('layout.customer_portal')"
           class="flex items-center gap-1.5 py-2 hover:underline"
-          data-testid="topbar-login"
-          @click="authStore.openSheet()"
+          data-testid="topbar-portal"
         >
           <User class="size-4" />
-          <span class="hidden sm:inline">{{ $t('auth.login') }}</span>
+          <span class="hidden sm:inline">{{ $t('layout.customer_portal') }}</span>
+        </NuxtLink>
+        <button
+          type="button"
+          :aria-label="$t('auth.logout')"
+          class="hidden items-center gap-1.5 py-2 hover:underline lg:flex"
+          data-testid="topbar-logout"
+          @click="logout"
+        >
+          <LogOut class="size-4" />
+          <span class="hidden sm:inline">{{ $t('auth.logout') }}</span>
         </button>
-        <template v-else>
-          <NuxtLink
-            :to="localePath('/portal')"
-            :aria-label="$t('layout.customer_portal')"
-            class="flex items-center gap-1.5 py-2 hover:underline"
-            data-testid="topbar-portal"
-          >
-            <User class="size-4" />
-            <span class="hidden sm:inline">{{
-              $t('layout.customer_portal')
-            }}</span>
-          </NuxtLink>
-          <button
-            type="button"
-            :aria-label="$t('auth.logout')"
-            class="hidden items-center gap-1.5 py-2 hover:underline lg:flex"
-            data-testid="topbar-logout"
-            @click="logout"
-          >
-            <LogOut class="size-4" />
-            <span class="hidden sm:inline">{{ $t('auth.logout') }}</span>
-          </button>
-        </template>
       </div>
     </div>
   </div>
