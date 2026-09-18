@@ -43,6 +43,9 @@ export const ThemeColorsSchema = z.object({
   accentForeground: CoercedColorSchema.nullable().optional(),
   destructive: CoercedColorSchema.nullable().optional(),
   destructiveForeground: CoercedColorSchema.nullable().optional(),
+  // Semantic status colors used by tenant-aware availability/status UI.
+  success: CoercedColorSchema.nullable().optional(),
+  warning: CoercedColorSchema.nullable().optional(),
   border: CoercedColorSchema.nullable().optional(),
   input: CoercedColorSchema.nullable().optional(),
   ring: CoercedColorSchema.nullable().optional(),

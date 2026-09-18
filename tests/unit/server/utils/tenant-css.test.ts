@@ -13,6 +13,19 @@ const coreColors: ThemeColors = {
   foreground: 'oklch(0.1 0 0)',
 };
 
+describe('generateTenantCss semantic colors', () => {
+  it('emits tenant success and warning variables', () => {
+    const derived = deriveThemeColors({
+      ...coreColors,
+      success: '#1E7B45',
+      warning: '#B87400',
+    });
+    const css = generateTenantCss('test', derived);
+    expect(css).toContain('--success: #1E7B45;');
+    expect(css).toContain('--warning: #B87400;');
+  });
+});
+
 describe('generateTenantCss surface colors', () => {
   it('emits --top-bar-background as a hex value when provided', () => {
     const derived = deriveThemeColors({

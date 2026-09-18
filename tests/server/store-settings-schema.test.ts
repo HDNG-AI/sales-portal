@@ -1068,15 +1068,15 @@ describe('deriveThemeColors', () => {
     foreground: 'oklch(0.145 0 0)',
   };
 
-  it('should derive all 26 optional colors from 6 core', () => {
+  it('should derive all optional and semantic colors from 6 core', () => {
     const result = deriveThemeColors(coreColors);
 
-    // 32 standard color keys + 8 surface keys (topBarBackground,
+    // 34 standard/semantic color keys + 8 surface keys (topBarBackground,
     // footerBackground, navBarBackground, siteBackground,
     // buttonBackground, buttonPurchaseBackground, topBarText,
     // footerText) that pass through unchanged.
     const keys = Object.keys(result);
-    expect(keys).toHaveLength(40);
+    expect(keys).toHaveLength(42);
     const surfaceKeys = new Set([
       'topBarBackground',
       'footerBackground',
@@ -1089,7 +1089,7 @@ describe('deriveThemeColors', () => {
     ]);
     for (const key of keys) {
       // Surface colors collapse to '' when the tenant did not set them.
-      // The standard 32 must always resolve to a non-empty string.
+      // Standard/semantic tokens must always resolve to a non-empty string.
       const value = result[key as keyof typeof result];
       expect(typeof value).toBe('string');
       if (!surfaceKeys.has(key)) {

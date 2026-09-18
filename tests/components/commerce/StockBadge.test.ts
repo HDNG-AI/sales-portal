@@ -38,20 +38,22 @@ describe('StockBadge', () => {
     mockCanAccess.mockReturnValue(true);
   });
 
-  it('renders in-stock state', () => {
+  it('renders in-stock state with semantic success styling', () => {
     const wrapper = mountComponent(StockBadge, {
       props: { stock: makeStock() },
       global: { stubs },
     });
     expect(wrapper.text()).toContain('product.in_stock');
+    expect(wrapper.find('.badge').classes()).toContain('text-success');
   });
 
-  it('renders low-stock state when totalStock <= threshold', () => {
+  it('renders low-stock state with semantic warning styling', () => {
     const wrapper = mountComponent(StockBadge, {
       props: { stock: makeStock({ totalStock: 3, inStock: 3 }) },
       global: { stubs },
     });
     expect(wrapper.text()).toContain('product.low_stock');
+    expect(wrapper.find('.badge').classes()).toContain('text-warning');
   });
 
   it('renders out-of-stock state', () => {
@@ -62,12 +64,16 @@ describe('StockBadge', () => {
     expect(wrapper.text()).toContain('product.out_of_stock');
   });
 
-  it('renders on-demand state when static > 0 and inStock === 0', () => {
+  it('renders on-demand state as neutral rather than informational blue', () => {
     const wrapper = mountComponent(StockBadge, {
       props: { stock: makeStock({ totalStock: 0, inStock: 0, static: 10 }) },
       global: { stubs },
     });
     expect(wrapper.text()).toContain('product.on_demand');
+    const classes = wrapper.find('.badge').classes();
+    expect(classes).toContain('text-foreground');
+    expect(classes).toContain('bg-muted');
+    expect(classes.join(' ')).not.toContain('blue');
   });
 
   it('respects custom threshold', () => {

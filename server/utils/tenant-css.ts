@@ -40,7 +40,7 @@ export const BRAND_LOCALHOST_COLORS: Pick<
 };
 
 /**
- * CSS property name mapping for all 32 theme color keys
+ * CSS property name mapping for all theme color keys
  */
 const COLOR_CSS_MAP: Record<keyof FullThemeColors, string> = {
   primary: '--primary',
@@ -59,6 +59,8 @@ const COLOR_CSS_MAP: Record<keyof FullThemeColors, string> = {
   accentForeground: '--accent-foreground',
   destructive: '--destructive',
   destructiveForeground: '--destructive-foreground',
+  success: '--success',
+  warning: '--warning',
   border: '--border',
   input: '--input',
   ring: '--ring',
@@ -131,7 +133,7 @@ function generateColorCss(
     }
     // Surface colors with an empty sentinel fall back to a documented
     // chain (other CSS var or hardcoded value) so every surface var is
-    // always emitted. The 32 standard tokens never reach this branch.
+    // always emitted. The standard semantic/theme tokens never reach this branch.
     const fallback = SURFACE_FALLBACKS[key];
     if (fallback) {
       lines.push(`${indent}${cssVar}: ${toSafariSafeColor(fallback)};`);
@@ -239,7 +241,7 @@ export function generateThemeHash(theme: TenantConfig['theme']): string {
 
 /**
  * Generates complete CSS for a tenant theme.
- * Colors are the full 32-color set (already derived), radius generates variants,
+ * Colors are the full derived theme color set, radius generates variants,
  * and override CSS vars are appended.
  */
 export function generateTenantCss(
@@ -300,6 +302,8 @@ export function createDefaultTheme(tenantId: string): TenantConfig['theme'] {
       accentForeground: null,
       destructive: null,
       destructiveForeground: null,
+      success: null,
+      warning: null,
       border: null,
       input: null,
       ring: null,
@@ -337,7 +341,7 @@ export function mergeThemes(
 }
 
 /**
- * Derives full 32-color set and generates complete tenant CSS + theme hash.
+ * Derives the full theme color set and generates complete tenant CSS + theme hash.
  * Convenience wrapper used by CRUD operations to avoid repeating color derivation.
  */
 export function buildDerivedTheme(
