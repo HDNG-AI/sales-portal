@@ -58,8 +58,9 @@ describe('PriceSlot', () => {
       });
 
       expect(wrapper.find('[data-testid="price-display"]').exists()).toBe(true);
-      expect(wrapper.attributes('data-price-state')).toBe(mode);
-      expect(wrapper.classes()).toContain('h-16');
+      const slot = wrapper.find('[data-testid="price-slot"]');
+      expect(slot.attributes('data-price-state')).toBe(mode);
+      expect(slot.classes()).toContain('h-16');
     },
   );
 
@@ -72,12 +73,15 @@ describe('PriceSlot', () => {
       global: { stubs },
     });
 
-    const link = wrapper.find('[data-testid="nuxt-link"]');
+    const slot = wrapper.find('[data-testid="price-slot"]');
+    const link = wrapper.findComponent({ name: 'NuxtLink' });
     expect(link.exists()).toBe(true);
-    expect(link.text()).toContain('product.login_for_prices');
-    expect(link.attributes('data-path')).toBe('/se/en/login');
-    expect(link.attributes('data-redirect')).toBe('/se/sv/p/test-product');
-    expect(wrapper.classes()).toContain('h-16');
+    expect(wrapper.text()).toContain('product.login_for_prices');
+    expect(link.props('to')).toEqual({
+      path: '/se/en/login',
+      query: { redirect: '/se/sv/p/test-product' },
+    });
+    expect(slot.classes()).toContain('h-16');
   });
 
   it('supports quote state in the same geometry and emits the quote action', async () => {
@@ -86,7 +90,9 @@ describe('PriceSlot', () => {
       global: { stubs },
     });
 
-    expect(wrapper.classes()).toContain('h-16');
+    expect(
+      wrapper.find('[data-testid="price-slot"]').classes(),
+    ).toContain('h-16');
     await wrapper.find('[data-testid="price-quote"]').trigger('click');
     expect(wrapper.emitted('request-quote')).toHaveLength(1);
   });
