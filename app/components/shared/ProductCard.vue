@@ -218,7 +218,7 @@ async function addToCart() {
       <div class="flex items-start justify-between gap-2">
         <p
           v-if="product?.articleNumber"
-          class="text-muted-foreground text-xs"
+          class="text-muted-foreground font-mono text-xs"
           data-testid="article-number"
         >
           <template v-if="isFullProduct(product)">
@@ -407,7 +407,7 @@ async function addToCart() {
         </h3>
         <p
           v-if="product?.articleNumber"
-          class="text-muted-foreground text-xs"
+          class="text-muted-foreground font-mono text-xs"
           data-testid="article-number"
         >
           <template v-if="isFullProduct(product)">
