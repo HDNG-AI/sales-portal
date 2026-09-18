@@ -8,8 +8,10 @@ import { computed } from 'vue';
 let mockIsFeatureConfigured = (_name: string): boolean => false;
 let mockHasFeature = (_name: string): boolean => false;
 let mockCanAccess = (_name: string): boolean => false;
+let mockFeatures: Record<string, { enabled: boolean; access?: unknown }> = {};
 
 vi.stubGlobal('useTenant', () => ({
+  features: computed(() => mockFeatures),
   isFeatureConfigured: (name: string) => mockIsFeatureConfigured(name),
   hasFeature: (name: string) => mockHasFeature(name),
 }));
@@ -47,6 +49,7 @@ describe('usePriceVisibility', () => {
     mockIsFeatureConfigured = () => false;
     mockHasFeature = () => false;
     mockCanAccess = () => false;
+    mockFeatures = {};
   });
 
   it('returns showPrice=true when priceVisibility feature is not configured (fail-open)', () => {
@@ -78,12 +81,26 @@ describe('usePriceVisibility', () => {
     expect(showPrice.value).toBe(false);
   });
 
-  it('returns canUnlockByAuth=true when feature enabled but access blocked', () => {
+  it('returns canUnlockByAuth=true when authenticated access is the only blocker', () => {
     mockIsFeatureConfigured = (name) => name === 'priceVisibility';
     mockHasFeature = (name) => name === 'priceVisibility';
+    mockFeatures = {
+      priceVisibility: { enabled: true, access: 'authenticated' },
+    };
     mockCanAccess = () => false;
     const { canUnlockByAuth } = usePriceVisibility();
     expect(canUnlockByAuth.value).toBe(true);
+  });
+
+  it('returns canUnlockByAuth=false for role-restricted pricing', () => {
+    mockIsFeatureConfigured = (name) => name === 'priceVisibility';
+    mockHasFeature = (name) => name === 'priceVisibility';
+    mockFeatures = {
+      priceVisibility: { enabled: true, access: { role: 'buyer' } },
+    };
+    mockCanAccess = () => false;
+    const { canUnlockByAuth } = usePriceVisibility();
+    expect(canUnlockByAuth.value).toBe(false);
   });
 
   it('returns canUnlockByAuth=false when feature is disabled', () => {
