@@ -28,9 +28,10 @@ const props = withDefaults(
 );
 
 const { t } = useI18n();
+const authStore = useAuthStore();
 
 const { formatLocale } = useFormatLocale();
-const { showPrice } = usePriceVisibility();
+const { showPrice, canUnlockByAuth } = usePriceVisibility();
 const { showIncVat } = useVatDisplay();
 
 /**
@@ -105,7 +106,7 @@ const lowestPriceFormatted = computed(() => {
 </script>
 
 <template>
-  <div>
+  <div class="min-h-6" data-testid="price-slot">
     <div
       v-if="price && showPrice && sellingPrice"
       class="inline-flex flex-wrap items-baseline gap-2"
@@ -140,6 +141,15 @@ const lowestPriceFormatted = computed(() => {
         t('common.vat_excl')
       }}</span>
     </div>
+    <button
+      v-else-if="!showPrice && canUnlockByAuth"
+      type="button"
+      class="text-primary inline-flex min-h-6 items-center text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      data-testid="login-for-price"
+      @click="authStore.openSheet('login')"
+    >
+      {{ t('product.login_for_prices') }}
+    </button>
     <div
       v-if="showPrice && lowestPriceFormatted"
       class="text-muted-foreground text-xs"
