@@ -249,6 +249,30 @@ const defaultStubs = {
     template: '<span class="price-display" />',
     props: ['price', 'lowestPrice', 'discountType', 'campaignNames'],
   },
+  PriceSlot: {
+    template:
+      '<span class="price-slot" :data-mode="mode"><span v-if="mode === \'list\' || mode === \'contract\'" class="price-display" /><span v-else-if="mode === \'hidden\'" class="price-login" /></span>',
+    props: [
+      'mode',
+      'price',
+      'returnTo',
+      'lowestPrice',
+      'discountType',
+      'campaignNames',
+    ],
+  },
+  SharedPriceSlot: {
+    template:
+      '<span class="price-slot" :data-mode="mode"><span v-if="mode === \'list\' || mode === \'contract\'" class="price-display" /><span v-else-if="mode === \'hidden\'" class="price-login" /></span>',
+    props: [
+      'mode',
+      'price',
+      'returnTo',
+      'lowestPrice',
+      'discountType',
+      'campaignNames',
+    ],
+  },
   StockBadge: {
     template: '<span class="stock-badge" />',
     props: ['stock'],

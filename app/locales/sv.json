@@ -297,7 +297,7 @@
     "grid_view": "Rutnätsvy",
     "list_view": "Listvy",
     "view_all": "Visa alla",
-    "login_for_prices": "Logga in för priser",
+    "login_for_prices": "Logga in för pris",
     "lowest_price_30d": "Lägsta pris senaste 30 dagarna: {price}",
     "result_count": "{count} produkter",
     "in_stock": "I lager",
