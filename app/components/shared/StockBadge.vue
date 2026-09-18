@@ -37,13 +37,13 @@ const label = computed(() => {
 const badgeClass = computed(() => {
   switch (status.value) {
     case 'in-stock':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'border-success/30 bg-success/10 text-success';
     case 'low-stock':
-      return 'bg-amber-100 text-amber-800 border-amber-200';
+      return 'border-warning/30 bg-warning/10 text-warning';
     case 'out-of-stock':
-      return 'bg-red-100 text-red-800 border-red-200';
+      return 'border-destructive/30 bg-destructive/10 text-destructive';
     case 'on-demand':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'border-border bg-muted text-foreground';
     default:
       return '';
   }
@@ -52,15 +52,30 @@ const badgeClass = computed(() => {
 const dotColor = computed(() => {
   switch (status.value) {
     case 'in-stock':
-      return 'border-green-600';
+      return 'border-success';
     case 'low-stock':
-      return 'border-amber-600';
+      return 'border-warning';
     case 'out-of-stock':
-      return 'border-red-600';
+      return 'border-destructive';
     case 'on-demand':
-      return 'border-blue-600';
+      return 'border-muted-foreground';
     default:
       return '';
+  }
+});
+
+const labelClass = computed(() => {
+  switch (status.value) {
+    case 'in-stock':
+      return 'text-success';
+    case 'low-stock':
+      return 'text-warning';
+    case 'out-of-stock':
+      return 'text-destructive';
+    case 'on-demand':
+      return 'text-foreground';
+    default:
+      return 'text-muted-foreground';
   }
 });
 </script>
@@ -75,7 +90,7 @@ const dotColor = computed(() => {
       class="size-[9px] shrink-0 rounded-full border-2 bg-transparent"
       :class="dotColor"
     />
-    <span class="text-muted-foreground">{{ label }}</span>
+    <span :class="labelClass">{{ label }}</span>
   </span>
 
   <!-- Default: pill badge -->
