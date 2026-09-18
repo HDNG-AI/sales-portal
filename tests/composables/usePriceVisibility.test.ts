@@ -24,6 +24,7 @@ vi.stubGlobal('computed', computed);
 
 vi.mock('../../app/composables/useTenant', () => ({
   useTenant: () => ({
+    features: computed(() => mockFeatures),
     isFeatureConfigured: (name: string) => mockIsFeatureConfigured(name),
     hasFeature: (name: string) => mockHasFeature(name),
   }),
