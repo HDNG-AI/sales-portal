@@ -219,14 +219,24 @@ export async function getTenantSDK(event: H3Event): Promise<TenantSDK> {
   // where tenantId may not be resolved yet)
   const cacheKey = event.context.tenant.tenantId || hostname;
 
+  // The environment is checked before the cache is consulted, not only when
+  // an SDK is built. A cached instance outlives the record it was built
+  // from, so a config that later goes malformed would keep being served by
+  // an SDK still pointed at the environment it used to name — the stale-data
+  // case this whole change exists for. Reading it is free: the plugin has
+  // already put the config on the event.
+  const resolved = event.context.tenant.config;
+  if (resolved?.geinsSettings) {
+    mapEnvironment(resolved.geinsSettings.environment);
+  }
+
   const cached = tenants.get(cacheKey);
   if (cached) {
     return cached;
   }
 
   // Prefer the config already resolved by 02.tenant-context plugin
-  const tenant =
-    event.context.tenant.config ?? (await resolveTenant(hostname, event));
+  const tenant = resolved ?? (await resolveTenant(hostname, event));
   if (!tenant?.geinsSettings) {
     throw createAppError(
       ErrorCode.BAD_REQUEST,

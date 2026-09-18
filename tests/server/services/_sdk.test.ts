@@ -266,6 +266,37 @@ describe('server/services/_sdk', () => {
       );
     });
 
+    it('refuses a cached SDK once the stored environment goes bad', async () => {
+      // A cached instance outlives the record it was built from, so without a
+      // check ahead of the cache a tenant keeps being served by an SDK
+      // pointed at the environment its config used to name.
+      const good = {
+        ...MOCK_GEINS_SETTINGS,
+        environment: 'production' as const,
+      };
+      const event = createEvent('cached.com');
+      event.context.tenant.tenantId = 't-cached';
+      event.context.tenant.config = {
+        tenantId: 't-cached',
+        geinsSettings: good,
+      };
+
+      // Populates the cache under 't-cached'.
+      await expect(getTenantSDK(event)).resolves.toBeDefined();
+
+      // Same tenant, same cache key, but the stored record is now malformed.
+      const stale = createEvent('cached.com');
+      stale.context.tenant.tenantId = 't-cached';
+      stale.context.tenant.config = {
+        tenantId: 't-cached',
+        geinsSettings: { ...MOCK_GEINS_SETTINGS, environment: 'dev' },
+      };
+
+      await expect(getTenantSDK(stale)).rejects.toThrow(
+        'Unknown Geins environment',
+      );
+    });
+
     it('should throw when tenant has no geinsSettings', async () => {
       mockResolveTenant.mockResolvedValue({
         tenantId: 'test',
