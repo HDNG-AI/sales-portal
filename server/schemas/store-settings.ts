@@ -75,6 +75,9 @@ export const ThemeColorsSchema = z.object({
 export const ThemeTypographySchema = z.object({
   fontFamily: z.string(),
   headingFontFamily: z.string().nullable().optional(),
+  // Optional secondary heading role. When omitted, H3-H6 continue to inherit
+  // headingFontFamily so existing tenants remain visually unchanged.
+  subheadingFontFamily: z.string().nullable().optional(),
   monoFontFamily: z.string().nullable().optional(),
 });
 
