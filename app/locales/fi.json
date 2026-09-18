@@ -313,6 +313,52 @@
     "height": "Korkeus",
     "weight": "Paino"
   },
+  "configurator": {
+    "required": "Pakollinen",
+    "read_only": "Määräytyy kokoonpanon mukaan",
+    "unavailable": "Ei käytettävissä nykyisillä valinnoilla",
+    "bounds": "{min}–{max} {unit}",
+    "optional": "Valinnainen",
+    "measurements": "Mitat ja muuttujat",
+    "choose_many": "Valitse ei yhtään tai useampi",
+    "quantity": "Määrä",
+    "show_all": "Näytä kaikki {count} vaihtoehtoa",
+    "choose_in_group": "Valitse {name}",
+    "search": "Hae…",
+    "no_matches": "Ei osumia.",
+    "bounds_narrowed": "raja muuttunut aiemman valinnan vuoksi",
+    "summary": {
+      "none": "ei valintaa",
+      "many": "{count} valittu"
+    },
+    "yes": "Kyllä",
+    "no": "Ei",
+    "commit": "Viimeistele kokoonpano",
+    "starting": "Aloitetaan kokoonpanoa…",
+    "failed": "Jokin meni vikaan. Lataa sivu uudelleen ja yritä uudestaan.",
+    "configure_product": "Määritä tuote",
+    "product_configuration": "Tuotemääritys",
+    "reset": "Palauta",
+    "page_note": "Tämä on määritettävä tuote. Rakenna oma versiosi alla kohdassa {tab} — hinta ja voimassaolo lasketaan jatkuvasti.",
+    "severity": {
+      "error": "Virhe",
+      "warning": "Varoitus"
+    },
+    "committed": {
+      "heading": "Kokoonpano on valmis",
+      "unit_price": "Yksikköhinta"
+    },
+    "header": {
+      "valid": "Kokoonpano on valmis.",
+      "invalid": "Tämä puuttuu, ennen kuin voit jatkaa:",
+      "recomputing": "Lasketaan uudelleen…",
+      "time_left": "{time} jäljellä",
+      "renew": "Jatka istuntoa",
+      "renew_failed": "Istuntoa ei voitu jatkaa.",
+      "expired": "Kokoonpanoistunto on vanhentunut.",
+      "start_over": "Aloita alusta"
+    }
+  },
   "account": {
     "my_account": "Oma tili",
     "profile": "Profiili",
