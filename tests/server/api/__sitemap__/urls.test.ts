@@ -28,6 +28,10 @@ vi.mock('../../../../server/utils/logger', () => ({
 }));
 
 vi.stubGlobal('defineEventHandler', (fn: AnyFn) => fn);
+// server/services/categories.ts caches its tree through this Nitro
+// auto-import, which the node tier does not provide. The handler under test
+// reaches it transitively; passing the function through is enough.
+vi.stubGlobal('defineCachedFunction', (fn: AnyFn) => fn);
 // Not exercised in these tests — getTenantSDK rejects before any query runs
 // — but urls.ts references it via Nitro auto-import, so it must exist.
 vi.stubGlobal('wrapServiceCall', vi.fn());
