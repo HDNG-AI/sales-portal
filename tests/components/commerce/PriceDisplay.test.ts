@@ -295,7 +295,7 @@ describe('PriceDisplay', () => {
     });
 
     it('shows a login CTA when auth can unlock a hidden price', () => {
-      tenant.value.features = { priceVisibility: { enabled: true } };
+      tenant.value.features = { priceVisibility: { enabled: true, access: 'authenticated' } };
       mockCanAccess.mockReturnValue(false);
       const wrapper = mountComponent(PriceDisplay, {
         props: { price: makePrice() },
