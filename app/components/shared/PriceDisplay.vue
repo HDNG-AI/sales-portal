@@ -29,8 +29,6 @@ const props = withDefaults(
 );
 
 const { t } = useI18n();
-const authStore = useAuthStore();
-
 const { formatLocale } = useFormatLocale();
 const { showPrice, canUnlockByAuth } = usePriceVisibility();
 const { showIncVat } = useVatDisplay();
@@ -92,6 +90,10 @@ const discountLabelClass = computed(() =>
   props.discountType === 'EXTERNAL' ? BADGE_INFO : BADGE_DESTRUCTIVE,
 );
 
+function openLoginForPrice() {
+  useAuthStore().openSheet('login');
+}
+
 const lowestPriceFormatted = computed(() => {
   if (!props.lowestPrice?.isDiscounted) return '';
   const formatted = effectiveShowVat.value
@@ -147,7 +149,7 @@ const lowestPriceFormatted = computed(() => {
       type="button"
       class="text-primary inline-flex min-h-6 items-center text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       data-testid="login-for-price"
-      @click="authStore.openSheet('login')"
+      @click="openLoginForPrice"
     >
       {{ t('product.login_for_prices') }}
     </button>
