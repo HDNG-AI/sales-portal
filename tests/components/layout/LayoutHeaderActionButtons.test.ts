@@ -4,6 +4,15 @@ import { mountComponent } from '../../utils/component';
 import LayoutHeaderActionButtons from '../../../app/components/layout/header/LayoutHeaderActionButtons.vue';
 import { mockIsCatalogMode } from '../../setup-components';
 import { useAppStore } from '../../../app/stores/app';
+import { ref } from 'vue';
+
+
+vi.mock('../../../app/composables/useCmsPageLink', () => ({
+  useCmsPageLink: () => ({
+    to: ref('/se/sv/ansok-om-konto'),
+    isResolved: ref(true),
+  }),
+}));
 
 // useTenant is mocked globally in setup-components.ts.
 // Use mockIsCatalogMode to toggle catalog mode in individual tests.
