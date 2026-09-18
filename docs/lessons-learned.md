@@ -13,35 +13,31 @@ and where the rule lives now.
 ## A shared account's credentials sat in the same env vars as the app's own fallback
 
 **Symptom.** A live merchant's real Geins credentials (API key, account name, channel) were sitting
-in `GEINS_API_KEY` / `GEINS_ACCOUNT_NAME` / `GEINS_CHANNEL` in local `.env`. Two unrelated things
-read those exact names: `DEFAULT_GEINS_SETTINGS` in `server/utils/tenant.ts` (the app's own
-fallback for a tenant that fails to resolve — meant to be generic) and the integration test suite
-(`tests/server/services/geins-settings.ts`, which legitimately needs a real account to run live
-queries against). Whichever value you put there broke one purpose or the other. Separately, a
-ralph-storefront deployment on a shared Railway environment had the identical collision — same
-shared-namespace mistake, no ADR for it, this entry is the only record.
+in `GEINS_API_KEY` / `GEINS_ACCOUNT_NAME` / `GEINS_CHANNEL` in a local `.env`. Two unrelated things
+read those exact names: the app's own generic fallback for a tenant that fails to resolve
+(`defaultGeinsSettings()` in `server/utils/tenant.ts`), and an integration suite that legitimately
+needed a real account to run live queries against. Whichever value you put there broke one purpose
+or the other. A separate deployment on a shared hosting environment hit the identical collision.
 
-**Root cause.** Two callers with genuinely different needs (a generic safety-net default vs. a real
-account's live credentials) sharing one env var namespace. The stored value was also wrong on its
+**Root cause.** Two callers with genuinely different needs — a generic safety net and a real
+account's live credentials — sharing one env var namespace. The stored value was also wrong on its
 own terms: `GEINS_CHANNEL` held the platform's combined `"channelId|tld"` format instead of the
-bare channel id the app expects — the split is a documented, established convention
-(`transformGeinsSettings()`, [ADR-007](adr/007-tenant-config-schema-service-layer.md)), just not
-followed here — and `GEINS_ENVIRONMENT` used ralph's `'dev'`/`'qa'`/`'prod'` convention instead of
-this app's `'production'`/`'staging'`, which `mapEnvironment()` in `server/services/_sdk.ts`
-silently defaulted to `'prod'` for any unrecognized value — the opposite of a safe fallback for a
-value that ultimately comes from KV storage via an unvalidated type assertion.
+bare channel id the app expects, a documented convention (`transformGeinsSettings()`,
+[ADR-007](adr/007-tenant-config-schema-service-layer.md)) simply not followed there. And
+`GEINS_ENVIRONMENT` carried another product's `'dev'`/`'qa'`/`'prod'` names instead of this app's
+`'production'`/`'staging'`, which `mapEnvironment()` in `server/services/_sdk.ts` silently
+defaulted to `'prod'` for any unrecognized value — the opposite of a safe fallback for a value that
+ultimately comes from KV storage through an unvalidated type assertion.
 
-**Fix.** Test-only credentials moved to a `GEINS_TEST_*` namespace, entirely separate from the bare
-`GEINS_*` names the app's runtime fallback reads. `GEINS_TEST_CHANNEL` now holds the bare id; the
-`.env` comment for `GEINS_TEST_ENVIRONMENT` spells out which naming convention applies where.
-`mapEnvironment()` now throws on an unrecognized value instead of defaulting to `'prod'`. Also
-switched the account itself from odelco (a real operating merchant) to boattools (our own
-onboarding test account) — a broken assertion or a stray write in the integration suite can't
-reach real customer-facing data that way.
+**Fix.** `mapEnvironment()` throws on an unrecognized environment instead of defaulting to
+`'prod'`, and the error carries an identifiable code so the call sites can tell it apart from their
+own failure cases. `resolveDefaultGeinsEnvironment()` applies the same rule to the
+`GEINS_ENVIRONMENT` variable itself.
 
 **Where the rule lives now.** A test fixture's real third-party credentials must never share an env
 var name with the app's own runtime config, even when both happen to read the same platform
-account — colliding names mean any value chosen is wrong for one of the two purposes. See
+account — colliding names mean any value chosen is wrong for one of the two purposes. Test
+credentials belong in their own namespace. See
 [docs/guide/multi-tenant.md](guide/multi-tenant.md) for the tenant-config side of this.
 
 ---
