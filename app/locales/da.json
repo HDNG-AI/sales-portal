@@ -909,6 +909,8 @@
     "fallback_email": "Hvis der ikke åbnes noget, så send os en e-mail på {recipient}",
     "field_required": "Dette felt er obligatorisk.",
     "invalid_email": "Angiv en gyldig e-mailadresse.",
-    "country_placeholder": "Vælg land"
+    "country_placeholder": "Vælg land",
+    "submit_success": "Tak — din besked er sendt.",
+    "submit_failed": "Noget gik galt. Prøv igen, eller kontakt os telefonisk."
   }
 }

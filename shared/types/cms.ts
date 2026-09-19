@@ -113,7 +113,12 @@ export interface VideoWidgetData {
   image?: WidgetImage;
 }
 
-export type FormFieldType = 'input' | 'email' | 'textarea' | 'select';
+export type FormFieldType =
+  | 'input'
+  | 'email'
+  | 'textarea'
+  | 'select'
+  | 'checkbox';
 
 export interface FormWidgetField {
   label: string;
@@ -121,10 +126,26 @@ export interface FormWidgetField {
   required: boolean;
   type: FormFieldType;
   options?: { value: string; label: string }[];
+  value?: string;
 }
 
 export interface FormWidgetData {
-  sendFormToEmail: string;
+  /**
+   * Recipient for the mailto fallback, and the address shown under the form.
+   * Optional once `postUrl` is set — a posted form needs no mail client.
+   */
+  sendFormToEmail?: string;
+  /**
+   * Submit over HTTP instead of opening a mail client. The origin must be
+   * allowlisted in `public.formPostOrigins`, because this value comes from
+   * CMS content: without that check a compromised merchant account could
+   * point a storefront form at any collector it liked.
+   *
+   * The request carries the spam fields the receiver checks — `website`,
+   * `ba-honeypot`, `form_started_at`, `form_duration` — so every posted form
+   * gets those traps without an author having to know they exist.
+   */
+  postUrl?: string;
   fields: FormWidgetField[];
   /**
    * Email subject for the mailto. Supports `{fieldName}` placeholders that are

@@ -909,6 +909,8 @@
     "fallback_email": "Om inget öppnas, maila oss på {recipient}",
     "field_required": "Detta fält är obligatoriskt.",
     "invalid_email": "Ange en giltig e-postadress.",
-    "country_placeholder": "Välj land"
+    "country_placeholder": "Välj land",
+    "submit_success": "Tack — ditt meddelande har skickats.",
+    "submit_failed": "Något gick fel. Försök igen, eller kontakta oss via telefon."
   }
 }
