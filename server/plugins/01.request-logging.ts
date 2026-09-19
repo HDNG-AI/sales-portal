@@ -85,6 +85,56 @@ function sanitizeHeaders(
   return sanitized;
 }
 
+/**
+ * Word segments that mark a query param as sensitive — the query-string
+ * counterpart to sensitiveHeaders above.
+ *
+ * Matched per segment, not against the whole name: `loginToken` (the
+ * impersonation JWT on /account, see server/api/auth/login-as.get.ts) and
+ * `resetKey` both carry a secret, and neither is equal to any entry here.
+ * Splitting on camelCase and separators catches them via `token` / `key`
+ * while leaving `keyword` and `monkey` alone, which a plain substring test
+ * would redact.
+ */
+const SENSITIVE_QUERY_PARAMS = ['key', 'token', 'secret', 'password', 'apikey'];
+
+/**
+ * Redacts sensitive query-param values from a path before it's logged.
+ * event.path includes the query string, and unlike headers it is logged
+ * unconditionally (not gated behind verboseRequests), so a secret passed
+ * via query string would otherwise reach the log sink in plaintext on
+ * every request.
+ */
+function isSensitiveParam(name: string): boolean {
+  return name
+    .split(/[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])/)
+    .some((segment) => SENSITIVE_QUERY_PARAMS.includes(segment.toLowerCase()));
+}
+
+export function sanitizeUrl(path: string): string {
+  // Not split('?', 2): that drops everything after a second '?', which is a
+  // legal literal inside a value, and would silently truncate the logged path.
+  const separator = path.indexOf('?');
+  if (separator === -1) return path;
+  const pathname = path.slice(0, separator);
+  const search = path.slice(separator + 1);
+  if (!search) return path;
+
+  const params = new URLSearchParams(search);
+  let redacted = false;
+  for (const name of new Set(params.keys())) {
+    if (isSensitiveParam(name)) {
+      params.set(name, '[REDACTED]');
+      redacted = true;
+    }
+  }
+  // Returning the original path when nothing matched keeps URLSearchParams
+  // from re-encoding every other request's query string (`sort=price:asc`
+  // becomes `sort=price%3Aasc`), which would shift log and metric values.
+  if (!redacted) return path;
+  return `${pathname}?${params.toString()}`;
+}
+
 export default defineNitroPlugin((nitroApp) => {
   // Request start: Initialize logging context
   nitroApp.hooks.hook('request', (event: H3Event) => {
@@ -109,7 +159,7 @@ export default defineNitroPlugin((nitroApp) => {
     const context: LogContext = {
       correlationId,
       method: event.method,
-      path: event.path,
+      path: sanitizeUrl(event.path),
       tenantId: event.context.tenant?.tenantId,
       hostname: event.context.tenant?.hostname,
       ip: getClientIp(event),
@@ -173,7 +223,7 @@ export default defineNitroPlugin((nitroApp) => {
       const context: LogContext = {
         correlationId: event.context.correlationId,
         method: event.method,
-        path: event.path,
+        path: sanitizeUrl(event.path),
         statusCode,
         duration,
         tenantId: event.context.tenant?.tenantId,
@@ -198,7 +248,7 @@ export default defineNitroPlugin((nitroApp) => {
         value: duration,
         unit: 'ms',
         dimensions: {
-          path: event.path,
+          path: sanitizeUrl(event.path),
           method: event.method,
           statusCode: String(statusCode),
         },
@@ -218,7 +268,7 @@ export default defineNitroPlugin((nitroApp) => {
     const context: LogContext = {
       correlationId: h3Event?.context?.correlationId,
       method: h3Event?.method,
-      path: h3Event?.path,
+      path: h3Event?.path ? sanitizeUrl(h3Event.path) : undefined,
       duration,
       tenantId: (h3Event?.context?.tenant as { id?: string })?.id,
     };
@@ -244,7 +294,7 @@ export default defineNitroPlugin((nitroApp) => {
       value: 1,
       unit: 'count',
       dimensions: {
-        path: h3Event?.path || 'unknown',
+        path: h3Event?.path ? sanitizeUrl(h3Event.path) : 'unknown',
         errorType: errorWithMeta?.name || 'Error',
       },
     });
