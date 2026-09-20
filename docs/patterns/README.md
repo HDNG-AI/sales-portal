@@ -354,31 +354,6 @@ watch(error, (err) => {
 
 ## Navigation Performance
 
-### Route Prefetching on Hover
-
-Use `prefetchRouteResolution()` on link hover to eliminate navigation delay for dynamic `[...slug]` pages:
-
-```vue
-<script setup>
-import { prefetchRouteResolution } from '~/composables/useRouteResolution';
-
-const props = defineProps<{ href: string }>();
-</script>
-
-<template>
-  <NuxtLink :to="href" @mouseenter="prefetchRouteResolution(href)">
-    <slot />
-  </NuxtLink>
-</template>
-```
-
-The prefetch function:
-
-- Checks the client-side `_routeCache` Map first (skips if already cached)
-- Calls `/api/resolve-route` and stores the result
-- Silently ignores errors (best-effort)
-- When the user navigates, `useRouteResolution()` finds the cached data and skips the API call
-
 ### Promise Deduplication
 
 The auth store's `fetchUser()` deduplicates concurrent calls by holding the in-flight promise, so
@@ -517,10 +492,10 @@ The signature: `wrapServiceCall<T>(fn, service, knownError?, errorCode?)` — de
 Per-tenant lazy singleton in `server/services/_sdk.ts`. Same tenant reuses the same SDK instance:
 
 ```typescript
-import { getSDK } from '../services/_sdk';
+import { getTenantSDK } from '../services/_sdk';
 
 export default defineEventHandler(async (event) => {
-  const sdk = getSDK(event); // Returns cached TenantSDK for this tenant
+  const sdk = await getTenantSDK(event); // Cached TenantSDK for this tenant
   const products = await sdk.core.products.list();
   return products;
 });
