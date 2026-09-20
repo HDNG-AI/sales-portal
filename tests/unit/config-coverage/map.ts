@@ -159,6 +159,7 @@ const HEADER_TOPBAR = 'tests/components/layout/LayoutHeaderTopbar.test.ts';
 const PORTAL_SHELL = 'tests/components/portal/PortalShell.test.ts';
 const PORTAL_ORDERS_TABLE =
   'tests/components/portal/PortalOrdersTable.test.ts';
+const TENANT_CONFIG_SERVICE = 'tests/server/tenant-config-service.test.ts';
 const PRICE_DISPLAY = 'tests/components/commerce/PriceDisplay.test.ts';
 const STOCK_BADGE = 'tests/components/commerce/StockBadge.test.ts';
 const STOCK_BADGE_UNIT = 'tests/unit/StockBadge.test.ts';
@@ -1197,6 +1198,17 @@ export const CONFIG_COVERAGE_MAP = {
       {
         spec: USE_TENANT,
         title: 'should return undefined when the tenant has not set a timezone',
+        kind: 'carrier',
+      },
+      {
+        spec: TENANT_CONFIG_SERVICE,
+        title: 'should include timezone',
+        kind: 'carrier',
+      },
+      {
+        spec: SERVER_TENANT,
+        title:
+          'salvages a malformed timezone to unset, keeping the rest of the config',
         kind: 'carrier',
       },
       {

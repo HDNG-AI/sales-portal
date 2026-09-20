@@ -1145,6 +1145,37 @@ describe('Tenant utilities', () => {
       expect(out?.mode).toBe('commerce');
     });
 
+    it('salvages a malformed timezone to unset, keeping the rest of the config', () => {
+      // Regression: without a SALVAGE_DEFAULTS entry the issue path for this
+      // field is a single segment, which skips the leaf-strip branch and
+      // returns null. A null resolution is negative-cached, so one bad date
+      // field would take the whole storefront down for the cache TTL.
+      // Looped rather than it.each so the title is a literal the config
+      // coverage map can reference — see tests/unit/config-coverage/map.ts.
+      for (const bad of ['Ohio/United-States', '+01:00', '']) {
+        const candidate = fullCandidate();
+        candidate.timezone = bad;
+
+        const out = parseStoreSettingsResilient(candidate, 'h');
+
+        expect(out, bad).not.toBeNull();
+        expect(out?.timezone, bad).toBeUndefined();
+        // The surrounding config has to survive the strip, not just the parse.
+        expect(out?.tenantId, bad).toBe('alpha');
+        expect(out?.branding.name, bad).toBe('A');
+        expect(out?.theme.colors.primary, bad).toBe('oklch(0.5 0.1 200)');
+      }
+    });
+
+    it('keeps a valid timezone through the resilient path', () => {
+      const candidate = fullCandidate();
+      candidate.timezone = 'Europe/Stockholm';
+
+      expect(parseStoreSettingsResilient(candidate, 'h')?.timezone).toBe(
+        'Europe/Stockholm',
+      );
+    });
+
     it('keeps the seo block intact when defaultKeywords is a comma string', () => {
       // Regression: the merchant API sends defaultKeywords as a comma string.
       // The seo block (title/description) must survive and keywords must
