@@ -15,7 +15,6 @@ import {
   resolveTenant,
   DEFAULT_GEINS_SETTINGS,
   invalidateTenantCaches,
-  withTenantConfigDefaults,
   tenantOverrideKey,
   type TenantPortalOverrides,
 } from './tenant';
@@ -94,8 +93,7 @@ async function persistCmsOverride(
   if (!update) return;
 
   const key = tenantOverrideKey(tenantId);
-  const existing =
-    await storage.getItem<TenantPortalOverrides>(key);
+  const existing = await storage.getItem<TenantPortalOverrides>(key);
 
   const cms = mergeCmsConfig(existing?.cms, update);
 
@@ -156,9 +154,7 @@ export async function createTenant(
   const rawExistingConfig = await storage.getItem<TenantConfig>(
     tenantConfigKey(finalTenantId),
   );
-  const existingConfig = rawExistingConfig
-    ? withTenantConfigDefaults(rawExistingConfig)
-    : null;
+  const existingConfig = rawExistingConfig;
 
   if (existingConfig) {
     // The request's hostname must already belong to this tenant — a
@@ -175,20 +171,12 @@ export async function createTenant(
     }
     if (!partialConfig) return existingConfig;
 
-    const updatedConfig = mergeTenantConfig(
-      existingConfig,
-      partialConfig,
-      {
-        tenantId: finalTenantId,
-        hostname: existingConfig.hostname,
-      },
-    );
+    const updatedConfig = mergeTenantConfig(existingConfig, partialConfig, {
+      tenantId: finalTenantId,
+      hostname: existingConfig.hostname,
+    });
     await storage.setItem(tenantConfigKey(finalTenantId), updatedConfig);
-    await persistCmsOverride(
-      storage,
-      finalTenantId,
-      partialConfig.cms,
-    );
+    await persistCmsOverride(storage, finalTenantId, partialConfig.cms);
     // Independent writes to unrelated storage — hostname mappings live in
     // `kv`, cache invalidation touches the `cache` namespace/in-memory
     // maps — neither depends on the other completing first.
@@ -209,7 +197,6 @@ export async function createTenant(
     geinsSettings: { ...DEFAULT_GEINS_SETTINGS },
     mode: 'commerce',
     checkoutMode: 'hosted',
-    timezone: 'UTC',
     theme: createDefaultTheme(finalTenantId),
     css: '',
     themeHash: '',
@@ -226,11 +213,7 @@ export async function createTenant(
   const finalConfig = mergeTenantConfig(baseConfig, partialConfig, identity);
 
   await storage.setItem(tenantConfigKey(finalTenantId), finalConfig);
-  await persistCmsOverride(
-    storage,
-    finalTenantId,
-    partialConfig?.cms,
-  );
+  await persistCmsOverride(storage, finalTenantId, partialConfig?.cms);
   await Promise.all([
     writeHostnameMappings(storage, finalConfig),
     // Clears any negative-cache entry from a lookup that happened before

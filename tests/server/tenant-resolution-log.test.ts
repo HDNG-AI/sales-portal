@@ -606,13 +606,9 @@ describe.sequential('getTenantById', () => {
     const config = kvConfig('t-1', 't-1.example');
     const storage = memoryStorage({ [tenantConfigKey('t-1')]: config });
 
-    // A raw KV read is not re-validated against the schema, so
-    // withTenantConfigDefaults() backfills `timezone` on the way out — the
-    // returned object is a copy, not the stored reference.
-    await expect(getTenantById('t-1')).resolves.toEqual({
-      ...config,
-      timezone: 'UTC',
-    });
+    // A raw KV read is not re-validated against the schema and nothing is
+    // substituted on the way out, so the stored config comes back as-is.
+    await expect(getTenantById('t-1')).resolves.toEqual(config);
     expect(storage.getItem).toHaveBeenCalledWith(tenantConfigKey('t-1'));
     expect(storage.getItem).toHaveBeenCalledTimes(1);
   });

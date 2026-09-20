@@ -972,10 +972,12 @@ describe('Tenant utilities', () => {
   });
 
   describe('getTenantById', () => {
-    it('backfills timezone on a config stored before the field existed', async () => {
+    it('leaves timezone unset on a config stored before the field existed', async () => {
       // A raw KV read isn't re-validated against the schema, so a record
       // written before `timezone` was added to TenantConfig comes back
-      // without it.
+      // without it — and that is the unset state, not something to migrate.
+      // Substituting a zone here would silently re-date the tenant's
+      // existing orders.
       const legacy = {
         tenantId: 'legacy-tenant',
         hostname: 'legacy.example.com',
@@ -998,7 +1000,8 @@ describe('Tenant utilities', () => {
       });
 
       const result = await getTenantById('legacy-tenant');
-      expect(result?.timezone).toBe('UTC');
+      expect(result).not.toBeNull();
+      expect(result?.timezone).toBeUndefined();
     });
 
     it('returns null for a missing config without throwing', async () => {

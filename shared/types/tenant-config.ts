@@ -59,13 +59,19 @@ export interface TenantConfig {
   // Checkout mode
   checkoutMode: 'custom' | 'hosted';
 
-  // IANA timezone identifier (e.g. 'Europe/Stockholm'), never a raw UTC
-  // offset — offsets don't survive DST. Anchors record-type timestamps
-  // (order placed, invoice date) to the tenant's own operating timezone
-  // rather than the server's OS timezone or each viewer's browser.
-  // Defaults to 'UTC' — deliberately not a tenant-specific guess; see
-  // docs/lessons-learned.md for why defaults here must stay generic.
-  timezone: string;
+  /**
+   * IANA timezone identifier (e.g. 'Europe/Stockholm'), never a raw UTC
+   * offset — offsets don't survive DST. Anchors record-type timestamps
+   * (order placed, invoice date) to the tenant's own operating timezone
+   * rather than the server's OS timezone or each viewer's browser.
+   *
+   * Optional, and with no default on purpose. 'UTC' asserts that an
+   * unconfigured tenant operates in UTC, which is true of almost none of
+   * them, and it reads at the consumer exactly like a tenant that chose UTC
+   * deliberately. Unset means the formatter omits `timeZone` entirely.
+   * See docs/adr/024-tenant-operating-timezone.md.
+   */
+  timezone?: string;
 
   // Theme
   theme: {
@@ -191,7 +197,7 @@ export interface PublicTenantConfig {
   aliases?: string[];
   mode: 'commerce' | 'catalog';
   checkoutMode: 'custom' | 'hosted';
-  timezone: string;
+  timezone?: string;
   theme: TenantConfig['theme'];
   branding: TenantConfig['branding'];
   layout?: TenantConfig['layout'];

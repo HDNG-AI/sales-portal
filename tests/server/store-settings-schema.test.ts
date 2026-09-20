@@ -335,7 +335,7 @@ describe('StoreSettingsSchema', () => {
       if (result.success) expect(result.data.mode).toBe('catalog');
     });
 
-    it('defaults timezone to UTC when the merchant API response omits it', () => {
+    it('leaves timezone unset when the merchant API response omits it', () => {
       const config = {
         tenantId: 'tz-default',
         hostname: 'tz-default.example.com',
@@ -370,7 +370,8 @@ describe('StoreSettingsSchema', () => {
       };
       const result = StoreSettingsSchema.safeParse(config);
       expect(result.success).toBe(true);
-      if (result.success) expect(result.data.timezone).toBe('UTC');
+      // No substitution: unset is distinguishable from a chosen 'UTC'.
+      if (result.success) expect(result.data.timezone).toBeUndefined();
     });
 
     it('preserves an explicit timezone rather than overriding it with UTC', () => {
@@ -409,6 +410,25 @@ describe('StoreSettingsSchema', () => {
       const result = StoreSettingsSchema.safeParse(config);
       expect(result.success).toBe(true);
       if (result.success) expect(result.data.timezone).toBe('Europe/Stockholm');
+    });
+
+    it.each(['+01:00', '-0500', '+00:00'])(
+      'rejects the offset %s, which Intl accepts but which cannot express DST',
+      (offset) => {
+        const result = StoreSettingsSchema.safeParse(
+          createMinimalConfig({ timezone: offset }),
+        );
+
+        expect(result.success).toBe(false);
+      },
+    );
+
+    it('accepts UTC, which Intl.supportedValuesOf omits', () => {
+      const result = StoreSettingsSchema.safeParse(
+        createMinimalConfig({ timezone: 'UTC' }),
+      );
+
+      expect(result.success).toBe(true);
     });
 
     it('rejects a raw UTC offset instead of an IANA timezone identifier', () => {

@@ -34,7 +34,7 @@ export function useTenant() {
   const mode = computed(() => tenant.value?.mode ?? 'commerce');
   const isCatalogMode = computed(() => mode.value === 'catalog');
   const checkoutMode = computed(() => tenant.value?.checkoutMode ?? 'custom');
-  const timezone = computed(() => tenant.value?.timezone ?? 'UTC');
+  const timezone = computed(() => tenant.value?.timezone);
   const watermark = computed(() => tenant.value?.branding?.watermark ?? 'full');
   // Falls back to the same defaults server/utils/tenant.ts merges in for an
   // unconfigured tenant — only relevant here before `tenant` has loaded.

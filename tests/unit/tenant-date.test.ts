@@ -7,6 +7,21 @@ describe('formatTenantDate', () => {
     expect(formatTenantDate(null, 'UTC')).toBe('-');
   });
 
+  it('omits the Intl option entirely when the tenant has no timezone', () => {
+    // An unset zone must format in the runtime's own, which is what every
+    // tenant had before the field existed. Asserted against an explicit
+    // formatter rather than a literal, so the test does not itself depend
+    // on where it runs.
+    const iso = '2025-12-22T23:30:00Z';
+    const runtimeZone = new Date(iso).toLocaleDateString('sv-SE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+
+    expect(formatTenantDate(iso, undefined)).toBe(runtimeZone);
+  });
+
   it('formats using the given timezone, not the process timezone', () => {
     // 23:30 UTC is already the next day in a timezone ahead of UTC.
     const iso = '2025-12-22T23:30:00Z';

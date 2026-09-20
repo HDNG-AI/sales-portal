@@ -71,7 +71,7 @@ function formatDate(iso: string): string {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-    timeZone: timezone.value,
+    ...(timezone.value ? { timeZone: timezone.value } : {}),
   });
 }
 
