@@ -113,19 +113,31 @@ function handleSelectChange(name: string, val: string) {
 }
 
 function validateAll(): boolean {
+  // Checkboxes in a group share one `name`, and so one error slot. Collected
+  // first and written after the loop: assigning per box, a required option
+  // left unticked would set the error and the next optional box in the same
+  // group would immediately clear it, letting the form submit without it.
+  const groupMissing = new Set<string>();
+  const groupSeen = new Set<string>();
+
   for (const field of props.data?.fields ?? []) {
     touched[field.name] = true;
     if (field.type === 'checkbox') {
+      groupSeen.add(field.name);
       // A required checkbox is a consent tick: it has to be ticked, where a
       // required text field only has to be non-empty.
-      fieldErrors[field.name] =
-        field.required && !checkedValues[checkboxKey(field)]
-          ? 'form.field_required'
-          : '';
+      if (field.required && !checkedValues[checkboxKey(field)]) {
+        groupMissing.add(field.name);
+      }
       continue;
     }
     validateField(field.name);
   }
+
+  for (const name of groupSeen) {
+    fieldErrors[name] = groupMissing.has(name) ? 'form.field_required' : '';
+  }
+
   return Object.values(fieldErrors).every((v) => !v);
 }
 
@@ -155,6 +167,26 @@ function resolveSubject(): string {
  * omitted: an unfilled optional field would otherwise contribute a bare
  * "Label:" line, and a long form is mostly optional fields.
  */
+/**
+ * The heading a checkbox group reports under.
+ *
+ * Read from every box in the group rather than the one that happens to be
+ * ticked first: `groupLabel` sits on the first option by convention, and if a
+ * buyer leaves that one unticked the group would otherwise be reported under
+ * a later option's own label — "Monitoring: Monitoring" instead of
+ * "Interested in: Monitoring".
+ */
+function resolveGroupLabel(
+  fields: FormWidgetField[],
+  field: FormWidgetField,
+): string {
+  for (const candidate of fields) {
+    if (candidate.name !== field.name) continue;
+    if (candidate.groupLabel) return candidate.groupLabel;
+  }
+  return field.label;
+}
+
 function buildMailtoFields(
   fields: FormWidgetField[],
 ): { label: string; value: string }[] {
@@ -175,7 +207,7 @@ function buildMailtoFields(
       }
       groupIndex.set(field.name, lines.length);
       lines.push({
-        label: field.value ? (field.groupLabel ?? field.label) : field.label,
+        label: field.value ? resolveGroupLabel(fields, field) : field.label,
         value: answer,
       });
       continue;
@@ -244,7 +276,7 @@ function selectOptionsFor(field: FormWidgetField) {
       <template v-if="field.type === 'checkbox'">
         <label class="flex items-start gap-2 text-sm">
           <input
-            :id="`form-field-input-${field.name}`"
+            :id="`form-field-checkbox-${checkboxKey(field)}`"
             v-model="checkedValues[checkboxKey(field)]"
             type="checkbox"
             class="border-input accent-primary mt-0.5 size-4 rounded border"

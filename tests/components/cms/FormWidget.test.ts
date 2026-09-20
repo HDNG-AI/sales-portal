@@ -399,3 +399,75 @@ describe('FormWidget checkbox fields', () => {
     expect(decodedBody()).not.toContain('Phone:');
   });
 });
+
+describe('FormWidget checkbox group edge cases', () => {
+  // groupLabel sits on the first option; a required box sits later in the
+  // same group. Both are the shapes the per-box handling got wrong.
+  const group: FormWidgetData['fields'] = [
+    {
+      label: 'Power',
+      name: 'interest',
+      value: 'Power',
+      groupLabel: 'Interested in',
+      required: false,
+      type: 'checkbox',
+    },
+    {
+      label: 'Monitoring',
+      name: 'interest',
+      value: 'Monitoring',
+      required: true,
+      type: 'checkbox',
+    },
+    {
+      label: 'Safety',
+      name: 'interest',
+      value: 'Safety',
+      required: false,
+      type: 'checkbox',
+    },
+  ];
+
+  function decodedBody(): string {
+    const url = String(navigateToMock.mock.calls[0]?.[0] ?? '');
+    return decodeURIComponent(url.split('&body=')[1] ?? '');
+  }
+
+  beforeEach(() => navigateToMock.mockClear());
+
+  it('keeps a required option enforced when a later option clears the slot', async () => {
+    // The group shares one error slot. Written per box, the required option's
+    // error was overwritten by the optional box after it, and the form
+    // submitted without it.
+    const wrapper = mountWidget({ fields: group });
+
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).not.toHaveBeenCalled();
+
+    await wrapper.findAll('input[type="checkbox"]')[1]!.setValue(true);
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the group label even when the box carrying it is unticked', async () => {
+    const wrapper = mountWidget({ fields: group });
+    const boxes = wrapper.findAll('input[type="checkbox"]');
+
+    // Leave "Power" — which carries groupLabel — unticked.
+    await boxes[1]!.setValue(true);
+    await boxes[2]!.setValue(true);
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).toContain('Interested in: Monitoring, Safety');
+    expect(decodedBody()).not.toContain('Monitoring: Monitoring');
+  });
+
+  it('gives every box in a group its own id', () => {
+    const wrapper = mountWidget({ fields: group });
+    const ids = wrapper
+      .findAll('input[type="checkbox"]')
+      .map((input) => input.attributes('id'));
+
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
