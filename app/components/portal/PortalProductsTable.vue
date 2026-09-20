@@ -4,6 +4,7 @@ import { productPath } from '#shared/utils/route-helpers';
 
 const { t } = useI18n();
 const { formatLocale } = useFormatLocale();
+const { timezone } = useTenant();
 const { localePath } = useLocaleMarket();
 
 defineProps<{
@@ -20,6 +21,7 @@ function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '-';
   try {
     return new Date(dateStr).toLocaleDateString(formatLocale.value, {
+      ...(timezone.value ? { timeZone: timezone.value } : {}),
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

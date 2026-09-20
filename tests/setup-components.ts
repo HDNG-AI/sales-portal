@@ -15,6 +15,11 @@ import { createPinia, setActivePinia } from 'pinia';
 // without duplicating the full useTenant mock.
 export const mockIsCatalogMode = ref(false);
 
+// Exported ref so component tests can drive the tenant's operating timezone.
+// Undefined is the real default — a tenant that has not set one gets no
+// `timeZone` Intl option at all, so dates render in the runtime's own zone.
+export const mockTenantTimezone = ref<string | undefined>(undefined);
+
 // Exported ref so component tests can drive the VAT-display preference.
 // PriceDisplay (and every component that renders it) calls useVatDisplay,
 // so it must be mocked at the setup tier. Defaults to incl-VAT.
@@ -229,6 +234,7 @@ vi.mock('../app/composables/useTenant', () => {
         () => tenant.value?.branding?.name ?? tenant.value?.tenantId ?? 'Store',
       ),
       mode: computed(() => tenant.value?.mode ?? 'commerce'),
+      timezone: computed(() => mockTenantTimezone.value),
       isCatalogMode: computed(() => mockIsCatalogMode.value),
       watermark: computed(() => tenant.value?.branding?.watermark ?? 'full'),
       availableLocales: computed(() => ['sv']),

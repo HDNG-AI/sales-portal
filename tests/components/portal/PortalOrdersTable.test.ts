@@ -1,5 +1,6 @@
-import { describe, it, expect, assert } from 'vitest';
+import { describe, it, expect, assert, afterEach } from 'vitest';
 import { mountComponent } from '../../utils/component';
+import { mockTenantTimezone } from '../../setup-components';
 import PortalOrdersTable from '../../../app/components/portal/PortalOrdersTable.vue';
 
 const mockOrders = [
@@ -38,6 +39,11 @@ const mockOrders = [
 const [firstOrder, secondOrder] = mockOrders;
 assert.isDefined(firstOrder);
 assert.isDefined(secondOrder);
+
+// The ref is shared across the whole component tier and nothing resets it.
+afterEach(() => {
+  mockTenantTimezone.value = undefined;
+});
 
 describe('PortalOrdersTable', () => {
   it('renders table headers', () => {
@@ -104,6 +110,21 @@ describe('PortalOrdersTable', () => {
     // The setup-components useI18n mock pins the locale to 'en'.
     expect(wrapper.text()).toContain('12/22/2025');
     expect(wrapper.text()).not.toMatch(/12\/22\/2025,?\s+\d{2}:\d{2}/);
+  });
+
+  it('renders createdAt on the calendar day of the tenant timezone', () => {
+    // 2025-12-22T17:22Z is already the 23rd in Auckland and still the 22nd in
+    // UTC. Both zones are asserted, so the day cannot come from whatever zone
+    // the test runner happens to be in — only from the tenant's own.
+    mockTenantTimezone.value = 'Pacific/Auckland';
+    expect(
+      mountComponent(PortalOrdersTable, { props: { orders: mockOrders } }).text(),
+    ).toContain('12/23/2025');
+
+    mockTenantTimezone.value = 'UTC';
+    expect(
+      mountComponent(PortalOrdersTable, { props: { orders: mockOrders } }).text(),
+    ).toContain('12/22/2025');
   });
 
   it('shows empty state when no orders', () => {

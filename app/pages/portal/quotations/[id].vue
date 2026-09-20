@@ -12,6 +12,7 @@ definePageMeta({ middleware: ['auth', 'feature'], feature: 'quotes' });
 
 const { t } = useI18n();
 const { formatLocale } = useFormatLocale();
+const { timezone } = useTenant();
 const route = useRoute();
 const store = useQuotesStore();
 const { localePath } = useLocaleMarket();
@@ -67,6 +68,7 @@ function statusLabel(status: string): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(formatLocale.value, {
+    ...(timezone.value ? { timeZone: timezone.value } : {}),
     year: 'numeric',
     month: 'long',
     day: 'numeric',

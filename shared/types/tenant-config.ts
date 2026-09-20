@@ -53,6 +53,19 @@ export interface TenantConfig {
   // Checkout mode
   checkoutMode: 'custom' | 'hosted';
 
+  /**
+   * IANA timezone the tenant operates in (e.g. 'Europe/Stockholm'), used to
+   * anchor record-type timestamps — order placed, invoice date — to one zone
+   * rather than the server's or each viewer's.
+   *
+   * Optional, and with no default on purpose. A tenant configured before this
+   * field existed has no value for it and no way to set one, so substituting
+   * any zone would silently re-date its existing orders. Unset means the
+   * formatter omits `timeZone` entirely, which is the behaviour every tenant
+   * has today; a tenant that sets it gets a stable zone from that point on.
+   */
+  timezone?: string;
+
   // Theme
   theme: {
     name: string;
@@ -154,6 +167,7 @@ export interface PublicTenantConfig {
   aliases?: string[];
   mode: 'commerce' | 'catalog';
   checkoutMode: 'custom' | 'hosted';
+  timezone?: string;
   theme: TenantConfig['theme'];
   branding: TenantConfig['branding'];
   layout?: TenantConfig['layout'];

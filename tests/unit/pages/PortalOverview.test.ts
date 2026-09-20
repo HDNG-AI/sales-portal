@@ -64,6 +64,15 @@ vi.mock('../../../app/composables/useFormatLocale', () => ({
   }),
 }));
 
+// The page reads only the tenant timezone. Unmocked, the real composable
+// fetches /api/config through the routed useFetch stub below, which expects a
+// plain URL string and throws on the key this composable passes.
+vi.mock('../../../app/composables/useTenant', () => ({
+  useTenant: () => ({
+    timezone: computed(() => undefined),
+  }),
+}));
+
 // Mock callOnce — calls the factory function synchronously (mirrors Nuxt's callOnce)
 vi.stubGlobal(
   'callOnce',

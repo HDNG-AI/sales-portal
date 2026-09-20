@@ -263,6 +263,28 @@ describe('useTenant', () => {
     });
   });
 
+  describe('timezone', () => {
+    it('should return timezone from config', () => {
+      mockData.value = createMockTenantConfig({
+        timezone: 'Europe/Stockholm',
+      });
+
+      const { timezone } = useTenant();
+
+      expect(timezone.value).toBe('Europe/Stockholm');
+    });
+
+    it('should return undefined when the tenant has not set a timezone', () => {
+      // Undefined rather than a substituted zone: the formatter omits the
+      // Intl option entirely, which is what an unconfigured tenant gets today.
+      mockData.value = createMockTenantConfig({});
+
+      const { timezone } = useTenant();
+
+      expect(timezone.value).toBeUndefined();
+    });
+  });
+
   describe('checkoutMode', () => {
     it('should return checkoutMode from config', () => {
       mockData.value = createMockTenantConfig({ checkoutMode: 'hosted' });

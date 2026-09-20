@@ -18,7 +18,7 @@ const route = useRoute();
 const { localePath } = useLocaleMarket();
 const { formatLocale } = useFormatLocale();
 const cartStore = useCartStore();
-const { isCatalogMode } = useTenant();
+const { isCatalogMode, timezone } = useTenant();
 const { canAccess } = useFeatureAccess();
 const canReorder = computed(() => canAccess('reorder') && !isCatalogMode.value);
 
@@ -109,6 +109,7 @@ watch(
 function formatDate(iso?: string): string {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString(formatLocale.value, {
+    ...(timezone.value ? { timeZone: timezone.value } : {}),
     year: 'numeric',
     month: 'long',
     day: 'numeric',
