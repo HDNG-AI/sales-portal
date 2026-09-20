@@ -59,6 +59,10 @@ query product(
       name
       parameterGroupId
       parameters {
+        # `label` is the merchant's localized display name, resolved against
+        # the languageId passed above; `name` is the technical PIM key and
+        # reads the same in every language, so consumers prefer label.
+        label
         name
         value
         show

@@ -141,7 +141,7 @@ useProductTabPrint();
                     class="border-border border-b"
                   >
                     <td class="text-muted-foreground py-2 pr-4">
-                      {{ param.name ?? param.label ?? '' }}
+                      {{ param.label ?? param.name ?? '' }}
                     </td>
                     <td class="py-2">{{ param.value }}</td>
                   </tr>

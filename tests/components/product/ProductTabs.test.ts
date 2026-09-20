@@ -271,3 +271,57 @@ describe('ProductTabs', () => {
     expect(relatedContent.find('.related-products').exists()).toBe(true);
   });
 });
+
+describe('ProductTabs localized parameter labels', () => {
+  it('prefers the localized label over the technical name', () => {
+    // `name` is the PIM key and reads the same in every language; `label` is
+    // the merchant's display name, resolved against the requested language.
+    // Showing `name` gives every non-default locale the English key.
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          parameterGroups: [
+            {
+              name: 'Mått',
+              parameterGroupId: 1,
+              parameters: [
+                {
+                  name: 'Weight',
+                  label: 'Vikt',
+                  value: '500 g',
+                  show: true,
+                },
+              ],
+            },
+          ],
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+
+    const text = wrapper.text();
+    expect(text).toContain('Vikt');
+    expect(text).not.toContain('Weight');
+  });
+
+  it('falls back to the name when a parameter carries no label', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          parameterGroups: [
+            {
+              name: 'Mått',
+              parameterGroupId: 1,
+              parameters: [{ name: 'Weight', value: '500 g', show: true }],
+            },
+          ],
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.text()).toContain('Weight');
+  });
+});
