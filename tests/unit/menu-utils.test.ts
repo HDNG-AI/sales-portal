@@ -309,3 +309,23 @@ describe('stripGeinsPrefix brand override scope', () => {
     );
   });
 });
+
+describe('stripGeinsPrefix category indicator', () => {
+  it("maps a category's own `c` indicator rather than dropping it", () => {
+    // Geins emits `l` on menu links and `c` on a category canonicalUrl. With
+    // no `c` entry the indicator was dropped, so this returned `/batterier`
+    // while the menu side built `/c/batterier` — and the two never matched.
+    expect(stripGeinsPrefix('/se/sv/c/batterier')).toBe('/c/batterier');
+  });
+
+  it('still maps the ambiguous `l` to the category route', () => {
+    expect(stripGeinsPrefix('/se/sv/l/epoxi')).toBe('/c/epoxi');
+  });
+
+  it('leaves a brand-typed `c` url on the category route', () => {
+    // Only `l` is ambiguous; a url that already says `c` is not guessing.
+    expect(stripGeinsPrefix('/se/sv/c/batterier', 'brand')).toBe(
+      '/c/batterier',
+    );
+  });
+});

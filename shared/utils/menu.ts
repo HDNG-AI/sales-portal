@@ -8,6 +8,11 @@ import { SUPPORTED_LOCALE_CODES } from '../utils/locale-market';
  * We map them to our type-prefixed route paths.
  */
 const GEINS_TYPE_MAP: Record<string, string> = {
+  // Geins emits both: `l` on menu and CMS links, `c` on a category's own
+  // canonicalUrl. Without `c` the indicator is dropped rather than mapped,
+  // so `/se/sv/c/<alias>` returns `/<alias>` — which no longer matches the
+  // `/c/<alias>` the menu side now builds, and the link loses its active state.
+  c: ROUTE_PATHS.category, // /c/ → /c/
   l: ROUTE_PATHS.category, // /l/ → /c/
   p: ROUTE_PATHS.product, // /p/ → /p/
   b: ROUTE_PATHS.brand, // /b/ → /b/
