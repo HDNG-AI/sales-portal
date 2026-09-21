@@ -123,6 +123,10 @@ import type {
 const USE_TENANT = 'tests/composables/useTenant.test.ts';
 const SERVER_TENANT = 'tests/server/tenant.test.ts';
 const TENANT_CSS = 'tests/unit/server/utils/tenant-css.test.ts';
+const THEME_UTIL = 'tests/unit/server/utils/theme.test.ts';
+const CONFIGURATION_PANEL = 'tests/components/product/ConfigurationPanel.test.ts';
+const CONFIGURATOR_MESSAGES =
+  'tests/components/product/configurator/ConfiguratorMessages.test.ts';
 const FOOTER_MAIN = 'tests/components/layout/LayoutFooterMain.test.ts';
 const LAYOUT_FOOTER = 'tests/components/layout/LayoutFooter.test.ts';
 const LAYOUT_HEADER = 'tests/components/layout/LayoutHeader.test.ts';
@@ -1320,6 +1324,65 @@ export const CONFIG_COVERAGE_MAP = {
       sidebarAccentForeground: derivedColor(SIDEBAR_GROUP, COPY_FALLBACK),
       sidebarBorder: derivedColor(SIDEBAR_GROUP, BG_FAMILY),
       sidebarRing: derivedColor(SIDEBAR_GROUP, PRIMARY_FAMILY),
+
+      // Two semantic status colours. Themeable like the rest, with the
+      // stylesheet's own values as the derived defaults, so a tenant that
+      // sets neither renders as it did before they were configurable.
+      success: {
+        status: 'has-test',
+        test: [
+          {
+            spec: THEME_UTIL,
+            title: 'provides semantic success and warning defaults',
+            kind: 'carrier',
+          },
+          {
+            spec: THEME_UTIL,
+            title:
+              'preserves tenant-provided semantic success and warning colors',
+            kind: 'carrier',
+          },
+          {
+            spec: TENANT_CSS,
+            title: 'emits tenant success and warning variables',
+            kind: 'carrier',
+          },
+          {
+            spec: CONFIGURATION_PANEL,
+            title: 'copies the specification as plain text',
+            kind: 'consumer',
+            drives: 'field',
+          },
+        ],
+        note:
+          'The copy button flashes its confirmation in the success colour, ' +
+          'which is the one consumer that asserts the class rather than a ' +
+          'colour value.',
+      },
+      warning: {
+        status: 'has-test',
+        test: [
+          {
+            spec: THEME_UTIL,
+            title: 'provides semantic success and warning defaults',
+            kind: 'carrier',
+          },
+          {
+            spec: TENANT_CSS,
+            title: 'emits tenant success and warning variables',
+            kind: 'carrier',
+          },
+          {
+            spec: CONFIGURATOR_MESSAGES,
+            title: 'renders a warning as a warning',
+            kind: 'consumer',
+            drives: 'field',
+          },
+        ],
+        note:
+          'A non-blocking message is styled in the warning colour where a ' +
+          'blocking one gets destructive, so the class is the consumer.',
+      },
 
       // The eight surfaces, six of which the emitter is asserted on.
       topBarBackground: SURFACE_COLOR,

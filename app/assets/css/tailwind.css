@@ -93,10 +93,13 @@
     --accent-foreground: #171717;
     --destructive: #d80027;
     --destructive-foreground: #ffffff;
-    /* The three states the tenant theme does not carry. `selected` marks a
-       chosen row and is deliberately not themed: a tenant whose primary is a
-       near-black neutral would otherwise mark its choices in grey. Used as
-       `bg-x/10 text-x`, the way `destructive` already is. */
+    /* `selected` marks a chosen row and is deliberately not themed: a tenant
+       whose primary is a near-black neutral would otherwise mark its choices
+       in grey. Used as `bg-x/10 text-x`, the way `destructive` already is.
+
+       `success` and `warning` ARE themeable — see ThemeColorsSchema and
+       deriveThemeColors — so these two are the fallback a tenant gets before
+       its own CSS is injected, and they match the derived defaults exactly. */
     --selected: #0f766e;
     --success: #047857;
     --warning: #b45309;

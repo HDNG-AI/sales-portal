@@ -45,6 +45,10 @@ describe('ConfiguratorMessages', () => {
     const row = wrapper.find('[data-testid="configurator-message"]');
     expect(row.attributes('data-severity')).toBe('warning');
     expect(row.text()).toContain('Electric legs require a power strip.');
+    // The severity is also carried visually, in the themeable warning colour
+    // rather than the destructive one a blocking error gets.
+    expect(row.classes()).toContain('text-warning');
+    expect(row.classes()).not.toContain('text-destructive');
   });
 
   it('renders one row per message', () => {

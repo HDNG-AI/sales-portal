@@ -149,6 +149,11 @@ export function deriveThemeColors(colors: ThemeColors): FullThemeColors {
       colors.destructiveForeground,
       'oklch(0.985 0 0)',
     ),
+    // The two status colours a brand actually differs on. Defaults are the
+    // values app/assets/css/tailwind.css already ships, so a tenant that sets
+    // neither renders exactly as before.
+    success: pick(colors.success, 'oklch(0.508 0.105 165.612)'),
+    warning: pick(colors.warning, 'oklch(0.555 0.146 48.998)'),
     border: pick(colors.border, borderColor),
     input: pick(colors.input, borderColor),
     ring: pick(colors.ring, ringColor),

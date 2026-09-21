@@ -38,8 +38,28 @@ describe('deriveThemeColors surface forwarding', () => {
     expect(result.buttonPurchaseBackground).toBe('');
   });
 
-  it('returns 40 keys total (32 standard + 8 surfaces)', () => {
+  it('returns 42 keys total (34 standard + 8 surfaces)', () => {
     const result = deriveThemeColors({ ...coreColors });
-    expect(Object.keys(result)).toHaveLength(40);
+    expect(Object.keys(result)).toHaveLength(42);
+  });
+
+  it('provides semantic success and warning defaults', () => {
+    // The values app/assets/css/tailwind.css already ships, so a tenant that
+    // sets neither renders exactly as it did before they were themeable.
+    const result = deriveThemeColors({ ...coreColors });
+
+    expect(result.success).toBe('oklch(0.508 0.105 165.612)');
+    expect(result.warning).toBe('oklch(0.555 0.146 48.998)');
+  });
+
+  it('preserves tenant-provided semantic success and warning colors', () => {
+    const result = deriveThemeColors({
+      ...coreColors,
+      success: 'oklch(0.527 0.154 150.069)',
+      warning: 'oklch(0.7 0.2 90)',
+    });
+
+    expect(result.success).toBe('oklch(0.527 0.154 150.069)');
+    expect(result.warning).toBe('oklch(0.7 0.2 90)');
   });
 });

@@ -525,3 +525,22 @@ describe('deriveThemeColors fallbacks per derivation family', () => {
     expect(css, 'chart5').toContain('--chart-5: #010101;');
   });
 });
+
+describe('generateTenantCss semantic status colors', () => {
+  it('emits tenant success and warning variables', () => {
+    const derived = deriveThemeColors({
+      ...coreColors,
+      success: 'oklch(0.527 0.154 150.069)',
+      warning: 'oklch(0.7 0.2 90)',
+    });
+
+    const css = generateTenantCss('acme', derived);
+
+    // Converted to sRGB hex like every other themed colour, so Safari renders
+    // them; the assertion is on the variable existing with the tenant's value,
+    // not on the exact conversion, which toSafariSafeColor owns.
+    expect(css).toMatch(/--success:\s*\S+;/);
+    expect(css).toMatch(/--warning:\s*\S+;/);
+    expect(css).not.toMatch(/--success:\s*;/);
+  });
+});
