@@ -8,16 +8,15 @@ Testing strategy, architecture, and practices for the Sales Portal.
 
 ## Overview
 
-3687 unit/component tests across 277 files + 12 E2E spec files / 226 tests across three browser projects (portal, auth, cart, navigation, search, routing, etc.).
+3970 unit/component tests across 292 files + 13 E2E spec files and five preflight layers / 249 tests across three browser projects (portal, auth, cart, navigation, search, routing, etc.), plus one order-placement spec in a fourth project that only ever runs by hand.
 
-Counts as of 2026-08-25. E2E has setup prerequisites — see [E2E Tests](#e2e-tests).
+Counts as of 2026-09-08; the order-placement project was added 2026-09-13 and is not part of them, because no ordinary run collects it — see [Placing a real order](#placing-a-real-order-e2e-order-placementyml). E2E has setup prerequisites — see [E2E Tests](#e2e-tests).
 
-| Level       | Tool                    | What it tests                            |
-| ----------- | ----------------------- | ---------------------------------------- |
-| Unit        | Vitest                  | Functions, utilities, stores, middleware |
-| Component   | Vitest + Vue Test Utils | Vue components in isolation              |
-| Integration | Vitest                  | Server services hitting real Geins API   |
-| E2E         | Playwright              | Complete user flows in a browser         |
+| Level     | Tool                    | What it tests                            |
+| --------- | ----------------------- | ---------------------------------------- |
+| Unit      | Vitest                  | Functions, utilities, stores, middleware |
+| Component | Vitest + Vue Test Utils | Vue components in isolation              |
+| E2E       | Playwright              | Complete user flows in a browser         |
 
 ## Test Stack
 
@@ -74,12 +73,12 @@ After creating a test, add its path to the appropriate list in `vitest.workspace
 
 ### Performance tuning
 
-| Setting                     | Where            | Why                                                         |
-| --------------------------- | ---------------- | ----------------------------------------------------------- |
-| `isolate: false`            | node, components | Reuses module cache across files — no per-file worker setup |
-| `sequence.concurrent: true` | all tiers        | Runs tests within a file concurrently                       |
-| `getVitestConfigFromNuxt()` | node, components | Shares Nuxt's Vite config without booting Nuxt              |
-| `happy-dom` over `jsdom`    | components       | ~3s faster for 10 component files                           |
+| Setting                     | Where            | Why                                                           |
+| --------------------------- | ---------------- | ------------------------------------------------------------- |
+| `isolate: false`            | node, components | Reuses module cache across files — no per-file worker setup   |
+| `sequence.concurrent: true` | all tiers        | Runs tests within a file concurrently                         |
+| `getVitestConfigFromNuxt()` | node, components | Boots Nuxt once for its Vite config; no Nuxt runtime per tier |
+| `happy-dom` over `jsdom`    | components       | ~3s faster for 10 component files                             |
 
 ### Performance benchmarks
 
@@ -170,27 +169,36 @@ application bugs.
 Tests run against a tenant hostname, not `localhost`, so the multi-tenant server plugin can
 resolve a tenant. The target comes from the environment, read in one place (`tests/e2e/target.ts`):
 
-| Variable                        | Default                                 | Meaning                                              |
-| ------------------------------- | --------------------------------------- | ---------------------------------------------------- |
-| `PLAYWRIGHT_BASE_URL`           | `http(s)://tenant-a.litium.portal:3000` | Origin under test (https when `E2E_PROD=1` or in CI) |
-| `E2E_EXPECTED_TENANT_ID`        | `tenant-a`                              | Tenant `/api/config` must resolve to                 |
-| `E2E_USERNAME` / `E2E_PASSWORD` | unset                                   | Test account (see 2.)                                |
-| `E2E_PROD`                      | unset                                   | `1`: build and test the production build over https  |
-| `E2E_EXTERNAL_SERVER`           | unset                                   | `1`: the target is already running, start nothing    |
+| Variable                        | Default         | Meaning                                                                                     |
+| ------------------------------- | --------------- | ------------------------------------------------------------------------------------------- |
+| `PLAYWRIGHT_BASE_URL`           | the team tenant | Origin under test (https when `E2E_PROD=1` or in CI)                                        |
+| `E2E_EXPECTED_TENANT_ID`        | the team tenant | Tenant `/api/config` must resolve to                                                        |
+| `E2E_USERNAME` / `E2E_PASSWORD` | unset           | Test account (see 2.)                                                                       |
+| `E2E_PROD`                      | unset           | `1`: build and test the production build over https                                         |
+| `E2E_EXTERNAL_SERVER`           | unset           | `1`: the target is already running, start nothing                                           |
+| `E2E_REMOTE`                    | unset           | `1`: the target is a deployed environment on purpose                                        |
+| `E2E_ALLOW_ORDERS_FOR`          | unset           | Tenant name the `orders` project may place a real order on. Command line only, never `.env` |
 
-Locally they live in `.env`; in CI in repository variables and secrets. No tenant other than the
-default is named in the repo — switching target is an environment change. The hostname must point
-at `127.0.0.1` in `/etc/hosts`:
+Locally they live in `.env`; in CI in repository variables and secrets. Switching target is an
+environment change; the committed default names the team-owned test tenant, and it is one target
+in every mode: `<name>.litium.test:3000` — http on the dev server, https for the production
+build.
 
-```
-127.0.0.1 tenant-a.litium.portal
-```
+Nothing has to be configured on the machine for it. The dnsmasq wildcard sends all of
+`*.litium.test` to `127.0.0.1`, and the server looks the tenant up under `.litium.store`
+(`server/utils/lookup-hostname.ts`) in every mode, the production build included — so no
+`/etc/hosts` line, and no target name that could reach a deployed environment by accident. CI has
+no dnsmasq, so the job writes one hosts line for the target it was given, derived from
+`PLAYWRIGHT_BASE_URL`.
 
-A wildcard `*.litium.portal` resolver (dnsmasq — see `infra/local-development.md`) works too.
+**Preflight L0 resolves the target name and fails the run when it does not point at this
+machine**, naming the fix — for a `.litium.test` name that means `pnpm local:setup` has not run.
+`E2E_REMOTE=1` is how you point the suite at a deployed environment on purpose; the check then
+declares itself out of scope.
 
 #### 2. A test account
 
-`tenant-a` gates `orderPlacement` and `priceVisibility` behind `access: 'authenticated'`, so an
+The tenant gates `orderPlacement` and `priceVisibility` behind `access: 'authenticated'`, so an
 anonymous visitor gets **no prices and no add-to-cart button**. The cart and portal specs
 therefore need a signed-in customer. Add to `.env` (gitignored):
 
@@ -201,7 +209,7 @@ E2E_PASSWORD=<password>
 
 Requirements for the account:
 
-- A **B2B customer** on the tenant behind `tenant-a.litium.portal` — not an admin or API key.
+- A **B2B customer** on the tenant the run targets — not an admin or API key.
 - Use a **dedicated test user**, never a personal login. The suite signs in repeatedly and
   mutates cart state.
 - One portal test additionally needs a **saved list containing products**; without it that test
@@ -216,8 +224,13 @@ you simply get less coverage, and the run summary says so.
 A test that does not run says why, or the run fails. `test.skip()` / `test.fixme()` are lint errors
 in `tests/e2e/`; the one sanctioned way is `outOfScope(condition, reason, detail)` from
 `tests/e2e/helpers.ts`, where `reason` is a closed list (`ScopeReason`): `no-credentials`,
-`mobile-project`, `dev-server`, `fixture-missing`, `tenant-config`. A test that runs with part of its
-assertions off (no CSP header on the dev server) declares that with `noteOutOfScope()`.
+`mobile-project`, `dev-server`, `fixture-missing`, `tenant-config`, `remote-target`,
+`feature-hidden`, `mutation-gate`. A test that runs with part of its assertions off (no CSP
+header on the dev server) declares that with `noteOutOfScope()`.
+
+The list lives in **two** files. `tests/e2e/reporters/scope-reporter.ts` keeps its own copy, because
+Playwright loads a reporter before the specs and it cannot import the spec-side type. A new reason
+added to only one of them reads as undeclared and fails the run.
 
 `tests/e2e/reporters/scope-reporter.ts` prints one block at the end of every run:
 
@@ -228,6 +241,14 @@ assertions off (no CSP header on the dev server) declares that with `noteOutOfSc
   ran it. The list reporter calls these "did not run"; here they are counted against the layer that
   failed.
 - **unknown** — skipped with no declaration. The run fails, even if every test that ran passed.
+
+`fixture-missing` is capped on top of that. `EXPECTED_FIXTURE_MISSING` in the reporter is how many
+such declarations a run may contain — zero — and a run above it fails even when every test that ran
+passed: each one names data the test tenant is supposed to hold, so one appearing means a green
+build that proves less than the build before it. The count spans both lists, so moving a
+declaration from `outOfScope()` to `noteOutOfScope()` does not slip under it. `mobile-project` is
+not capped; those are permanent, and a cap on the total would have to move every time a responsive
+test was added.
 
 A permanently skipped test is deleted, not parked; the decision it was waiting on goes in a ticket.
 
@@ -285,11 +306,12 @@ successful login leaves no session. Both are correct in production and invisible
 which has neither.
 
 So the production-build path (`E2E_PROD=1 pnpm test:e2e` locally, always in CI) serves `pnpm preview`
-over https with a self-signed certificate for `*.litium.portal`:
+over https with a self-signed certificate. Its SAN covers `*.litium.test` and `*.litium.store`, so
+it also fits a target pointed at a real hostname:
 
 ```bash
 infra/scripts/local-cert.sh    # writes .certs/local.{crt,key}; pnpm local:setup runs it too
-E2E_PROD=1 pnpm test:e2e       # build + preview over https://tenant-a.litium.portal:3000
+E2E_PROD=1 pnpm test:e2e       # build + preview over https://<name>.litium.test:3000
 ```
 
 `playwright.config.ts` reads the pair and hands it to `pnpm preview` as `NITRO_SSL_CERT` /
@@ -301,11 +323,27 @@ local production build yourself without a warning, `mkcert -install` is optional
 #### Commands
 
 ```bash
-pnpm test:e2e          # Headless, all projects (chromium, Mobile Chrome, webkit)
+pnpm test:e2e          # Headless, EVERY project — the three browsers and `orders`
 pnpm test:e2e:ui       # Playwright UI
 pnpm test:e2e:debug    # Debug mode
 pnpm test:e2e:report   # View last report
 ```
+
+> **`E2E_ALLOW_ORDERS_FOR` never goes in `.env`.** A bare `pnpm test:e2e` selects no project, so it
+> runs every one of them, `orders` included. The project separation stops `ci.yml` and
+> `e2e-full.yml`, which name their projects — it does not stop a full local run. With the flag in
+> `.env` that run would place a real order, every time. Pass it inline, for the one invocation that
+> should place one:
+>
+> ```bash
+> pnpm test:e2e                                                   # the suite; orders declares itself out of scope
+> E2E_ALLOW_ORDERS_FOR=<tenant> pnpm test:e2e --project=orders     # and this places one real order
+> ```
+
+`tests/e2e/` compiles under its own `tsconfig.json`, deliberately without the Nuxt aliases so a spec
+cannot import `app/` or `server/` code. `pnpm typecheck` runs it as a second step after
+`nuxt typecheck`, so a type error in a spec, a helper or the reporter fails the same gate as the
+rest of the repo.
 
 #### Writing helpers
 
@@ -326,7 +364,7 @@ The preflight layers are the canaries — they depend on almost nothing, so if _
 report names the layer; check the server before debugging code:
 
 ```bash
-curl http://tenant-a.litium.portal:3000/api/health
+curl "http://$(node tests/e2e/target-defaults.mjs):3000/api/health"
 ```
 
 A 500 there means restart the dev server. For long sessions, start it with
@@ -368,6 +406,7 @@ tests/
 │   ├── target.ts           # The environment the suite reads: origin, tenant, account
 │   ├── helpers.ts          # Shared: discoverProduct, waitForHydration, addToCart
 │   ├── preflight/          # L0–L4, one spec per layer, one project per spec
+│   ├── orders/             # Mutating. Own project, ignored by the browser projects (1)
 │   ├── app.spec.ts         # App health, responsive, accessibility, perf (10)
 │   ├── auth.spec.ts        # Login, register, validation, view switching (8)
 │   ├── cart.spec.ts        # Add-to-cart, cart page, remove, promo (5)
@@ -384,7 +423,6 @@ tests/
 │   ├── services/
 │   │   ├── _client.test.ts
 │   │   ├── sdk-services.test.ts
-│   │   ├── integration.test.ts           # Hits real Geins API
 │   │   └── graphql-loader.test.ts
 │   └── ...
 ├── stores/            # Pinia store tests (node tier)
@@ -503,10 +541,9 @@ restore();
 
 ### Service Layer Tests
 
-Two approaches in `tests/server/services/`:
-
-- **Unit tests** — mock SDK calls, test service logic in isolation
-- **Integration tests** — hit real Geins API with test credentials, gated by env vars
+Services are tested in `tests/server/services/` by mocking SDK calls and
+exercising the service logic in isolation. Journeys against a live Geins API are
+covered by the e2e suite, in a browser, against the team tenant.
 
 Mock data is always inlined in test files — never read from external paths (they don't exist in CI).
 
@@ -525,6 +562,25 @@ vi.stubGlobal(
 );
 ```
 
+**`vi.stubGlobal` does not reach an imported composable.** It answers what the
+component under test calls itself, because the SFC's auto-import compiles to a
+global lookup. A composable you `import` is transformed instead: its own
+auto-imports resolve to the composable module, so a global stub is invisible to
+it. Mock the module.
+
+```typescript
+// `useCmsMenu` calls `useTenant`. Importing the real composable to run it
+// against a fixture means mocking the module it resolves to, not the global.
+const { mockTenant } = vi.hoisted(() => ({ mockTenant: { value: null } }));
+vi.mock('../../../app/composables/useTenant', () => ({
+  useTenant: () => ({ tenant: mockTenant }),
+}));
+```
+
+This is worth the trouble when the point of the test is that the real
+composable runs: reimplementing it in the spec asserts the mirror, which proves
+nothing about the code the app executes.
+
 ## E2E Tests
 
 E2E tests run against the real dev server with real Geins API data — no mocks. Setup
@@ -535,11 +591,23 @@ prerequisites are in [Running Tests → E2E Tests](#e2e-tests-1).
 Most historical E2E failures in this repo were not application bugs. They were these, so check
 them before concluding the app is broken:
 
-- **Ambiguous locators.** Playwright fails a locator matching more than one element, and reports
-  it as **"element(s) not found" / "not visible"** — not as a strict-mode error. Several
-  `data-testid`s legitimately appear twice: `search-input` (header + page), `cart-drawer`,
-  `[role="tabpanel"]` (Reka UI mounts one per tab). Scope to a container (`main`,
-  `[data-testid="mobile-search-panel"]`) rather than reaching for `.first()`.
+- **Ambiguous locators.** Playwright fails a locator matching more than one element, and the
+  usual cause is the responsive split below: a page renders a mobile shape _and_ a desktop
+  shape, both in the DOM, so a `data-testid` placed on each matches twice.
+  **The rule: one test id on a single wrapper around both branches, and scope anything inside
+  it to the visible branch** (`:visible`, or a container) rather than reaching for `.first()`.
+  `PortalOrdersTable.vue` is the shape to copy, with one correction — put the wrapper on the
+  non-empty branch, not around the empty state too, or its presence stops meaning "there is a
+  list". Row ids inside a `v-for` stay duplicated by design: both branches really do render N
+  rows, so a count must scope to what is visible. Mutually exclusive branches may share an id
+  without tripping strict mode, but that is not the same as it being safe: a shared id makes
+  any assertion about **absence** ambiguous, because it says no element with that id rendered
+  rather than which branch stayed away. Where the branches mean different things — a gated and
+  an ungated price, say — give them different ids. Ids that appear twice for unrelated reasons:
+  `search-input` (header + page), `cart-drawer`, `[role="tabpanel"]` (Reka UI mounts one per
+  tab). It does not always fail as a strict-mode error: `isVisible().catch(() => false)` turns
+  any locator error into a plain `false`, so an unexpected `false` there means suspect an
+  ambiguous locator before missing data.
 - **`role="dialog"` is not unique.** `CookieBanner.vue` carries it, so it collides with any sheet
   or filter panel. The consent state is pre-seeded in `playwright.config.ts` so the banner never
   renders — if you add another persistent dialog, expect the same class of collision.
@@ -571,7 +639,7 @@ import { waitForHydration } from './helpers';
 
 await page.goto('/some-page');
 await page.waitForLoadState('load');
-await waitForHydration(page); // Checks __vue_app__ + 1s stabilization
+await waitForHydration(page); // Waits for __vue_app__, then for isHydrating to clear
 ```
 
 **pressSequentially for v-model** — `fill()` sets values programmatically and may not trigger Vue's watch chain. Use `pressSequentially()` for search inputs and other watched fields:
@@ -607,45 +675,157 @@ V8 coverage provider. Reports: HTML (`coverage/index.html`), JSON, terminal text
 
 Excludes: `app/components/ui/**` (shadcn-vue), `*.d.ts`, `node_modules`, `.nuxt`
 
+### Config coverage map
+
+Line coverage says which code ran; it says nothing about which tenant _configuration_ was
+exercised. `tests/unit/config-coverage/map.ts` records that separately: one entry per value
+a tenant can set, naming the test or tests that cover it, or the reason none does. An entry
+names one reference or several — a value's getter and each consumer that branches on it are
+separate assertions, and a single slot would force one to overwrite the other. A field added
+to `PublicTenantConfig` — or a value of a union field, or one of the three states of an
+optional string field — fails `pnpm typecheck` until it has an entry, and `pnpm test`
+prints the entries without a test on every run.
+
+A test that asserts what the app does for a particular config value is registered in the map
+as part of the same change, with a reference whose `kind` says what it proves: `carrier` (the
+value arrives or is returned unchanged), `reader` (a shared mechanism such as `hasFeature`
+produces a different result per value) or `consumer` (the code the map names as the value's
+consumer does something different). Two questions decide it — would the assertion pass with a
+different value, and is the subject the consumer or something between the config and it — and
+they are written on the field in `tests/unit/config-coverage/types.ts`. `has-test` means a
+`consumer` reference exists; `no-test` means a consumer is named as `file:line` and nothing
+asserts it there, whatever carrier or reader references the entry lists. A consumer test that
+stubs the reader (`drives: 'reader'`) counts only together with a `reader` reference on the same
+cell, and one whose stub binds no key (`drives: 'stub'`) never counts; `map.test.ts` checks that
+composition, and the map header explains why it holds. A test
+that only carries the value in a fixture is not an assertion about it and stays out. Nothing
+detects an unregistered test: no spec declares which config value it covers, so this is an
+obligation on the change, not a gate. A full sweep of the suite against the map runs once per
+milestone that adds config tests.
+
 ## CI/CD Integration
 
-See `.github/workflows/ci.yml`. It runs on **PRs into `main`/`production`** and on **pushes to
-`dev`** — not on every push.
+Three workflows run tests; none runs on a schedule, and only the third writes something
+nothing deletes — every run leaves carts behind, see
+[What a run leaves behind](#what-a-run-leaves-behind).
 
-| Job               | When     | What                                                  |
-| ----------------- | -------- | ----------------------------------------------------- |
-| Lint & Type Check | both     | `pnpm lint`, `pnpm typecheck`                         |
-| Unit & Component  | both     | `pnpm test:coverage` (full vitest suite)              |
-| E2E               | PRs only | **Preflight, then a 4-file smoke subset on chromium** |
+| Workflow · Job                                             | Trigger                                       | What                                                             |
+| ---------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------- |
+| `ci.yml` · Lint & Type Check                               | PRs into `main`/`production`, pushes to `dev` | `pnpm lint`, `pnpm typecheck` (app, `tests/`, `tests/e2e/`)      |
+| `ci.yml` · Unit & Component                                | same                                          | `pnpm test:coverage` (full vitest suite)                         |
+| `ci.yml` · E2E Suite                                       | PRs only                                      | **Preflight, then every spec on all three projects**             |
+| `e2e-full.yml` · E2E Suite (manual)                        | `workflow_dispatch`, any branch               | **Preflight, then every spec on all three projects**             |
+| `e2e-order-placement.yml` · E2E Order Placement (mutating) | `workflow_dispatch` only, with a tenant name  | **Preflight, then the `orders` project — places one real order** |
+
+`retries` is zero everywhere (`playwright.config.ts`), so a red run in either workflow is a real
+failure rather than one that survived three attempts. Both run the production build, so before a
+PR run `pnpm test:e2e` locally in dev mode — the one mode nothing else covers; the PR job covers
+the production build.
+
+### The PR job (`ci.yml`)
 
 The E2E job builds the production build, starts `pnpm preview` once (over https, output in the
 `preview-log` artifact), then runs one step per preflight layer against it with
 `E2E_EXTERNAL_SERVER=1` and `--no-deps` — `Preflight L0 · reachability` … `L4 · session` — and
-finally the specs:
+then every spec, one step per browser project:
 
 ```
---no-deps --project=chromium app.spec.ts homepage.spec.ts csp-policy.spec.ts unknown-hostname.spec.ts
+--no-deps --project=chromium        # then "Mobile Chrome", then webkit
 ```
 
-A red run stops at the layer that broke and the later steps are skipped, so the step view names
-the layer. The target and account come from repository variables (`E2E_BASE_URL`,
+A red run stops at the layer or project that broke and the later steps are skipped, so the step
+view names it. The target and account come from repository variables (`E2E_BASE_URL`,
 `E2E_EXPECTED_TENANT_ID`) and secrets (`E2E_USERNAME`, `E2E_PASSWORD`), with the committed
-defaults when unset. Be aware of what this does and does not buy you:
+defaults when unset.
 
-- The four spec files make no data-discovery calls and need no test account, which is why they
-  were chosen. Without credentials the session layer is out of scope, not red.
-- The identity layer does fail against an unreachable merchant API (503) or an unregistered
-  hostname, but the specs still pass against a Geins API that is down. A green E2E job is **not**
-  evidence that the storefront works.
-- The other 9 spec files, and the `Mobile Chrome` / `webkit` projects, are ungated. They rot
-  silently; assume they are broken unless someone has run them locally.
-- `theme-colors.spec.ts` is a deliberate WebKit regression guard, but CI installs chromium only
-  and passes `--project=chromium`, so **it runs nowhere in CI** despite the comment in
-  `playwright.config.ts` implying otherwise.
+**The gate stops at the first failing browser project; the manual workflow continues.** The
+gate answers one question — is the branch safe to merge — and the answer is settled once a
+project goes red, while the manual run exists to measure and needs all three numbers.
 
-Running the full suite in CI would need a test account in GitHub Secrets (see
-[E2E Tests](#e2e-tests)). Until that exists, **run `pnpm test:e2e` locally before a PR that
-touches storefront behaviour** — the smoke subset will not catch it.
+A green run is still not evidence that the Geins backend is healthy: the identity layer fails
+against an unreachable merchant API (503) or an unregistered hostname, but the specs run
+against whatever that API returns.
+
+### The manual run (`e2e-full.yml`)
+
+`workflow_dispatch` only, on any branch: `gh workflow run e2e-full.yml --ref <branch>`.
+
+Same target as the PR job — a production build on the runner — with chromium, webkit and the
+Mobile Chrome device profile. Each preflight layer and each browser project is its own step, and
+wall-clock per project goes to the job summary. This workflow needs no mutation gate, but not
+because the suite writes nothing — see [What a run leaves behind](#what-a-run-leaves-behind). It
+needs none because the three browser projects cannot collect the one spec that places an order.
+
+A run signs in once however many browsers it drives — preflight L4 writes the session, every
+auth-dependent spec reads that file — so splitting the projects across jobs, or sharding, repeats
+the preflight and with it the sign-in against a rate-limited endpoint.
+
+### What a run leaves behind
+
+**Every suite run creates about 45 real carts and abandons them.** `cart.spec.ts` builds a cart
+in twelve of its tests and `checkout.spec.ts` in three, each test gets a fresh browser context with
+no `cart_id` cookie, and nothing empties them afterwards — so that is 15 carts per browser project,
+45 across the three. They are real carts on the tenant, they simply have no order and no owner
+looking at them.
+
+That is worth knowing before reading the next section: the order spec is not the first thing in this
+suite to write to the backend. It is the first to leave something **lasting and visible** — an order
+on the account's order list, which five specs read and nothing deletes.
+
+### Placing a real order (`e2e-order-placement.yml`)
+
+The only workflow here that writes to the backend. `workflow_dispatch` only, with one required
+input — the **tenant name** — and never on a pull request in any form:
+
+```
+gh workflow run e2e-order-placement.yml --ref <branch> -f tenant=<tenant name>
+```
+
+It runs the `orders` Playwright project, one step, without `--no-deps` so the five preflight layers
+run as project dependencies. Two to three minutes.
+
+**Every run leaves a real order on the test account, and nothing deletes it.** That is the price of
+the run, and it is worth knowing in advance rather than discovering. The account holds 26 orders as
+of 2026-09-13. Five specs read that list and every one of them picks an order by property rather
+than by id, so a new order displaces nothing — the list simply grows. `fetchOrders` reads a fixed
+window of it: the oldest twelve, sorted on `createdAt`, because that is where the orders those
+specs select on sit and new orders arrive at the other end.
+
+Two structural locks make an accidental order impossible, which is why this can live in an
+open-source repository:
+
+1. **The spec has its own project in its own folder** (`tests/e2e/orders/`), which the `chromium`,
+   `Mobile Chrome` and `webkit` projects ignore exactly as they ignore `preflight/`. The PR job and
+   the manual workflow both select projects by name, so neither can collect it. An invocation
+   that names no project — a bare `pnpm test:e2e` — runs every project and does collect it, which
+   is what the second lock is for.
+2. **`E2E_ALLOW_ORDERS_FOR` carries a tenant name, not a boolean.** This is the lock that matters
+   locally, because the first one does not cover a bare `pnpm test:e2e` — see the warning under
+   [Commands](#commands). The spec places an order only
+   when that value is _exactly equal_ to the tenant `/api/config` resolves for the origin under
+   test. So `=1` and `=true` match nothing, and a copied `.env` pointed at another tenant names the
+   wrong one. Unset: the spec declares itself out of scope (`mutation-gate`) and the run is green
+   having placed nothing. Set but naming a tenant the origin does not resolve to: the test is red,
+   still having placed nothing — the flag was set deliberately and names the wrong thing, and
+   silence would be a worse answer than showing both tenant names.
+
+The workflow adds a third layer for its own sake: a guard step fails the job on an empty input,
+because `required: true` is a check on the dispatch form and a run that reached the spec with no
+flag would finish green having done nothing.
+
+One order per run, on chromium, with `retries: 0` restated on the project —
+`/api/checkout/create-order` rate-limits order creation to 5 per 60 seconds per IP, and a retry here
+would be a second real order. The spec waits up to 120 s for `/api/orders/<publicId>` to answer 200
+and records the measured wait; that budget rests on five samples measured 2026-09-13 (5.2 s to
+46.7 s, the widest being this spec's own first real run), and exceeding it fails the test with the
+number rather than widening the wait.
+
+Every workflow names its browser set in its Playwright cache key, because cache entries are
+immutable: a key that cannot express which browsers an entry holds would restore a chromium-only
+cache forever and pay the webkit download on every run. That is also why the order workflow, which
+needs chromium alone, carries a key of its own rather than sharing the other two's. Two things that cache does not buy —
+`--with-deps` runs `apt-get` every time and that is never cached, and an entry only saves from a
+green job, so the first runs after a key changes look slower than the steady state.
 
 ## Gotchas
 
@@ -662,7 +842,9 @@ const stubs = {
 
 ### CSP + COOP in E2E
 
-Filter CSP inline style violations and COOP header warnings in E2E console error assertions.
+Filter COOP header warnings in E2E console error assertions: the dev server is http, so Chromium
+reports the header as ignored. CSP violations are not filtered — they are the class
+`theme-colors.spec.ts` guards, and the production build produces none.
 
 ### `destr` type coercion
 

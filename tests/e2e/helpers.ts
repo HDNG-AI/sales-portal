@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { e2eCredentials, hasE2ECredentials } from './target';
 
 export { e2eCredentials, hasE2ECredentials };
@@ -29,20 +29,33 @@ export { e2eCredentials, hasE2ECredentials };
  * - `no-credentials`: E2E_USERNAME / E2E_PASSWORD not set.
  * - `mobile-project`: the feature is desktop-only (hidden below `lg`).
  * - `dev-server`: the assertion needs the production build (CSP header).
- * - `fixture-missing`: the test account lacks the data (quotes, saved lists).
- *   Goes away with the seeded team-owned tenant (SAL-361).
+ * - `fixture-missing`: the test account lacks the data (quotes, saved lists) —
+ *   data the platform cannot produce yet, not a tenant nobody seeded.
  * - `tenant-config`: the tenant's configuration does not exercise this path
- *   (single locale, no CMS apply page). The dangerous one — "passes on
- *   tenant-a" says nothing about other tenants. M3 turns these into
- *   assertions derived from `/api/config`; until then the reporter lists
+ *   (single locale, no CMS apply page). The dangerous one — "passes on the
+ *   configured tenant" says nothing about other tenants. Deriving these from
+ *   `/api/config` as assertions is a later step; until then the reporter lists
  *   every instance so they stay visible.
+ * - `remote-target`: `E2E_REMOTE=1` — the target is a deployed environment on
+ *   purpose, so preflight L0's locality check does not apply.
+ * - `feature-hidden`: no template in the app renders the affordance, for any
+ *   tenant — the backend and the component are still there, the markup that
+ *   mounts it is not. Narrower than `tenant-config` (which is about one
+ *   tenant's settings) and than `fixture-missing` (which is about data).
+ * - `mutation-gate`: `E2E_ALLOW_ORDERS_FOR` does not name the tenant this
+ *   origin resolves to, so the run places no order. The only reason here that
+ *   describes a *choice* not to assert; the other seven describe an assertion
+ *   that cannot be made.
  */
 export type ScopeReason =
   | 'no-credentials'
   | 'mobile-project'
   | 'dev-server'
   | 'fixture-missing'
-  | 'tenant-config';
+  | 'tenant-config'
+  | 'remote-target'
+  | 'feature-hidden'
+  | 'mutation-gate';
 
 /**
  * Skip the current test — or, called at file/describe level, every test in
@@ -80,6 +93,8 @@ export interface DiscoveredProduct {
   alias: string;
   skuId: number;
   name: string;
+  /** Rendered on every product card, so it links a card to this API row. */
+  articleNumber: string | null;
 }
 
 export interface DiscoveredCategory {
@@ -91,17 +106,20 @@ interface RawProduct {
   skus?: { skuId: number }[];
   alias?: string;
   name?: string;
+  articleNumber?: string | null;
 }
 
 /**
- * Candidates with a usable alias and SKU, sorted by alias — the products API
- * applies no stable ordering, so an unsorted "first one" differs per call.
+ * Candidates with a usable alias and SKU. The `sort` makes the twenty rows the
+ * same twenty every call: without it, four reads 2.5 seconds apart returned
+ * four different sets from a catalogue of 98. Not `LATEST`, which orders on a
+ * timestamp the response does not carry. The alias sort only breaks ties.
  */
 async function fetchProductCandidates(
   page: Page,
 ): Promise<DiscoveredProduct[]> {
   const response = await page.request.get('/api/product-lists/products', {
-    params: { take: '20' },
+    params: { take: '20', filter: JSON.stringify({ sort: 'ALPHABETICAL' }) },
   });
   expect(response.ok()).toBe(true);
 
@@ -116,8 +134,31 @@ async function fetchProductCandidates(
       alias: p.alias,
       skuId: p.skus![0]!.skuId,
       name: p.name ?? p.alias,
+      articleNumber: p.articleNumber ?? null,
     }))
     .sort((a, b) => a.alias.localeCompare(b.alias));
+}
+
+/**
+ * Whether `/p/<alias>` renders the configurator instead of the ordinary PDP.
+ *
+ * Asked per candidate because the list payload does not carry `configurable`:
+ * it is derived in `/api/products/<alias>`. The first candidate alphabetically
+ * is a configurable product on the team tenant, and the configurator page has
+ * no gallery, no product heading and no tabs — so a spec about the ordinary
+ * PDP that takes the first row finds none of them.
+ *
+ * Not cached: the answer depends on the caller's session, since the feature
+ * carries an access rule, and a cache would hand the anonymous run what the
+ * signed-in one resolved.
+ */
+export async function isConfigurable(
+  page: Page,
+  alias: string,
+): Promise<boolean> {
+  const response = await page.request.get(`/api/products/${alias}`);
+  if (!response.ok()) return false;
+  return (await response.json())?.configurable === true;
 }
 
 /** A product with a valid SKU. Use `discoverPurchasableProduct` to buy. */
@@ -127,7 +168,176 @@ export async function discoverProduct(page: Page): Promise<DiscoveredProduct> {
     candidates.length,
     'no product with a SKU and alias found',
   ).toBeGreaterThan(0);
-  return candidates[0]!;
+
+  for (const candidate of candidates) {
+    if (!(await isConfigurable(page, candidate.alias))) return candidate;
+  }
+
+  throw new Error(
+    `Every candidate is a configurable product (tried: ${candidates
+      .map((c) => c.alias)
+      .join(', ')}), so no ordinary product page can be reached.`,
+  );
+}
+
+// ---------- Prices ----------
+
+/** The unit price an API response carries, as numbers rather than copy. */
+export interface ApiPrice {
+  exVat: number;
+  incVat: number;
+  vat: number;
+}
+
+/**
+ * The unit price `/api/products/<alias>` returns, as numbers.
+ *
+ * Uses the caller's browser context, so the signed-in and the anonymous run
+ * each get what that caller is actually served. Every field is asserted to be
+ * a finite number before it is returned: a helper that hands back `undefined`
+ * turns the assertions built on it into a comparison of two undefineds, which
+ * passes.
+ */
+export async function fetchProductPrice(
+  page: Page,
+  alias: string,
+): Promise<ApiPrice> {
+  const response = await page.request.get(`/api/products/${alias}`);
+  expect(response.ok(), `/api/products/${alias} did not answer 200`).toBe(true);
+
+  // `/api/products/<alias>` returns the product object itself, not a wrapper.
+  const unitPrice = (await response.json())?.unitPrice;
+
+  const price: ApiPrice = {
+    exVat: unitPrice?.sellingPriceExVat,
+    incVat: unitPrice?.sellingPriceIncVat,
+    vat: unitPrice?.vat,
+  };
+
+  for (const [field, value] of Object.entries(price)) {
+    expect(
+      Number.isFinite(value),
+      `unitPrice.${field} for "${alias}" is not a number: ${JSON.stringify(value)}`,
+    ).toBe(true);
+  }
+
+  return price;
+}
+
+/**
+ * The `market` / `locale` pair a locale-prefixed URL carries, in the shape the
+ * product APIs take. `/se/sv/products` → `{ market: 'se', locale: 'sv' }`.
+ *
+ * Asserts the prefix rather than falling back to sending nothing. On an
+ * unprefixed page the grid still sends both — `useLocaleMarket` reads the
+ * market from a cookie, the tenant, then a hardcoded `'se'`, and the locale
+ * from i18n state, none of it from the route — so a silent `{}` here would
+ * read a different catalogue than the page while the completeness assertion
+ * passed anyway. `page.goto` follows the server-side redirect to the prefixed
+ * path, so this holds today; the assertion is what keeps it holding.
+ */
+function localeQueryFrom(url: string): Record<string, string> {
+  const [market, locale] = new URL(url).pathname.split('/').filter(Boolean);
+  const isCode = (v?: string) => !!v && /^[a-z]{2}$/.test(v);
+  expect(
+    isCode(market) && isCode(locale),
+    `expected a locale-prefixed URL like /se/sv/…, got ${url}. Read the ` +
+      `catalogue after navigating, or it is read for a different market and ` +
+      `locale than the page used.`,
+  ).toBe(true);
+  return { market: market!, locale: locale! };
+}
+
+/** One row of the product-list endpoint, with the fields a price test needs. */
+export interface ProductListRow {
+  alias: string;
+  articleNumber: string;
+  exVat: number;
+}
+
+/**
+ * A sample of up to `take` catalogue rows from `/api/product-lists/products`,
+ * for a caller that picks products by a property and then addresses them by
+ * alias.
+ *
+ * A sample, never the catalogue: the endpoint applies no stable ordering (four
+ * calls seconds apart returned four different first products), so two calls
+ * are two draws, and `take` is capped at 100 by `ProductListSchema`. Nothing
+ * from here may be matched against what the `/products` grid rendered — a card
+ * on the grid and a row in this sample are drawn separately, and their overlap
+ * measured 9, 4, 0 and 18 rows of 24. To read a card's price from the API, take
+ * the alias off the card's own link and ask `/api/products/<alias>`.
+ *
+ * Requires a locale-prefixed URL and sends its market and locale along, as the
+ * grid does, so a sample is drawn from the same catalogue the page shows.
+ */
+export async function fetchProductListSample(
+  page: Page,
+  take = 100,
+): Promise<ProductListRow[]> {
+  const response = await page.request.get('/api/product-lists/products', {
+    params: { take: String(take), ...localeQueryFrom(page.url()) },
+  });
+  expect(response.ok(), '/api/product-lists/products did not answer 200').toBe(
+    true,
+  );
+
+  const products = (await response.json())?.products ?? [];
+  return products
+    .filter(
+      (p: {
+        alias?: string;
+        articleNumber?: string;
+        unitPrice?: { sellingPriceExVat?: number };
+      }) =>
+        !!p.alias &&
+        !!p.articleNumber &&
+        Number.isFinite(p.unitPrice?.sellingPriceExVat),
+    )
+    .map(
+      (p: {
+        alias: string;
+        articleNumber: string;
+        unitPrice: { sellingPriceExVat: number };
+      }) => ({
+        alias: p.alias,
+        articleNumber: p.articleNumber,
+        exVat: p.unitPrice.sellingPriceExVat,
+      }),
+    );
+}
+
+/**
+ * The number inside a rendered price, ignoring currency and separators.
+ *
+ * Never compare formatted price strings. The same amount reaches the DOM as
+ * two different strings depending on which path ran: `PriceDisplay` prefers
+ * the API's pre-formatted value ("600 kr") and falls back to `formatPrice`,
+ * an `Intl.NumberFormat` currency format ("600,00 kr" with a non-breaking
+ * space). Asserting the string asserts which path ran, not what the price is.
+ *
+ * Throws on text with no digits rather than returning `NaN`, which compares
+ * false against everything and would read as a wrong price instead of a
+ * missing element.
+ *
+ * Assumes the sv-SE convention the app formats in: comma decimal mark, space
+ * thousands separator. A locale that groups with periods would need this to
+ * know which separator it is looking at.
+ */
+export function parsePrice(text: string): number {
+  const digits = text.replace(/[^\d,.]/g, '');
+  if (!/\d/.test(digits)) {
+    throw new Error(`no number in rendered price: ${JSON.stringify(text)}`);
+  }
+  // Comma is the decimal mark in sv-SE; the thousands separator is a space,
+  // already dropped above.
+  return Number.parseFloat(digits.replace(',', '.'));
+}
+
+/** Reads a rendered price off the page and returns it as a number. */
+export async function readPrice(locator: Locator): Promise<number> {
+  await expect(locator).toBeVisible({ timeout: 15000 });
+  return parsePrice((await locator.innerText()).trim());
 }
 
 /** Memoised per worker — probing costs a page load + hydration wait each. */
@@ -152,7 +362,11 @@ export async function discoverPurchasableProduct(
 
   const tried: string[] = [];
 
-  for (const candidate of candidates.slice(0, maxAttempts)) {
+  for (const candidate of candidates) {
+    if (tried.length >= maxAttempts) break;
+    // A configurable product has no add-to-cart button, so trying one spends
+    // an attempt to learn what one request already answers.
+    if (await isConfigurable(page, candidate.alias)) continue;
     tried.push(candidate.alias);
 
     await page.goto(`/p/${candidate.alias}`);
@@ -189,8 +403,8 @@ function stripMarketLocalePrefix(path: string): string {
 }
 
 /**
- * Discover a category by resolving a known route pattern.
- * Falls back to fetching the menu and picking the first category link.
+ * The first category in the tenant's main menu, measured stable over four
+ * reads — unlike the product endpoint, this one needs no sort.
  *
  * Returns alias with `/c/` type prefix (e.g. `c/material`) so tests can
  * navigate with `page.goto(`/${category.alias}`)`.
@@ -272,10 +486,18 @@ export async function login(
 /**
  * Navigate to a product's PDP and add it to cart by clicking the add-to-cart button.
  *
+ * `quantity` steps the PDP's quantity control before the click, so the cart
+ * holds a known number rather than one of everything — the only way a line
+ * sum (quantity x unit price) is a real multiplication.
+ *
  * Because hydration mismatch patching can leave event handlers temporarily
  * unattached, we retry the click up to 3 times if the cart drawer doesn't open.
  */
-export async function addToCart(page: Page, productAlias: string) {
+export async function addToCart(
+  page: Page,
+  productAlias: string,
+  quantity = 1,
+) {
   await page.goto(`/p/${productAlias}`);
   await page.waitForLoadState('load');
   await waitForHydration(page);
@@ -284,6 +506,22 @@ export async function addToCart(page: Page, productAlias: string) {
   await expect(addButton).toBeVisible({ timeout: 20000 });
   await expect(addButton).toBeEnabled({ timeout: 10000 });
   await addButton.scrollIntoViewIfNeeded();
+
+  if (quantity > 1) {
+    const field = page.locator('[data-testid="quantity-input"]').first();
+    const amount = field.locator('input');
+    const increment = field.locator('button:last-of-type');
+    for (let step = 1; step < quantity; step++) {
+      await increment.click();
+    }
+    // The control is capped at the SKU's stock, so a silent stop short of the
+    // asked-for number would send a different quantity than the test asserts.
+    await expect(
+      amount,
+      `the PDP quantity control did not reach ${quantity} for "${productAlias}" ` +
+        `— stock caps it at its max`,
+    ).toHaveValue(String(quantity));
+  }
 
   const drawer = page.locator('[data-testid="cart-drawer"]');
 
@@ -351,6 +589,299 @@ export async function addToCart(page: Page, productAlias: string) {
 }
 
 /**
+ * One cart line, in the numbers the cart APIs computed for it. Both VAT sides:
+ * the cart surfaces follow the buyer's `vat_display` preference, the checkout
+ * is pinned to inc-VAT, and each must be compared against its own side.
+ */
+export interface ApiCartLine {
+  /** Identifies the line against an order's, which is where the two are paired. */
+  skuId: number;
+  /** Rendered on the order detail page, so it pairs a screen row with an API row. */
+  articleNumber: string;
+  quantity: number;
+  unitPriceExVat: number;
+  unitPriceIncVat: number;
+  totalPriceExVat: number;
+  totalPriceIncVat: number;
+}
+
+/** The cart `/api/cart` reports, as numbers. */
+export interface ApiCart {
+  subTotalExVat: number;
+  subTotalIncVat: number;
+  totalExVat: number;
+  totalIncVat: number;
+  vat: number;
+  /**
+   * The shipping fee as the API formats it, `''` until a shipping option is
+   * selected. A string rather than a number: before checkout there is no fee
+   * to compare against, and the surfaces render a fallback instead.
+   */
+  shippingFeeFormatted: string;
+  discountIncVat: number;
+  items: ApiCartLine[];
+}
+
+/**
+ * The cart the server computed, read through the same endpoint the page uses.
+ *
+ * The cart is identified by the `cart_id` cookie (`shared/constants/storage.ts`),
+ * not by the signed-in account, so this reads the caller's own cart and two
+ * tests never see each other's. Every number is asserted finite before it is
+ * returned: a helper that hands back `undefined` turns the assertions built on
+ * it into a comparison of two undefineds, which passes.
+ */
+export async function fetchCart(page: Page): Promise<ApiCart> {
+  const cartId = (await page.context().cookies()).find(
+    (cookie) => cookie.name === 'cart_id',
+  )?.value;
+  expect(
+    cartId,
+    'no cart_id cookie — nothing reached the cart, so there is no cart to read',
+  ).toBeTruthy();
+
+  const response = await page.request.get('/api/cart', {
+    params: { cartId: cartId! },
+  });
+  expect(response.ok(), '/api/cart did not answer 200').toBe(true);
+
+  const body = await response.json();
+  const summary = body?.summary;
+
+  const cart: ApiCart = {
+    subTotalExVat: summary?.subTotal?.sellingPriceExVat,
+    subTotalIncVat: summary?.subTotal?.sellingPriceIncVat,
+    totalExVat: summary?.total?.sellingPriceExVat,
+    totalIncVat: summary?.total?.sellingPriceIncVat,
+    vat: summary?.total?.vat,
+    shippingFeeFormatted: summary?.shipping?.feeIncVatFormatted ?? '',
+    discountIncVat: summary?.fixedAmountDiscountIncVat,
+    items: (body?.items ?? []).map(
+      (item: {
+        skuId?: number;
+        product?: { articleNumber?: string };
+        quantity?: number;
+        unitPrice?: { sellingPriceExVat?: number; sellingPriceIncVat?: number };
+        totalPrice?: {
+          sellingPriceExVat?: number;
+          sellingPriceIncVat?: number;
+        };
+      }) => ({
+        skuId: item.skuId,
+        articleNumber: item.product?.articleNumber,
+        quantity: item.quantity,
+        unitPriceExVat: item.unitPrice?.sellingPriceExVat,
+        unitPriceIncVat: item.unitPrice?.sellingPriceIncVat,
+        totalPriceExVat: item.totalPrice?.sellingPriceExVat,
+        totalPriceIncVat: item.totalPrice?.sellingPriceIncVat,
+      }),
+    ),
+  };
+
+  for (const [field, value] of Object.entries(cart)) {
+    if (field === 'shippingFeeFormatted' || field === 'items') continue;
+    expect(
+      Number.isFinite(value),
+      `cart summary ${field} is not a number: ${JSON.stringify(value)}`,
+    ).toBe(true);
+  }
+  expect(
+    typeof cart.shippingFeeFormatted,
+    'the shipping fee arrived as something other than a string',
+  ).toBe('string');
+  expect(cart.items.length, '/api/cart reports no lines').toBeGreaterThan(0);
+  for (const [index, line] of cart.items.entries()) {
+    for (const [field, value] of Object.entries(line)) {
+      if (field === 'articleNumber') {
+        expect(
+          value,
+          `cart line ${index} carries no article number, so it cannot be paired with an order line`,
+        ).toBeTruthy();
+        continue;
+      }
+      expect(
+        Number.isFinite(value),
+        `cart line ${index} ${field} is not a number: ${JSON.stringify(value)}`,
+      ).toBe(true);
+    }
+  }
+
+  return cart;
+}
+
+/** One order line, in the numbers the orders API computed for it. */
+export interface ApiOrderLine {
+  /** Identifies the line against a cart's, which is where the two are paired. */
+  skuId: number;
+  /** Rendered in the article-number cell, so it pairs a screen row with this one. */
+  articleNumber: string;
+  quantity: number;
+  unitPriceIncVat: number;
+  totalPriceIncVat: number;
+}
+
+/**
+ * One order as the orders API reports it, inc-VAT throughout.
+ *
+ * Inc-VAT because that is the only mode the portal's order surfaces render:
+ * the list shows `sellingPriceIncVatFormatted` and every value on the detail
+ * page is an inc-VAT or VAT string, with no ex-VAT cell anywhere. `totalExVat`
+ * is carried so the three can be checked against each other on the API side,
+ * which is the only place ex-VAT exists.
+ */
+export interface ApiOrder {
+  publicId: string;
+  subTotalIncVat: number;
+  totalIncVat: number;
+  totalExVat: number;
+  vat: number;
+  /**
+   * The shipping fee as the API formats it, `''` when no option was priced —
+   * which is every order on the account today. A string rather than a number
+   * for the same reason as the cart's: there is no fee to compare against and
+   * the surface renders the empty string.
+   */
+  shippingFeeFormatted: string;
+  /** The order-level total, alongside the cart summary's. Both are sent today. */
+  orderTotalIncVat: number | undefined;
+  items: ApiOrderLine[];
+}
+
+/** One order, read through the endpoint the detail page fetches. */
+export async function fetchOrder(
+  page: Page,
+  publicId: string,
+): Promise<ApiOrder> {
+  const response = await page.request.get(`/api/orders/${publicId}`);
+  expect(response.ok(), `/api/orders/${publicId} did not answer 200`).toBe(
+    true,
+  );
+
+  const order = (await response.json())?.order;
+  const summary = order?.cart?.summary;
+
+  const result: ApiOrder = {
+    publicId,
+    subTotalIncVat: summary?.subTotal?.sellingPriceIncVat,
+    totalIncVat: summary?.total?.sellingPriceIncVat,
+    totalExVat: summary?.total?.sellingPriceExVat,
+    vat: summary?.total?.vat,
+    shippingFeeFormatted: summary?.shipping?.feeIncVatFormatted ?? '',
+    orderTotalIncVat: order?.orderTotal?.sellingPriceIncVat,
+    items: (order?.cart?.items ?? []).map(
+      (item: {
+        skuId?: number;
+        product?: { articleNumber?: string };
+        quantity?: number;
+        unitPrice?: { sellingPriceIncVat?: number };
+        totalPrice?: { sellingPriceIncVat?: number };
+      }) => ({
+        skuId: item.skuId,
+        articleNumber: item.product?.articleNumber,
+        quantity: item.quantity,
+        unitPriceIncVat: item.unitPrice?.sellingPriceIncVat,
+        totalPriceIncVat: item.totalPrice?.sellingPriceIncVat,
+      }),
+    ),
+  };
+
+  for (const field of [
+    'subTotalIncVat',
+    'totalIncVat',
+    'totalExVat',
+    'vat',
+  ] as const) {
+    expect(
+      Number.isFinite(result[field]),
+      `order ${publicId} summary ${field} is not a number: ${JSON.stringify(result[field])}`,
+    ).toBe(true);
+  }
+  expect(
+    typeof result.shippingFeeFormatted,
+    `order ${publicId} shipping fee arrived as something other than a string`,
+  ).toBe('string');
+  expect(
+    result.items.length,
+    `order ${publicId} reports no lines`,
+  ).toBeGreaterThan(0);
+  for (const [index, line] of result.items.entries()) {
+    for (const [field, value] of Object.entries(line)) {
+      if (field === 'articleNumber') {
+        expect(
+          value,
+          `order ${publicId} line ${index} carries no article number, so it cannot be paired with a cart line`,
+        ).toBeTruthy();
+        continue;
+      }
+      expect(
+        Number.isFinite(value),
+        `order ${publicId} line ${index} ${field} is not a number: ${JSON.stringify(value)}`,
+      ).toBe(true);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Twelve, from the oldest end: of the 26 orders on the account the first with
+ * several lines is 16th from the newest end and the first unrounded 18th, but
+ * 2nd and 4th from the oldest. New orders arrive at the new end.
+ */
+const ORDERS_READ_IN_FULL = 12;
+
+/**
+ * The oldest {@link ORDERS_READ_IN_FULL} orders the account owns, each read in
+ * full.
+ *
+ * The list endpoint carries only the inc-VAT total and no lines, so choosing
+ * an order by what it contains means reading each one. It is deliberately not
+ * memoised: an order placed during the run would make a cached list describe
+ * a different account than the one on screen.
+ *
+ * Sorted on `createdAt` rather than the order the endpoint returns, which
+ * nothing asserts.
+ *
+ * Pick from the result by property — most lines, a total that does not
+ * terminate in two decimals — never by a fixed id. The account is reseeded
+ * from time to time and a hardcoded order is a test that rots silently.
+ */
+export async function fetchOrders(
+  page: Page,
+  limit = ORDERS_READ_IN_FULL,
+): Promise<ApiOrder[]> {
+  const response = await page.request.get('/api/orders');
+  expect(response.ok(), '/api/orders did not answer 200').toBe(true);
+
+  const orders: { publicId?: string; createdAt?: string }[] =
+    (await response.json())?.orders ?? [];
+  expect(
+    orders.length,
+    'the test account owns no orders, so there is nothing to compare against',
+  ).toBeGreaterThan(0);
+  for (const order of orders) {
+    expect(
+      order.publicId,
+      'an order arrived without a publicId, which is the key the detail endpoint takes',
+    ).toBeTruthy();
+    expect(
+      order.createdAt,
+      'an order arrived without a createdAt, so the oldest ones cannot be told apart',
+    ).toBeTruthy();
+  }
+
+  const oldestFirst = [...orders]
+    .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))
+    .slice(0, limit);
+
+  const result: ApiOrder[] = [];
+  for (const order of oldestFirst) {
+    result.push(await fetchOrder(page, order.publicId!));
+  }
+  return result;
+}
+
+/**
  * Fill the login form fields without submitting.
  */
 export async function fillLoginForm(
@@ -403,7 +934,18 @@ export async function expectTestId(page: Page, testId: string) {
 }
 
 /**
- * Collect console errors during a page action, filtering out known noise.
+ * Measured the only console output on the home page in dev (Chromium rejects
+ * the COOP header over http) and none at all against the production build. The
+ * entries dropped from this list — `favicon`, `404`, `Failed to load resource`,
+ * `Content Security Policy` — caught nothing in either mode and all four name
+ * real defects.
+ */
+const EXPECTED_CONSOLE_NOISE = ['Cross-Origin-Opener-Policy'];
+
+/**
+ * Assert an action produces no console errors, through hydration: `goto`
+ * resolves at `domcontentloaded`, before the application runs. `pageerror` too,
+ * which is how WebKit reports an uncaught exception.
  */
 export async function expectNoConsoleErrors(
   page: Page,
@@ -411,50 +953,63 @@ export async function expectNoConsoleErrors(
 ) {
   const errors: string[] = [];
 
-  const handler = (msg: { type: () => string; text: () => string }) => {
+  const onConsole = (msg: { type: () => string; text: () => string }) => {
     if (msg.type() === 'error') {
       errors.push(msg.text());
     }
   };
+  const onPageError = (error: Error) => {
+    errors.push(error.message);
+  };
 
-  page.on('console', handler);
-  await action();
-  page.removeListener('console', handler);
+  page.on('console', onConsole);
+  page.on('pageerror', onPageError);
+  try {
+    await action();
+    await waitForHydration(page);
+  } finally {
+    page.removeListener('console', onConsole);
+    page.removeListener('pageerror', onPageError);
+  }
 
   const critical = errors.filter(
-    (e) =>
-      !e.includes('favicon') &&
-      !e.includes('404') &&
-      !e.includes('Failed to load resource') &&
-      !e.includes('Cross-Origin-Opener-Policy') &&
-      !e.includes('Content Security Policy'),
+    (e) => !EXPECTED_CONSOLE_NOISE.some((noise) => e.includes(noise)),
   );
 
-  expect(critical).toHaveLength(0);
+  expect(
+    critical,
+    `console errors during the action:\n${critical.join('\n')}`,
+  ).toHaveLength(0);
 }
 
 // ---------- Hydration ----------
 
 /**
- * Wait for Nuxt/Vue to hydrate the page.
- * SSR renders static HTML immediately, but event handlers and reactivity
- * are only attached after Vue hydrates on the client. We detect hydration
- * by checking for the `__vue_app__` property on the Nuxt root element,
- * then wait for a tick to allow hydration mismatch patching to complete.
+ * Wait for Nuxt/Vue to hydrate: mounted, then finished patching.
+ *
+ * The timeout belongs in the third argument — `waitForFunction(fn, arg,
+ * options)`. Passed second it set no limit at all: `actionTimeout` is 0.
  */
 export async function waitForHydration(page: Page, timeout = 15000) {
   await page.waitForFunction(
     () => {
       const nuxtRoot = document.getElementById('__nuxt');
-      return !!(
-        nuxtRoot && (nuxtRoot as unknown as Record<string, unknown>).__vue_app__
-      );
+      if (
+        !nuxtRoot ||
+        !(nuxtRoot as unknown as Record<string, unknown>).__vue_app__
+      ) {
+        return false;
+      }
+      const nuxtApp = (
+        window as unknown as {
+          useNuxtApp?: () => { isHydrating?: boolean } | undefined;
+        }
+      ).useNuxtApp?.();
+      return nuxtApp?.isHydrating === false;
     },
+    undefined,
     { timeout },
   );
-
-  // Allow Vue to finish hydration mismatch patching and re-attach event handlers
-  await page.waitForTimeout(300);
 }
 
 // ---------- Viewport ----------
@@ -465,4 +1020,184 @@ export async function setMobileViewport(page: Page) {
 
 export async function setDesktopViewport(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
+}
+
+// ---------- Quotes ----------
+
+/** One quotation line, in the numbers the quotes API computed for it. */
+export interface ApiQuoteLine {
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+/**
+ * One quotation as `/api/quotes/<id>` reports it.
+ *
+ * Inc-VAT throughout, and there is no ex-VAT number anywhere on this path:
+ * every amount maps from `sellingPriceIncVat`. `tax` is the subtotal's VAT
+ * rather than a component of the total, so subtotal + tax + shipping is not
+ * the total and must never be asserted as one.
+ */
+export interface ApiQuote {
+  id: string;
+  subtotal: number;
+  tax: number;
+  shipping: number;
+  total: number;
+  items: ApiQuoteLine[];
+}
+
+/** One quotation as the list endpoint reports it, alongside its rendered row. */
+export interface ApiQuoteListItem {
+  id: string;
+  total: number;
+  itemCount: number;
+}
+
+/** One quotation, read through the endpoint the detail page fetches. */
+export async function fetchQuote(page: Page, id: string): Promise<ApiQuote> {
+  const response = await page.request.get(`/api/quotes/${id}`);
+  expect(response.ok(), `/api/quotes/${id} did not answer 200`).toBe(true);
+
+  const quote = (await response.json())?.quote;
+  const result: ApiQuote = {
+    id,
+    subtotal: quote?.subtotal,
+    tax: quote?.tax,
+    shipping: quote?.shipping,
+    total: quote?.total,
+    items: (quote?.lineItems ?? []).map(
+      (item: {
+        quantity?: number;
+        unitPrice?: number;
+        totalPrice?: number;
+      }) => ({
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+      }),
+    ),
+  };
+
+  for (const field of ['subtotal', 'tax', 'shipping', 'total'] as const) {
+    expect(
+      Number.isFinite(result[field]),
+      `quotation ${id} ${field} is not a number: ${JSON.stringify(result[field])}`,
+    ).toBe(true);
+  }
+  expect(
+    result.items.length,
+    `quotation ${id} reports no lines`,
+  ).toBeGreaterThan(0);
+  for (const [index, line] of result.items.entries()) {
+    for (const [field, value] of Object.entries(line)) {
+      expect(
+        Number.isFinite(value),
+        `quotation ${id} line ${index} ${field} is not a number: ${JSON.stringify(value)}`,
+      ).toBe(true);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * The quotations the signed-in account can read, as the list endpoint sends
+ * them. The list carries a total per quotation but no lines, so it is the
+ * side to compare a list row against — the detail comes from `fetchQuote`.
+ */
+export async function fetchQuoteList(page: Page): Promise<ApiQuoteListItem[]> {
+  const response = await page.request.get('/api/quotes');
+  expect(response.ok(), '/api/quotes did not answer 200').toBe(true);
+
+  const quotes: { id?: string; total?: number; itemCount?: number }[] =
+    (await response.json())?.quotes ?? [];
+  expect(
+    quotes.length,
+    'the test account can read no quotations, so there is nothing to compare against',
+  ).toBeGreaterThan(0);
+
+  return quotes.map((quote) => {
+    expect(
+      quote.id,
+      'a quotation arrived without an id, which is the key the detail endpoint takes',
+    ).toBeTruthy();
+    expect(
+      Number.isFinite(quote.total),
+      `quotation ${quote.id} list total is not a number: ${JSON.stringify(quote.total)}`,
+    ).toBe(true);
+    return {
+      id: quote.id!,
+      total: quote.total!,
+      itemCount: quote.itemCount ?? 0,
+    };
+  });
+}
+
+/**
+ * Every quotation the account can read, each read in full.
+ *
+ * Not memoised, and never picked by a fixed id: the account is reseeded from
+ * time to time, so a quotation is chosen by what it contains — the line whose
+ * unit price needs more than two decimals, the one with a quantity above one.
+ */
+export async function fetchQuotes(page: Page): Promise<ApiQuote[]> {
+  const list = await fetchQuoteList(page);
+  const quotes: ApiQuote[] = [];
+  for (const item of list) {
+    quotes.push(await fetchQuote(page, item.id));
+  }
+  return quotes;
+}
+
+// ---------- Saved lists ----------
+
+/** One product's two prices, as `/api/products/by-aliases` reports them. */
+export interface ApiAliasPrice {
+  alias: string;
+  exVat: number;
+  incVat: number;
+}
+
+/**
+ * The products behind a saved list's aliases, read through the endpoint the
+ * list page itself fetches.
+ *
+ * The endpoint drops an alias it cannot resolve instead of failing the batch
+ * (`getProductsByAliases`), so the caller is told which aliases came back and
+ * can hold the page to the same count — a list that silently lost a member
+ * would otherwise show a lower total that still matches this sum.
+ */
+export async function fetchProductsByAliases(
+  page: Page,
+  aliases: string[],
+): Promise<ApiAliasPrice[]> {
+  const response = await page.request.get('/api/products/by-aliases', {
+    params: { aliases: aliases.join(',') },
+  });
+  expect(response.ok(), '/api/products/by-aliases did not answer 200').toBe(
+    true,
+  );
+
+  const products: {
+    alias?: string;
+    unitPrice?: { sellingPriceExVat?: number; sellingPriceIncVat?: number };
+  }[] = (await response.json())?.products ?? [];
+
+  return products.map((product) => {
+    const price: ApiAliasPrice = {
+      alias: product.alias ?? '',
+      exVat: product.unitPrice?.sellingPriceExVat as number,
+      incVat: product.unitPrice?.sellingPriceIncVat as number,
+    };
+    expect(price.alias, 'a product arrived without an alias').toBeTruthy();
+    for (const field of ['exVat', 'incVat'] as const) {
+      expect(
+        Number.isFinite(price[field]),
+        `${price.alias} ${field} is not a number: ${JSON.stringify(price[field])}`,
+      ).toBe(true);
+    }
+    return price;
+  });
 }

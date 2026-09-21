@@ -120,7 +120,12 @@ function getStatusLabel(status: QuoteStatus): string {
         {{ t('portal.quotations.no_quotations') }}
       </div>
 
-      <template v-else>
+      <!-- One handle for the list, wrapping both responsive shapes below. It
+           sits on the `v-else` rather than around the whole block so its
+           presence still means "the list has rows" — a wrapper that also
+           covered the empty state would match on an empty tenant and assert
+           nothing. -->
+      <div v-else data-testid="quotations-table">
         <!-- Count summary -->
         <p
           data-testid="quotations-count"
@@ -132,7 +137,7 @@ function getStatusLabel(status: QuoteStatus): string {
         </p>
 
         <!-- Mobile card view -->
-        <div class="space-y-3 md:hidden" data-testid="quotations-table">
+        <div class="space-y-3 md:hidden">
           <NuxtLink
             v-for="quote in paginatedQuotes"
             :key="quote.id"
@@ -153,9 +158,11 @@ function getStatusLabel(status: QuoteStatus): string {
             <div class="text-muted-foreground space-y-1 text-sm">
               <div class="flex justify-between">
                 <span>{{ formatDate(quote.createdAt) }}</span>
-                <span class="text-foreground font-medium">{{
-                  quote.totalFormatted
-                }}</span>
+                <span
+                  data-testid="quotation-total"
+                  class="text-foreground font-medium"
+                  >{{ quote.totalFormatted }}</span
+                >
               </div>
               <div>{{ quote.contactName }}</div>
             </div>
@@ -164,7 +171,7 @@ function getStatusLabel(status: QuoteStatus): string {
 
         <!-- Desktop table -->
         <div class="hidden md:block">
-          <table data-testid="quotations-table" class="w-full text-sm">
+          <table class="w-full text-sm">
             <thead>
               <tr class="border-border border-b text-left">
                 <th class="py-3 pr-4 font-medium">
@@ -195,7 +202,9 @@ function getStatusLabel(status: QuoteStatus): string {
                 <td class="py-3 pr-4">{{ quote.quoteNumber || '—' }}</td>
                 <td class="py-3 pr-4">{{ formatDate(quote.createdAt) }}</td>
                 <td class="py-3 pr-4">{{ quote.contactName }}</td>
-                <td class="py-3 pr-4">{{ quote.totalFormatted }}</td>
+                <td data-testid="quotation-total" class="py-3 pr-4">
+                  {{ quote.totalFormatted }}
+                </td>
                 <td class="py-3 pr-4">
                   <span
                     data-testid="quote-status-badge"
@@ -265,7 +274,7 @@ function getStatusLabel(status: QuoteStatus): string {
             {{ t('portal.quotations.pagination.next') }}
           </Button>
         </div>
-      </template>
+      </div>
     </div>
   </PortalShell>
 </template>

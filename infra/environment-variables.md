@@ -61,6 +61,7 @@ These are **non-sensitive configuration values** visible in the repository setti
 | `GEINS_TENANT_API_URL` | _(empty)_                      | Geins Tenant API URL (server-only) | Any valid URL                              |
 | `STORAGE_DRIVER`       | `fs`                           | Storage backend for tenant config  | `memory`, `fs`, `redis`                    |
 | `ENABLE_ANALYTICS`     | `false`                        | Enable client-side analytics       | `true`, `false`                            |
+| `CONFIGURATOR_BACKEND` | `off`                          | Backend for product configuration  | `off`, `fixture`, `sdk`                    |
 | `LOG_LEVEL`            | `info`                         | Server log verbosity               | `debug`, `info`, `warn`, `error`, `silent` |
 | `SENTRY_ORG`           | _(empty)_                      | Sentry organization slug           | Your Sentry org name                       |
 | `SENTRY_PROJECT`       | _(empty)_                      | Sentry project slug                | Your Sentry project name                   |
@@ -70,6 +71,36 @@ These are **non-sensitive configuration values** visible in the repository setti
 - All variables have sensible defaults - only set if you need to override
 - **SENTRY_ORG** and **SENTRY_PROJECT** are only used at **build time** for source map uploads
 - The deploy workflow passes these to Bicep, which converts them to `NUXT_*` format in Azure
+
+### Variables the Workflow Reads Itself
+
+These three are **not** passed to Bicep and never become app settings: `deploy.yml` and
+`rollback.yml` read them to decide where to check that a release is ready, before and after the
+production slot swap. Nothing in the running app sees them, and changing one restarts nothing.
+
+| Variable                | Value                                                          | Read by                                                                                                      |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `SWAP_READINESS_HOST`   | bare hostname, no scheme, e.g. `<tenant>.staging.litium.store` | the readiness check on the staging slot before the swap, and the slot's build id a rollback compares against |
+| `SWAP_VERIFY_HOST`      | bare hostname, no scheme, e.g. `<tenant>.litium.store`         | the verification of production, after a swap or a rollback                                                   |
+| `SWAP_VERIFY_TENANT_ID` | the tenant id `/api/config` reports on those hostnames         | the identity assertion in every one of those checks                                                          |
+
+- **A missing value stops the run.** The first step of the prod deploy job, and of the rollback
+  job, names the variable that is not set and where to set it. Readiness is never skipped and never
+  defaulted: a check that quietly does nothing is worse than no check, because the run still says
+  success.
+- **Change them** when the hostname the release is verified on changes, when the verification moves
+  to another tenant, or when a new environment gets a slot of its own.
+- The hostnames must carry no `https://`; the workflow builds the URL.
+
+Two things are deliberately **not** variables:
+
+- **The TTFB budget** (`TTFB_BUDGET_MS`, in `deploy.yml`'s `env:`) is a literal. It defines what
+  "ready" means, and moving that bar should show up in a reviewed diff rather than in a settings
+  field with no history.
+- **The pages that get rendered** are looked up at run time from `/api/__sitemap__/urls`, not
+  listed anywhere. A listed category path would tie the release gate to the catalogue: rename or
+  unpublish that category and a healthy deploy fails for a reason that has nothing to do with the
+  deploy.
 
 ---
 
@@ -87,7 +118,11 @@ The `deploy.yml` workflow passes GitHub variables to Bicep, which sets these in 
 | `NUXT_STORAGE_DRIVER`            | `vars.STORAGE_DRIVER`             | `runtimeConfig.storage.driver`            |
 | `NUXT_STORAGE_REDIS_URL`         | `secrets.REDIS_URL`               | `nitro.storage.kv` (build time)           |
 | `NUXT_PUBLIC_FEATURES_ANALYTICS` | `vars.ENABLE_ANALYTICS`           | `runtimeConfig.public.features.analytics` |
+| `NUXT_CONFIGURATOR_BACKEND`      | `vars.CONFIGURATOR_BACKEND`       | `runtimeConfig.configurator.backend`      |
 | `NUXT_SENTRY_DSN`                | `secrets.SENTRY_DSN`              | `runtimeConfig.sentry.dsn` (server-only)  |
+| `SENTRY_ENVIRONMENT`             | Set by Bicep based on environment | `process.env.SENTRY_ENVIRONMENT`          |
+| `NUXT_PUBLIC_SENTRY_ENVIRONMENT` | Set by Bicep based on environment | `runtimeConfig.public.sentry.environment` |
+| `NUXT_PUBLIC_SENTRY_DSN`         | `secrets.SENTRY_DSN`              | `runtimeConfig.public.sentry.dsn`         |
 | `NITRO_HOST`                     | Hardcoded `0.0.0.0`               | Required for Azure containers             |
 | `NITRO_PORT`                     | Hardcoded `3000`                  | Container port                            |
 | `WEBSITES_PORT`                  | Hardcoded `3000`                  | Azure port mapping                        |
@@ -103,7 +138,18 @@ NUXT_API_SECRET                   →  apiSecret
 NUXT_GEINS_API_ENDPOINT           →  geins.apiEndpoint
 NUXT_STORAGE_DRIVER               →  storage.driver
 NUXT_SENTRY_DSN                   →  sentry.dsn (server-only)
+NUXT_PUBLIC_SENTRY_DSN            →  public.sentry.dsn
 ```
+
+The mapping only fires for keys that already exist in `runtimeConfig`. Nitro's
+`applyEnv` walks the declared object and overrides what it finds; it never
+creates a missing key. An env var for an undeclared nested key is read and
+silently discarded, with no warning — which is why `public.sentry` is declared
+with empty defaults rather than left out.
+
+`SENTRY_ENVIRONMENT` is the exception that carries no prefix: it is read
+straight from `process.env` in `sentry.server.config.ts`, which runs before the
+Nuxt runtime config exists.
 
 **Without the `NUXT_` prefix, Nuxt ignores the variable at runtime!**
 
@@ -175,9 +221,14 @@ Copy the output values for the next step.
 - [ ] `GEINS_TENANT_API_URL` - Geins Tenant API URL
 - [ ] `STORAGE_DRIVER` - Set to `redis` for production
 - [ ] `ENABLE_ANALYTICS` - Set to `true` if needed
+- [ ] `CONFIGURATOR_BACKEND` - Set to `fixture` on an environment that should serve product
+      configuration. An unset variable arrives as an empty string, which reads as `off`.
 - [ ] `LOG_LEVEL` - Adjust as needed (`silent` to disable all logging)
 - [ ] `SENTRY_ORG` - If using Sentry
 - [ ] `SENTRY_PROJECT` - If using Sentry
+- [ ] `SWAP_READINESS_HOST`, `SWAP_VERIFY_HOST`, `SWAP_VERIFY_TENANT_ID` - Required for a prod
+      deploy and for a rollback; read by the workflows, not passed to Bicep. See "Variables the
+      Workflow Reads Itself"
 
 ### 5. GitHub Environments
 

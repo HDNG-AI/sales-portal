@@ -313,6 +313,70 @@
     "height": "Height",
     "weight": "Weight"
   },
+  "configurator": {
+    "required": "Required",
+    "read_only": "Set by the configuration",
+    "unavailable": "Not available with your current choices",
+    "bounds": "{min}–{max} {unit}",
+    "optional": "Optional",
+    "measurements": "Measurements & variables",
+    "choose_many": "Choose none or more",
+    "quantity": "Quantity",
+    "show_all": "Show all {count} options",
+    "choose_in_group": "Choose {name}",
+    "search": "Search…",
+    "no_matches": "No matches.",
+    "bounds_narrowed": "limit adjusted by an earlier choice",
+    "summary": {
+      "none": "nothing chosen",
+      "many": "{count} chosen"
+    },
+    "yes": "Yes",
+    "no": "No",
+    "commit": "Complete configuration",
+    "starting": "Starting the configuration…",
+    "failed": "Something went wrong. Reload the page and try again.",
+    "configure_product": "Configure product",
+    "product_configuration": "Product configuration",
+    "reset": "Reset",
+    "sections": "Sections",
+    "remaining": "{count} left",
+    "previous": "Previous",
+    "next": "Next",
+    "section_position": "Section {current} of {total}",
+    "page_note": "This is a configurable product. Build your variant under {tab} below — price and validity are calculated as you go.",
+    "severity": {
+      "error": "Error",
+      "warning": "Warning"
+    },
+    "committed": {
+      "heading": "The configuration is complete",
+      "unit_price": "Unit price"
+    },
+    "panel": {
+      "valid": "The configuration is complete and can be ordered.",
+      "invalid": "Missing before you can continue: {items}.",
+      "invalid_unspecified": "The configuration is not complete.",
+      "recomputing": "Recalculating…",
+      "time_left": "{time} left",
+      "renew": "Extend session",
+      "renew_failed": "The session could not be extended.",
+      "expired": "The configuration session has expired.",
+      "start_over": "Start over",
+      "title": "Specification",
+      "prices_ex_vat": "prices excl. VAT",
+      "customer_type": {
+        "person": "Private customer",
+        "organization": "Business customer"
+      },
+      "net_price": "Net price",
+      "quantity_suffix": "{count} pcs",
+      "indicative": "Indicative price. The price is confirmed in the quotation.",
+      "copy": "Copy specification",
+      "copied": "Copied",
+      "copy_quantity": "Quantity: {count} pcs"
+    }
+  },
   "account": {
     "my_account": "My Account",
     "profile": "Profile",

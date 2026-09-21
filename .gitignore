@@ -63,3 +63,12 @@ playwright/.auth/
 
 # Local copy of the admin-write endpoint's secret — never commit
 admin-secret.txt
+
+# Compiled ARM output from `pnpm infra:validate:build` (az bicep build writes <name>.json
+# next to each template); infra/modules holds only Bicep, so any .json there is build output
+infra/main.json
+infra/modules/*.json
+
+# Stryker mutation testing (sandbox and report output)
+.stryker-tmp
+reports/mutation/

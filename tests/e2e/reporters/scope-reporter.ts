@@ -27,16 +27,33 @@ import type {
  */
 
 // Mirrors ScopeReason in tests/e2e/helpers.ts. The reporter is loaded by
-// Playwright before the specs, so it keeps its own copy of the list.
+// Playwright before the specs, so it keeps its own copy of the list — which
+// means the vocabulary lives in two files and a new reason has to be added to
+// both, or a declared skip reads as undeclared and fails the run.
 const SCOPE_REASONS = [
   'no-credentials',
   'mobile-project',
   'dev-server',
   'fixture-missing',
   'tenant-config',
+  'remote-target',
+  'feature-hidden',
+  'mutation-gate',
 ] as const;
 const DECLARED = new RegExp(`^(${SCOPE_REASONS.join('|')}): `);
 const SCOPE_NOTE_ANNOTATION = 'scope';
+
+/**
+ * Declared `fixture-missing` skips a run is allowed to contain. Zero because
+ * every one of them names data the test tenant is supposed to hold, so one
+ * appearing means the tenant lost it and a green run is proving less than the
+ * run before it. Measured on a full three-project run 2026-09-13: 0.
+ *
+ * Edit this deliberately, never to make a run pass. Other reasons are not
+ * capped: `mobile-project` is permanent by design, and raising a total would
+ * be the same number drifting upwards unread.
+ */
+const EXPECTED_FIXTURE_MISSING = 0;
 
 interface ScopedTest {
   reason: string;
@@ -51,7 +68,11 @@ class ScopeReporter implements Reporter {
     this.suite = suite;
   }
 
-  onEnd(result: FullResult): { status?: FullResult['status'] } | undefined {
+  // Playwright's `onEnd` accepts a status object only through a promise —
+  // returning one synchronously does not satisfy the interface.
+  async onEnd(
+    result: FullResult,
+  ): Promise<{ status?: FullResult['status'] } | undefined> {
     const failedProjects = new Set<string>();
     for (const test of this.suite.allTests()) {
       if (
@@ -101,6 +122,12 @@ class ScopeReporter implements Reporter {
       }
     }
 
+    // Both lists: a declaration moved from a skip to a note still narrows the
+    // run, and must not slip under the cap by changing shape.
+    const fixtureMissing = [...outOfScope, ...partial].filter(
+      (e) => e.reason === 'fixture-missing',
+    ).length;
+
     const lines: string[] = ['', 'Declared scope'];
 
     if (outOfScope.length) {
@@ -129,6 +156,11 @@ class ScopeReporter implements Reporter {
       );
       for (const title of unknown) lines.push(`    ${title}`);
     }
+    if (fixtureMissing > EXPECTED_FIXTURE_MISSING) {
+      lines.push(
+        `  fixture-missing: ${fixtureMissing}, expected at most ${EXPECTED_FIXTURE_MISSING} — the tenant lost data the suite asserts on`,
+      );
+    }
     if (
       outOfScope.length + partial.length + blocked.size + unknown.length ===
       0
@@ -138,8 +170,15 @@ class ScopeReporter implements Reporter {
 
     console.log(lines.join('\n'));
 
-    if (unknown.length && result.status === 'passed') {
-      console.log('\nRun failed: undeclared skips.');
+    const failures: string[] = [];
+    if (unknown.length) failures.push('undeclared skips');
+    if (fixtureMissing > EXPECTED_FIXTURE_MISSING) {
+      failures.push(
+        `fixture-missing above the cap (${fixtureMissing} > ${EXPECTED_FIXTURE_MISSING})`,
+      );
+    }
+    if (failures.length && result.status === 'passed') {
+      console.log(`\nRun failed: ${failures.join('; ')}.`);
       return { status: 'failed' };
     }
     return undefined;

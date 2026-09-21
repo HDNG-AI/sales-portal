@@ -116,7 +116,7 @@ describe('LayoutHeaderTopbar', () => {
     expect(contactAnchor.exists()).toBe(false);
   });
 
-  it('does not render the account-application anchor in the utility topbar', () => {
+  it('does not render the applyForAccount anchor in the utility topbar', () => {
     authStoreState.isAuthenticated = false;
     applyToRef.value = '/se/sv/ansok-om-konto';
     applyResolvedRef.value = true;

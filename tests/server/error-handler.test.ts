@@ -77,13 +77,11 @@ function makeEvent(
       ? undefined
       : (overrides.correlationId ?? 'corr-abc');
   const tenantId =
-    overrides.tenantId === null
-      ? undefined
-      : (overrides.tenantId ?? 'boattools');
+    overrides.tenantId === null ? undefined : (overrides.tenantId ?? 'example');
   const hostname =
     overrides.hostname === null
       ? undefined
-      : (overrides.hostname ?? 'boattools.litium.store');
+      : (overrides.hostname ?? 'example.litium.store');
   return {
     method: 'GET',
     path: '/se/sv/',
@@ -112,7 +110,17 @@ function makeEvent(
 }
 
 function run(event: MockEvent, error: Error & { statusCode?: number }) {
-  errorHandler(error, event as unknown as Parameters<typeof errorHandler>[1]);
+  // Nitro passes a third argument carrying its own fallback renderer. Ours
+  // never delegates, so the stub throws if that ever changes.
+  errorHandler(
+    error as Parameters<typeof errorHandler>[0],
+    event as unknown as Parameters<typeof errorHandler>[1],
+    {
+      defaultHandler: () => {
+        throw new Error('errorHandler delegated to the Nitro default handler');
+      },
+    },
+  );
 }
 
 // --- Tests ---------------------------------------------------------------
@@ -138,15 +146,15 @@ describe('renderErrorHtml', () => {
       statusMessage: 'Internal Server Error',
       message: 'Nuxt I18n server context has not been set up yet.',
       correlationId: 'abc-123',
-      tenantId: 'boattools',
-      hostname: 'boattools.litium.store',
+      tenantId: 'example',
+      hostname: 'example.litium.store',
     });
     expect(html).toContain('500');
     expect(html).toContain('Something went wrong');
     expect(html).toContain('Reference ID:');
     expect(html).toContain('abc-123');
     expect(html).toContain('Tenant:');
-    expect(html).toContain('boattools');
+    expect(html).toContain('example');
     expect(html).toContain('Nuxt I18n server context has not been set up yet.');
   });
 
@@ -168,8 +176,8 @@ describe('renderErrorHtml', () => {
       statusMessage: 'Not Found',
       message: 'Not Found',
       correlationId: undefined,
-      tenantId: 'boattools',
-      hostname: 'boattools.litium.store',
+      tenantId: 'example',
+      hostname: 'example.litium.store',
     });
     expect(html).toContain('Page not found');
     expect(html).not.toContain('Reference ID');
@@ -255,8 +263,8 @@ describe('renderErrorHtml', () => {
       statusMessage: 'Not Found',
       message: 'Not Found',
       correlationId: 'x',
-      tenantId: 'tenant-a',
-      hostname: 'tenant-a.example',
+      tenantId: 'alpha',
+      hostname: 'alpha.example',
       themeName: 'teal',
       themeCss:
         "[data-theme='teal'] { --primary: #006f72; --button-background: #006f72; }",
@@ -313,7 +321,7 @@ describe('errorHandler (Nitro integration)', () => {
       'Nuxt I18n server context has not been set up yet.',
     );
     expect(event.node.res.body).toContain('corr-abc');
-    expect(event.node.res.body).toContain('boattools');
+    expect(event.node.res.body).toContain('example');
   });
 
   it('returns JSON when Accept does not include text/html', () => {
@@ -328,8 +336,8 @@ describe('errorHandler (Nitro integration)', () => {
       statusCode: 500,
       message: 'boom',
       correlationId: 'corr-abc',
-      tenantId: 'boattools',
-      hostname: 'boattools.litium.store',
+      tenantId: 'example',
+      hostname: 'example.litium.store',
     });
     expect(parsed.stack).toBeUndefined();
   });
@@ -367,7 +375,7 @@ describe('errorHandler (Nitro integration)', () => {
     run(event, err);
 
     expect(event.node.res.headers['x-correlation-id']).toBe('corr-abc');
-    expect(event.node.res.headers['x-tenant-id']).toBe('boattools');
+    expect(event.node.res.headers['x-tenant-id']).toBe('example');
   });
 
   it('omits tenant headers when tenant context was never set', () => {
@@ -436,7 +444,7 @@ describe('errorHandler (Nitro integration)', () => {
       expect.objectContaining({ message: 'kaboom' }),
       expect.objectContaining({
         correlationId: 'corr-abc',
-        tenantId: 'boattools',
+        tenantId: 'example',
       }),
     );
   });
@@ -617,7 +625,7 @@ describe('buildErrorResponse (unregistered hostname)', () => {
       const event = makeEvent({
         accept: 'application/json',
         tenantResolution:
-          '[tenant] resolve host=boattools.litium.store kv=hit api=skipped outcome=resolved tenant=boattools',
+          '[tenant] resolve host=example.litium.store kv=hit api=skipped outcome=resolved tenant=example',
       });
       const response = buildErrorResponse(
         event as unknown as Parameters<typeof buildErrorResponse>[0],
@@ -625,5 +633,107 @@ describe('buildErrorResponse (unregistered hostname)', () => {
       );
       expect(JSON.parse(response.body).resolution).toBeUndefined();
     });
+  });
+});
+
+// The plugin refuses a loopback host with this input in development; the page
+// is instructions rather than a report, so it drops the status code, the
+// buttons and the diagnostics block.
+describe('buildErrorResponse (development setup page)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadConfig.mockReturnValue({ debugErrors: false });
+    mockIsDevMode.mockReturnValue(true);
+  });
+
+  const setup = {
+    statusCode: 404,
+    statusMessage: 'Not Found',
+    message:
+      'localhost does not name a store. Open http://<name>.litium.test:3000 instead.',
+    isDevSetup: true,
+  };
+
+  function render(accept: string) {
+    const event = makeEvent({ accept, tenantId: null, hostname: 'localhost' });
+    return buildErrorResponse(
+      event as unknown as Parameters<typeof buildErrorResponse>[0],
+      setup,
+    );
+  }
+
+  it('carries the three steps and the setup title', () => {
+    const body = render('text/html').body;
+
+    expect(body).toContain('The dev server is running. Now pick a store.');
+    expect(body).toContain('http://&lt;name&gt;.litium.test:3000');
+    expect(body).toContain('pnpm local:setup');
+    expect(body).toContain('pnpm local:dev');
+    expect(body).toContain('pnpm local:stop');
+    expect((body.match(/<li>/g) ?? []).length).toBe(3);
+  });
+
+  // `pnpm local:dev` forwards port 80 only and the dev server is http; the
+  // certificate belongs to the production build under E2E_PROD.
+  it('promises no https and no port 443', () => {
+    const body = render('text/html').body;
+
+    expect(body).not.toContain('443');
+    expect(body).not.toContain('https://');
+  });
+
+  it('drops the status code, the buttons and the diagnostics block', () => {
+    const body = render('text/html').body;
+
+    expect(body).not.toContain('class="code"');
+    expect(body).not.toContain('class="btns"');
+    expect(body).not.toContain('class="diag"');
+    expect(body).not.toContain('corr-abc');
+    expect(body).toContain(
+      '<title>The dev server is running. Now pick a store.</title>',
+    );
+  });
+
+  // The page is the same for everyone: `<name>` is the placeholder the
+  // developer fills in, and no tenant hostname or id may reach it.
+  it('names no tenant', () => {
+    const body = render('text/html').body;
+    const hosts = body.match(/[\w-]+\.litium\.(store|test)/g) ?? [];
+
+    expect(hosts).toEqual([]);
+    expect(body).toContain('.litium.store');
+  });
+
+  it('answers a non-browser client with the one-line message', () => {
+    const response = render('application/json');
+
+    expect(JSON.parse(response.body)).toMatchObject({
+      statusCode: 404,
+      message: setup.message,
+      hostname: 'localhost',
+    });
+  });
+
+  // The plugin's branch is compiled away in a production build, so nothing
+  // can set the flag there. Gating the render on the same constant is what
+  // keeps the copy out of the shipped bundle rather than leaving it as
+  // unreachable strings; this pins that the second gate stays.
+  it('production build: falls back to the generic copy, page carries no setup text', () => {
+    mockIsDevMode.mockReturnValue(false);
+    const body = render('text/html').body;
+
+    expect(body).not.toContain('The dev server is running');
+    expect(body).not.toContain('pnpm local:setup');
+    expect(body).toContain('Page not found');
+    expect(body).toContain('class="code"');
+  });
+
+  it('does not log; the setup page is not an error', async () => {
+    const { logger: importedLogger } =
+      await import('../../server/utils/logger');
+    render('text/html');
+
+    expect(importedLogger.error).not.toHaveBeenCalled();
+    expect(importedLogger.warn).not.toHaveBeenCalled();
   });
 });
