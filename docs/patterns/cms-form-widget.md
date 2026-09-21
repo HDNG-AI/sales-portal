@@ -89,9 +89,13 @@ in Geins Studio and rendered by the existing `app/pages/[...slug].vue`
 catch-all route. The form is a JSON form widget inside the page, routed
 by `JsonWidget` to `FormWidget`.
 
-There is no separate `/contact` route. Navigation links straight to
-`/contact-form` (the header topbar uses `localePath('/contact-form')`),
-so `/contact-form` is the single canonical contact URL.
+There is no separate `/contact` route, and nothing links to the slug
+literally: `/contact-form` is one of the five literals the ESLint rule in
+`eslint.config.mjs` forbids passing to `localePath` or `navigateTo`, per
+ADR-021. The header topbar resolves the page by CMS tag —
+`useCmsPageLink(CMS_TAGS.CONTACT_PAGE)` in
+`app/components/layout/header/LayoutHeaderTopbar.vue` — and renders the
+link only once it resolves. See `docs/patterns/cms-page-link.md`.
 
 There is no `CONTACT_FORM` CMS slot. No `DEFAULT_CMS_CONFIG` seed is
 needed: the page renders as an ordinary CMS page via the catch-all,
