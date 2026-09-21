@@ -4,7 +4,11 @@
  * browser. Anchoring to the tenant's timezone keeps "which day" a single,
  * agreed fact for a business record — the server-OS-dependent version of
  * this shifted the displayed date depending on where the process happened
- * to run. See docs/adr/023-tenant-operating-timezone.md.
+ * to run. See docs/adr/024-tenant-operating-timezone.md.
+ *
+ * `timezone` is optional because the tenant field is: unset means the
+ * option is omitted entirely and Intl formats in the runtime's own zone,
+ * which is the behaviour a tenant that never set one already has.
  *
  * Deliberately not for deadline/cutoff-style timestamps ("order before
  * 14:00") — those are more useful converted to the viewer's own clock,
@@ -12,7 +16,7 @@
  */
 export function formatTenantDate(
   dateStr: string | number | null | undefined,
-  timezone: string,
+  timezone: string | undefined,
   locale = 'sv-SE',
 ): string {
   if (dateStr == null) return '-';
@@ -21,7 +25,7 @@ export function formatTenantDate(
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-      timeZone: timezone,
+      ...(timezone ? { timeZone: timezone } : {}),
     });
   } catch {
     return String(dateStr);

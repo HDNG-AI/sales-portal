@@ -520,10 +520,8 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     geinsSettings: merged.geinsSettings,
     mode: merged.mode,
     checkoutMode: merged.checkoutMode,
-    // Defensive fallback, not just the schema default — this function also
-    // runs on hand-built configs that never go through
-    // StoreSettingsSchema.parse().
-    timezone: merged.timezone ?? 'UTC',
+    // Preserve an explicitly configured timezone; leave it unset otherwise.
+    timezone: merged.timezone,
     theme,
     branding,
     features,
@@ -787,6 +785,11 @@ export function parseStoreSettingsResilient(
     contact: null,
     overrides: null,
     cms: undefined,
+    // Presentation config: a malformed value must degrade to unset, not fail
+    // the parse. Without an entry the issue path is a single segment, which
+    // skips the leaf-strip branch and returns null — and a null resolution is
+    // negative-cached, so one bad date field takes a storefront down.
+    timezone: undefined,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -1102,20 +1105,6 @@ export async function resolvePreviewTenant(
 // ---------------------------------------------------------------------------
 
 /**
- * Backfills `timezone` on a config read straight from KV. A raw read isn't
- * re-validated against the schema, so a record stored before this field
- * existed comes back without it — used by every call site that returns a
- * stored config directly rather than through buildTenantConfig(). See
- * docs/adr/023-tenant-operating-timezone.md.
- */
-export function withTenantConfigDefaults(config: TenantConfig): TenantConfig {
-  return {
-    ...config,
-    timezone: config.timezone ?? 'UTC',
-  };
-}
-
-/**
  * Retrieves a tenant config directly by tenantId (no hostname lookup).
  * Returns null for missing or inactive configs without side-effects —
  * invalidation is handled exclusively by the webhook handler.
@@ -1126,7 +1115,7 @@ export async function getTenantById(
   const storage = useStorage('kv');
   const config = await storage.getItem<TenantConfig>(tenantConfigKey(tenantId));
   if (!config || !config.isActive) return null;
-  return withTenantConfigDefaults(config);
+  return config;
 }
 
 /** A lookup's config (null when none) and how it ended. */

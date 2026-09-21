@@ -28,7 +28,7 @@ ADRs document significant architectural decisions with context and consequences.
 | 020 | [Buyer market selection on login](020-buyer-market-selection.md)                   | accepted | 2026-06-04 |
 | 021 | [CMS-page link routing contract](021-cms-page-link-routing.md)                     | accepted | 2026-06-12 |
 | 022 | [Dev/main branching and release flow](022-dev-main-branching-release-flow.md)      | accepted | 2026-06-15 |
-| 023 | [Tenant operating timezone](023-tenant-operating-timezone.md)                      | accepted | 2026-08-28 |
+| 024 | [Tenant operating timezone](024-tenant-operating-timezone.md)                      | accepted | 2026-09-20 |
 
 ## Adding New ADRs
 

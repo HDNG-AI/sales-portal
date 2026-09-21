@@ -119,14 +119,16 @@ describe('createTenant', () => {
     });
     expect(tenant.geinsSettings).toEqual(DEFAULT_GEINS_SETTINGS);
     expect(tenant.isActive).toBe(false);
-    // Never OS timezone — see docs/adr/023-tenant-operating-timezone.md.
-    expect(tenant.timezone).toBe('UTC');
+    // No zone is substituted on create — see
+    // docs/adr/024-tenant-operating-timezone.md for why not 'UTC'.
+    expect(tenant.timezone).toBeUndefined();
     expect(kvStore.get(tenantConfigKey('a.example.com'))).toEqual(tenant);
   });
 
-  it('backfills timezone on a stored config from before the field existed', async () => {
+  it('leaves timezone unset on a stored config from before the field existed', async () => {
     // Simulate a KV record written before `timezone` was added to
     // TenantConfig — a raw storage read wouldn't re-run schema defaults.
+    // Absent stays absent: a substituted zone would re-date existing orders.
     const legacy = {
       tenantId: 'legacy-tenant',
       hostname: 'legacy.example.com',
@@ -147,7 +149,7 @@ describe('createTenant', () => {
       tenantId: 'legacy-tenant',
     });
 
-    expect(tenant.timezone).toBe('UTC');
+    expect(tenant.timezone).toBeUndefined();
   });
 
   it('applies partial config over the defaults on fresh create', async () => {
