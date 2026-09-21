@@ -44,6 +44,18 @@ vi.mock('../../../server/services/graphql/unwrap', () => ({
   }),
 }));
 
+// The configurator seam. The route asks it whether a product is configurable;
+// what the answer depends on — the backend switch and the seeds — belongs to
+// the seam's own tests, and reaching it from here would pull `useRuntimeConfig`
+// into a tier that has no Nuxt instance.
+const mockIsConfigurableProduct = vi.fn<(...args: unknown[]) => boolean>(
+  () => false,
+);
+vi.mock('../../../server/services/configurator', () => ({
+  isConfigurableProduct: (...args: unknown[]) =>
+    mockIsConfigurableProduct(...args),
+}));
+
 // Rate limiter — uses useStorage('kv'), must stay mocked
 vi.mock('../../../server/utils/rate-limiter', () => ({
   reviewPostRateLimiter: {
@@ -112,6 +124,9 @@ const fakeEvent = {} as unknown as H3Event;
 describe('Product API Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // `clearAllMocks` clears calls, not return values, so an answer set in one
+    // case would otherwise travel into the next.
+    mockIsConfigurableProduct.mockReturnValue(false);
   });
 
   // =======================================================================
@@ -122,7 +137,7 @@ describe('Product API Routes', () => {
 
     beforeEach(async () => {
       vi.resetModules();
-      const mod = await import('../../../server/api/products/[alias].get.ts');
+      const mod = await import('../../../server/api/products/[alias].get');
       handler = mod.default as Handler;
     });
 
@@ -134,7 +149,7 @@ describe('Product API Routes', () => {
 
       const result = await handler(fakeEvent);
 
-      expect(result).toEqual({ id: 1, name: 'My Product' });
+      expect(result).toEqual({ id: 1, name: 'My Product', ancestors: [] });
     });
 
     it('throws NOT_FOUND when SDK returns null in default locale', async () => {
@@ -174,7 +189,11 @@ describe('Product API Routes', () => {
       try {
         const result = await handler(fakeEvent);
 
-        expect(result).toEqual({ alias: 'wood-screw-se', name: 'Trä SE' });
+        expect(result).toEqual({
+          alias: 'wood-screw-se',
+          name: 'Trä SE',
+          ancestors: [],
+        });
         expect(mockGraphqlQuery).toHaveBeenCalledTimes(2);
         expect(mockGraphqlQuery.mock.calls[0]?.[0].variables.languageId).toBe(
           'en-US',
@@ -201,6 +220,55 @@ describe('Product API Routes', () => {
       expect(mockGraphqlQuery).toHaveBeenCalledTimes(1);
     });
 
+    // -------------------------------------------------------------------
+    // The configurable flag
+    //
+    // Which page component a product gets is decided from this flag, so the
+    // route is where the portal-side name is attached. The question goes to
+    // the seam: the day the merchant API carries a field of its own, only the
+    // seam changes.
+    // -------------------------------------------------------------------
+    it('marks a product the configurator stands behind', async () => {
+      vi.mocked(getRouterParam).mockReturnValue('arbetsbord-pro');
+      mockIsConfigurableProduct.mockReturnValue(true);
+      mockGraphqlQuery.mockResolvedValue({
+        product: { productId: 1101, name: 'Arbetsbord Pro' },
+      });
+
+      const result = await handler(fakeEvent);
+
+      expect(result).toEqual({
+        productId: 1101,
+        name: 'Arbetsbord Pro',
+        ancestors: [],
+        configurable: true,
+      });
+    });
+
+    it('asks the seam with the product id as a string', async () => {
+      vi.mocked(getRouterParam).mockReturnValue('arbetsbord-pro');
+      mockGraphqlQuery.mockResolvedValue({
+        product: { productId: 1101, name: 'Arbetsbord Pro' },
+      });
+
+      await handler(fakeEvent);
+
+      expect(mockIsConfigurableProduct).toHaveBeenCalledWith(fakeEvent, '1101');
+    });
+
+    it('leaves the payload of an ordinary product untouched', async () => {
+      vi.mocked(getRouterParam).mockReturnValue('my-product');
+      mockGraphqlQuery.mockResolvedValue({
+        product: { productId: 42, name: 'My Product' },
+      });
+
+      const result = await handler(fakeEvent);
+
+      // Absent, not `false`: an ordinary product's response stays what it was
+      // before the configurator existed.
+      expect(result).not.toHaveProperty('configurable');
+    });
+
     it('throws ZodError for empty alias', async () => {
       vi.mocked(getRouterParam).mockReturnValue('');
 
@@ -223,7 +291,7 @@ describe('Product API Routes', () => {
     beforeEach(async () => {
       vi.resetModules();
       const mod =
-        await import('../../../server/api/products/[alias]/related.get.ts');
+        await import('../../../server/api/products/[alias]/related.get');
       handler = mod.default as Handler;
     });
 
@@ -254,7 +322,7 @@ describe('Product API Routes', () => {
     beforeEach(async () => {
       vi.resetModules();
       const mod =
-        await import('../../../server/api/products/[alias]/reviews.get.ts');
+        await import('../../../server/api/products/[alias]/reviews.get');
       handler = mod.default as Handler;
     });
 
@@ -299,7 +367,7 @@ describe('Product API Routes', () => {
     beforeEach(async () => {
       vi.resetModules();
       const mod =
-        await import('../../../server/api/products/[alias]/reviews.post.ts');
+        await import('../../../server/api/products/[alias]/reviews.post');
       handler = mod.default as Handler;
     });
 
@@ -357,7 +425,7 @@ describe('Product API Routes', () => {
     beforeEach(async () => {
       vi.resetModules();
       const mod =
-        await import('../../../server/api/products/[alias]/price-history.get.ts');
+        await import('../../../server/api/products/[alias]/price-history.get');
       handler = mod.default as Handler;
     });
 
@@ -388,7 +456,7 @@ describe('Product API Routes', () => {
     beforeEach(async () => {
       vi.resetModules();
       const mod =
-        await import('../../../server/api/products/monitor-availability.post.ts');
+        await import('../../../server/api/products/monitor-availability.post');
       handler = mod.default as Handler;
     });
 
@@ -432,8 +500,7 @@ describe('Product API Routes', () => {
 
     beforeEach(async () => {
       vi.resetModules();
-      const mod =
-        await import('../../../server/api/products/by-aliases.get.ts');
+      const mod = await import('../../../server/api/products/by-aliases.get');
       handler = mod.default as Handler;
     });
 
@@ -502,7 +569,10 @@ describe('Product API Routes', () => {
 
     it('sets private cache header for authenticated requests', async () => {
       vi.mocked(getQuery).mockReturnValue({ aliases: 'a' });
-      vi.mocked(optionalAuth).mockResolvedValue({ authToken: 'tok' });
+      vi.mocked(optionalAuth).mockResolvedValue({
+        authToken: 'tok',
+        refreshToken: 'refresh-tok',
+      });
       mockGraphqlQuery.mockResolvedValue({ product: { alias: 'a' } });
 
       await handler(fakeEvent);
@@ -553,7 +623,7 @@ describe('Product API Routes', () => {
 
     beforeEach(async () => {
       vi.resetModules();
-      const mod = await import('../../../server/api/products/by-ids.get.ts');
+      const mod = await import('../../../server/api/products/by-ids.get');
       handler = mod.default as Handler;
     });
 
@@ -638,7 +708,10 @@ describe('Product API Routes', () => {
 
     it('sets private cache header for authenticated requests', async () => {
       vi.mocked(getQuery).mockReturnValue({ ids: '1069' });
-      vi.mocked(optionalAuth).mockResolvedValue({ authToken: 'tok' });
+      vi.mocked(optionalAuth).mockResolvedValue({
+        authToken: 'tok',
+        refreshToken: 'refresh-tok',
+      });
       mockGraphqlQuery.mockResolvedValue({
         products: { products: [], count: 0 },
       });

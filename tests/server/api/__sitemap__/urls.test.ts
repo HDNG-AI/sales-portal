@@ -28,6 +28,10 @@ vi.mock('../../../../server/utils/logger', () => ({
 }));
 
 vi.stubGlobal('defineEventHandler', (fn: AnyFn) => fn);
+// getCategoryTree wraps itself in defineCachedFunction at module scope, so the
+// Nitro auto-import has to exist before urls.ts is imported below. Pass the
+// function straight through — caching is not what these tests are about.
+vi.stubGlobal('defineCachedFunction', (fn: unknown) => fn);
 // Not exercised in these tests — getTenantSDK rejects before any query runs
 // — but urls.ts references it via Nitro auto-import, so it must exist.
 vi.stubGlobal('wrapServiceCall', vi.fn());

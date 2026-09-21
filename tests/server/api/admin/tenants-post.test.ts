@@ -44,7 +44,10 @@ vi.stubGlobal('ErrorCode', {
 });
 
 function mockBody(overrides: Record<string, unknown> = {}) {
-  (globalThis.readValidatedBody as ReturnType<typeof vi.fn>).mockResolvedValue({
+  (
+    (globalThis as Record<string, unknown>)
+      .readValidatedBody as ReturnType<typeof vi.fn>
+  ).mockResolvedValue({
     hostname: 'shop.example.com',
     ...overrides,
   });

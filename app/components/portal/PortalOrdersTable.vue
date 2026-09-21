@@ -99,7 +99,7 @@ function handleSortCreated() {
 </script>
 
 <template>
-  <div data-testid="portal-orders-table">
+  <div>
     <!-- Empty state -->
     <div
       v-if="!orders.length"
@@ -109,13 +109,19 @@ function handleSortCreated() {
       {{ t('portal.overview.no_orders') }}
     </div>
 
-    <template v-else>
+    <!-- One handle for the list, wrapping both responsive shapes below. It
+         sits on the `v-else` rather than around the whole component so its
+         presence still means "the list has rows" — a wrapper that also
+         covered the empty state would match on an empty account and assert
+         nothing. -->
+    <div v-else data-testid="portal-orders-table">
       <!-- Mobile card view -->
       <div class="space-y-3 md:hidden">
         <NuxtLink
           v-for="order in limit ? orders.slice(0, limit) : orders"
           :key="order.id ?? undefined"
           :to="getOrderLink(order)"
+          data-testid="order-row"
           class="border-border hover:bg-muted/50 block rounded-lg border p-4 transition-colors"
         >
           <div class="mb-2 flex items-center justify-between">
@@ -127,9 +133,11 @@ function handleSortCreated() {
           <div class="text-muted-foreground space-y-1 text-sm">
             <div class="flex justify-between">
               <span>{{ formatDate(order.createdAt) }}</span>
-              <span class="text-foreground font-medium">{{
-                getTotal(order)
-              }}</span>
+              <span
+                data-testid="order-total"
+                class="text-foreground font-medium"
+                >{{ getTotal(order) }}</span
+              >
             </div>
             <div>{{ getPlacedBy(order) }}</div>
           </div>
@@ -173,13 +181,16 @@ function handleSortCreated() {
           <tr
             v-for="order in limit ? orders.slice(0, limit) : orders"
             :key="order.id ?? undefined"
+            data-testid="order-row"
             class="border-border hover:bg-muted/50 border-b transition-colors"
           >
             <td class="py-3 pr-4">{{ order.id }}</td>
             <td class="py-3 pr-4">{{ formatDate(order.createdAt) }}</td>
             <td class="py-3 pr-4">{{ getPlacedBy(order) }}</td>
             <td class="py-3 pr-4">{{ t('portal.orders.type_web') }}</td>
-            <td class="py-3 pr-4">{{ getTotal(order) }}</td>
+            <td data-testid="order-total" class="py-3 pr-4">
+              {{ getTotal(order) }}
+            </td>
             <td class="py-3 pr-4">
               <Badge :variant="getStatusVariant(order.status)">
                 {{ t(getStatusKey(order.status)) }}
@@ -195,6 +206,6 @@ function handleSortCreated() {
           </tr>
         </tbody>
       </table>
-    </template>
+    </div>
   </div>
 </template>

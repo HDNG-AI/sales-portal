@@ -95,15 +95,17 @@ jobs:
   # E2E Tests
   # ---------------------------------------------------------------------------
   test-e2e:
-    name: E2E Tests
+    name: E2E Suite
     # e2e is the heavier gate, reserved for the PR into main (the prod gate).
     # Pushes to dev run the light lint/types/unit jobs only.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
-      PLAYWRIGHT_BASE_URL: ${{ vars.E2E_BASE_URL || 'https://tenant-a.litium.portal:3000' }}
-      E2E_EXPECTED_TENANT_ID: ${{ vars.E2E_EXPECTED_TENANT_ID || 'tenant-a' }}
+      # Empty repository variables fall through to the committed defaults in
+      # tests/e2e/target-defaults.mjs, the one place the target is spelled out.
+      PLAYWRIGHT_BASE_URL: ${{ vars.E2E_BASE_URL }}
+      E2E_EXPECTED_TENANT_ID: ${{ vars.E2E_EXPECTED_TENANT_ID }}
       E2E_USERNAME: ${{ secrets.E2E_USERNAME }}
       E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
       E2E_EXTERNAL_SERVER: '1'
@@ -123,22 +125,28 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The browser set is in the key, and what that buys is in
+      # docs/testing.md under "The manual run".
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: playwright-${{ runner.os }}-chromium-webkit-${{ hashFiles('pnpm-lock.yaml') }}
 
+      # Mobile Chrome is a device profile on chromium, so it needs no download.
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium webkit
 
       # The target: an origin, the tenant it must resolve to, and a test
       # account. Repository variables/secrets override the committed defaults.
       # E2E_EXTERNAL_SERVER: the job starts the preview once (below) and runs
       # each preflight layer against it as its own step, so the step view
       # names the layer that broke; playwright.config.ts then starts nothing.
+      # Hostname from the suite's resolver, not from the variable: with the
+      # variable unset, `new URL('')` throws inside a command substitution,
+      # which leaves the step green and writes a hosts line with no hostname.
       - name: Point the target hostname at the runner
-        run: echo "127.0.0.1 $(node -e 'console.log(new URL(process.env.PLAYWRIGHT_BASE_URL).hostname)')" | sudo tee -a /etc/hosts
+        run: echo "127.0.0.1 $(node tests/e2e/target-defaults.mjs)" | sudo tee -a /etc/hosts
 
       # The production build sets `upgrade-insecure-requests` and Secure auth
       # cookies, so it only works over https. NITRO_SSL_CERT / NITRO_SSL_KEY
@@ -178,8 +186,20 @@ jobs:
       - name: Preflight L4 · session
         run: pnpm test:e2e --no-deps --project "L4 session"
 
-      - name: Run E2E smoke tests
-        run: pnpm test:e2e --no-deps --project=chromium tests/e2e/app.spec.ts tests/e2e/homepage.spec.ts tests/e2e/csp-policy.spec.ts tests/e2e/unknown-hostname.spec.ts
+      # One step per browser project, every spec. No `continue-on-error`: this
+      # gate answers whether the branch is safe to merge, and the answer is
+      # settled once the first project goes red — unlike e2e-full.yml, which
+      # continues because three wall-clock numbers are its deliverable.
+      # `--no-deps` because the preflight layers above already ran; L4 wrote
+      # the session file every project reads, so the job signs in once.
+      - name: Project · chromium
+        run: pnpm test:e2e --no-deps --project=chromium
+
+      - name: Project · Mobile Chrome
+        run: pnpm test:e2e --no-deps --project="Mobile Chrome"
+
+      - name: Project · webkit
+        run: pnpm test:e2e --no-deps --project=webkit
 
       - name: Upload preview server log
         uses: actions/upload-artifact@v4

@@ -1,6 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import type { VariantDimensionType, VariantType } from '@geins/types';
+import { nextTick } from 'vue';
+import type { ComponentPublicInstance } from 'vue';
 import { mountComponent } from '../../utils/component';
 import VariantSelector from '../../../app/components/product/VariantSelector.vue';
+import { mockShowIncVat } from '../../setup-components';
 
 const dimensions = [
   { dimensionName: 'Color', values: ['Red', 'Blue'] },
@@ -36,6 +40,12 @@ const variants = [
     stock: { inStock: 3, oversellable: 0, totalStock: 3, static: 0 },
   },
 ];
+
+// The VAT-display ref is anchored on globalThis and vitest runs without
+// isolation, so a value left behind here reaches every other spec.
+beforeEach(() => {
+  mockShowIncVat.value = true;
+});
 
 const sheetStubs = {
   Sheet: { template: '<div><slot /></div>', props: ['open'] },
@@ -149,7 +159,9 @@ describe('VariantSelector', () => {
     // The variant-search input is the first focusable element in the sheet;
     // letting reka-ui auto-focus it on open would pop the soft keyboard and
     // hide the variant options, so the component must preventDefault.
-    const sheet = wrapper.findComponent('[data-testid="variant-sheet"]');
+    const sheet = wrapper.findComponent<ComponentPublicInstance>(
+      '[data-testid="variant-sheet"]',
+    );
     const event = new Event('focus', { cancelable: true });
     sheet.vm.$emit('openAutoFocus', event);
     expect(event.defaultPrevented).toBe(true);
@@ -207,6 +219,11 @@ describe('VariantSelector', () => {
 describe('VariantSelector per-variant name and article number', () => {
   // One variantDimensions row (the active product's own value) + the full
   // sibling set in variantGroup.variants, mirroring real Geins payloads.
+  // The component declares `VariantDimensionType[]`/`VariantType[]` but casts
+  // both props to the GraphQL row shape in its own setup, and its comment says
+  // it tolerates that shape deliberately. These fixtures carry what the API
+  // really sends, so the cast below is the point of the test; the declared prop
+  // type is the thing that is wrong, and that is product code.
   const siblingDimensions = [{ dimension: 'Variant', value: '88' }];
   const siblingVariants = [
     {
@@ -234,12 +251,14 @@ describe('VariantSelector per-variant name and article number', () => {
     'grenror-100-100-90': {
       name: 'Grenrör 100/100-90',
       articleNumber: 'S1-233-090',
-      priceFormatted: '950 kr',
+      priceIncVatFormatted: '950 kr',
+      priceExVatFormatted: '760 kr',
     },
     'grenror-100-75-45': {
       name: 'Grenrör 100/75-45',
       articleNumber: 'S1-232-045',
-      priceFormatted: '850 kr',
+      priceIncVatFormatted: '850 kr',
+      priceExVatFormatted: '680 kr',
     },
   };
 
@@ -253,11 +272,14 @@ describe('VariantSelector per-variant name and article number', () => {
   function openSiblingSheet() {
     const wrapper = mountComponent(VariantSelector, {
       props: {
-        variantDimensions: siblingDimensions,
-        variants: siblingVariants,
+        variantDimensions:
+          siblingDimensions as unknown as VariantDimensionType[],
+        variants: siblingVariants as unknown as VariantType[],
         modelValue: { Variant: '88' },
         productName: 'Grenrör 150/150-88',
         productArticleNumber: 'S1-243-088',
+        priceIncVatFormatted: '1 200 kr',
+        priceExVatFormatted: '960 kr',
         variantProducts,
       },
       global: { stubs: sheetStubs, mocks: { $t: interpolatingT } },
@@ -324,8 +346,8 @@ describe('VariantSelector per-variant name and article number', () => {
     ];
     const wrapper = mountComponent(VariantSelector, {
       props: {
-        variantDimensions: oosDimensions,
-        variants: oosVariants,
+        variantDimensions: oosDimensions as unknown as VariantDimensionType[],
+        variants: oosVariants as unknown as VariantType[],
         modelValue: { Variant: 'm 20 / 5-8' },
         productName: 'Metallförskruvning M20x1,5',
       },
@@ -342,5 +364,83 @@ describe('VariantSelector per-variant name and article number', () => {
       expect(button.attributes('disabled')).toBeUndefined();
       expect(button.classes()).not.toContain('opacity-40');
     }
+  });
+});
+
+// The variant rows carry their own price, and that price must answer to the
+// inc/ex VAT switcher exactly as the main price on the same page does. The
+// active product's own row (88) is served by the parent fallback props, the
+// other two by their entries in variantProducts, so both sources are covered.
+describe('VariantSelector row price follows the VAT preference', () => {
+  const siblingDimensions = [{ dimension: 'Variant', value: '88' }];
+  const siblingVariants = [
+    { alias: 'grenror-150-150-88', dimension: 'Variant', value: '88' },
+    { alias: 'grenror-100-100-90', dimension: 'Variant', value: '90' },
+    { alias: 'grenror-100-75-45', dimension: 'Variant', value: '75-45' },
+  ];
+  const variantProducts = {
+    'grenror-100-100-90': {
+      name: 'Grenrör 100/100-90',
+      articleNumber: 'S1-233-090',
+      priceIncVatFormatted: '950 kr',
+      priceExVatFormatted: '760 kr',
+    },
+    'grenror-100-75-45': {
+      name: 'Grenrör 100/75-45',
+      articleNumber: 'S1-232-045',
+      priceIncVatFormatted: '850 kr',
+      priceExVatFormatted: '680 kr',
+    },
+  };
+
+  async function openPriceSheet() {
+    const wrapper = mountComponent(VariantSelector, {
+      props: {
+        variantDimensions:
+          siblingDimensions as unknown as VariantDimensionType[],
+        variants: siblingVariants as unknown as VariantType[],
+        modelValue: { Variant: '88' },
+        productName: 'Grenrör 150/150-88',
+        productArticleNumber: 'S1-243-088',
+        priceIncVatFormatted: '1 200 kr',
+        priceExVatFormatted: '960 kr',
+        variantProducts,
+      },
+      global: { stubs: sheetStubs },
+    });
+    await wrapper
+      .find('[data-testid="variant-trigger-Variant"]')
+      .trigger('click');
+    return wrapper;
+  }
+
+  function rowPrices(wrapper: ReturnType<typeof mountComponent>): string[] {
+    return wrapper
+      .findAll('[data-testid="variant-row-price"]')
+      .map((el) => el.text());
+  }
+
+  it('shows inc-VAT row prices when the buyer prefers inc VAT', async () => {
+    mockShowIncVat.value = true;
+    const wrapper = await openPriceSheet();
+    // Order: the active product's own value first, then the siblings.
+    expect(rowPrices(wrapper)).toEqual(['1 200 kr', '950 kr', '850 kr']);
+  });
+
+  it('shows ex-VAT row prices when the buyer prefers ex VAT', async () => {
+    mockShowIncVat.value = false;
+    const wrapper = await openPriceSheet();
+    expect(rowPrices(wrapper)).toEqual(['960 kr', '760 kr', '680 kr']);
+  });
+
+  it('re-renders the row prices when the preference changes, without a remount', async () => {
+    mockShowIncVat.value = true;
+    const wrapper = await openPriceSheet();
+    expect(rowPrices(wrapper)).toEqual(['1 200 kr', '950 kr', '850 kr']);
+
+    mockShowIncVat.value = false;
+    await nextTick();
+
+    expect(rowPrices(wrapper)).toEqual(['960 kr', '760 kr', '680 kr']);
   });
 });

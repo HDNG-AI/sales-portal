@@ -206,6 +206,7 @@ export default defineNuxtConfig({
       { code: 'nb', language: 'nb-NO', name: 'Norsk', file: 'nb.json' },
       { code: 'fi', language: 'fi-FI', name: 'Suomi', file: 'fi.json' },
       { code: 'da', language: 'da-DK', name: 'Dansk', file: 'da.json' },
+      { code: 'de', language: 'de-DE', name: 'Deutsch', file: 'de.json' },
     ],
     langDir: 'locales',
     strategy: 'no_prefix',
@@ -238,6 +239,13 @@ export default defineNuxtConfig({
     project: process.env.SENTRY_PROJECT || '',
     // Auth token for source map uploads (optional - if not set, source maps won't be uploaded)
     authToken: process.env.SENTRY_AUTH_TOKEN || '',
+    // Without this the built server entry never imports sentry.server.config.mjs,
+    // so the SDK is shipped in the image but never initialises and nothing is
+    // reported from Azure. `nuxt dev` loads it either way, which is what makes
+    // the gap invisible locally. The alternative is a --import flag on the
+    // Dockerfile CMD, which breaks the moment anyone changes how the container
+    // starts; this keeps it in the build.
+    autoInjectServerSentry: 'top-level-import',
   },
 
   // Enable client-side source maps for better error stack traces
@@ -277,9 +285,13 @@ export default defineNuxtConfig({
    * │ NUXT_ADMIN_READ_SECRET          │                                      │
    * │ NUXT_EXTERNAL_API_BASE_URL      │                                      │
    * │ NUXT_SENTRY_DSN                 │                                      │
+   * │ SENTRY_ENVIRONMENT              │                                      │
+   * │ NUXT_PUBLIC_SENTRY_DSN          │                                      │
+   * │ NUXT_PUBLIC_SENTRY_ENVIRONMENT  │                                      │
    * │ NUXT_WEBHOOK_SECRET              │                                      │
    * │ NUXT_LOGGING_VERBOSE_REQUESTS   │                                      │
    * │ NUXT_PUBLIC_FEATURES_ANALYTICS  │                                      │
+   * │ NUXT_CONFIGURATOR_BACKEND       │                                      │
    * └─────────────────────────────────────────────────────────────────────────┘
    *
    * NOTE: Values set here are defaults. Azure env vars override them at runtime.
@@ -322,6 +334,14 @@ export default defineNuxtConfig({
     // Azure: NUXT_ADMIN_READ_SECRET=your-secret-here
     adminReadSecret: '',
 
+    // RSS thresholds for /api/health, in MB. Sized for the production
+    // container; a different container size is the reason to change them.
+    // Azure: NUXT_HEALTH_RSS_DEGRADED_MB, NUXT_HEALTH_RSS_UNHEALTHY_MB
+    health: {
+      rssDegradedMb: 400,
+      rssUnhealthyMb: 900,
+    },
+
     // External API base URL for the proxy
     // Azure: NUXT_EXTERNAL_API_BASE_URL=https://your-external-api.com
     externalApiBaseUrl: 'https://api.app.com',
@@ -343,6 +363,14 @@ export default defineNuxtConfig({
       // When true, request logs include full headers (sanitized).
       // Useful for debugging but can be noisy in production.
       verboseRequests: false,
+    },
+
+    // Which implementation answers a product-configuration request.
+    // 'off' | 'fixture' | 'sdk'; anything else, an empty string included, is
+    // read as 'off' (see server/services/configurator.ts).
+    // Azure: NUXT_CONFIGURATOR_BACKEND=fixture
+    configurator: {
+      backend: 'off',
     },
 
     // When true, 500 responses include the error stack trace.
@@ -375,6 +403,16 @@ export default defineNuxtConfig({
       api: {
         baseUrl: '/api',
         timeout: 30000,
+      },
+
+      // Sentry (browser). These keys must be declared here even though both
+      // default to empty: Nitro's applyEnv walks only keys that already
+      // exist, so an undeclared nested key means NUXT_PUBLIC_SENTRY_* is
+      // read and silently dropped, and Sentry.init never runs client-side.
+      // Azure: NUXT_PUBLIC_SENTRY_DSN, NUXT_PUBLIC_SENTRY_ENVIRONMENT
+      sentry: {
+        dsn: '',
+        environment: '',
       },
     },
   },
@@ -470,10 +508,18 @@ export default defineNuxtConfig({
     buildCache: true,
   },
 
+  // `nuxt dev` otherwise listens on the hostname `localhost`, which Node
+  // resolves to ::1 first — the dnsmasq wildcard answers 127.0.0.1, so local
+  // hostnames would reach nothing. HOST/NUXT_HOST/NITRO_HOST still override
+  // this, which is how `local:dev --lan` binds every interface.
+  devServer: {
+    host: '127.0.0.1',
+  },
+
   // Vite configuration
   vite: {
     server: {
-      allowedHosts: ['.litium.portal'],
+      allowedHosts: ['.litium.portal', '.litium.test'],
       watch: {
         ignored: ['**/node_modules/**', '**/.git/**'],
       },

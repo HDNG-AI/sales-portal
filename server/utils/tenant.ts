@@ -1,11 +1,12 @@
 import type { H3Event } from 'h3';
-import type { TenantConfig } from '#shared/types/tenant-config';
+import type { FeatureAccess, TenantConfig } from '#shared/types/tenant-config';
 import { CMS_SLOTS } from '#shared/types/cms-slots';
 import { CMS_MENUS } from '#shared/constants/cms';
 import { PRODUCT_MEDIA_PARAMETER_DEFAULTS } from '#shared/constants/product-media';
 import type {
   StoreSettings,
   GeinsSettings,
+  FeatureAccessInput,
   FeatureConfig,
 } from '../schemas/store-settings';
 import { StoreSettingsSchema } from '../schemas/store-settings';
@@ -339,11 +340,17 @@ export interface TenantCacheStorage {
  */
 export async function invalidateTenantCaches(
   tenantId: string,
-  hostname: string,
+  hostname: string | Iterable<string>,
   cacheStorage: TenantCacheStorage,
 ): Promise<void> {
   clearSdkCache(tenantId);
-  clearNegativeCache(hostname);
+  // Every hostname the tenant claims, not just the one the caller named.
+  // resolveTenant consults the negative cache before KV, so an alias probed
+  // while the tenant was still unknown keeps answering 404 for the rest of
+  // its TTL with the refreshed config already in storage.
+  for (const h of typeof hostname === 'string' ? [hostname] : hostname) {
+    clearNegativeCache(h);
+  }
 
   const escapedConfigKey = tenantConfigKey(tenantId).replace(/\W/g, '');
   const nitroCacheKey = `nitro/handlers:_:${escapedConfigKey}.json`;
@@ -431,6 +438,62 @@ export function transformGeinsSettings(
 // ---------------------------------------------------------------------------
 
 /**
+ * The rules the app can evaluate, as a lookup. `satisfies` is what keeps it from
+ * drifting from the union: a member added to `FeatureAccess` is a compile error
+ * here until it is listed.
+ */
+const EVALUABLE_ACCESS = {
+  all: true,
+  authenticated: true,
+} satisfies Record<FeatureAccess, true>;
+
+/**
+ * Fail-closed, deliberately: any rule added to `FeatureAccessSchema` later is
+ * retired by default — even with an evaluator written for it — until it is
+ * listed in `EVALUABLE_ACCESS` too. That covers string literals as well as
+ * object rules.
+ */
+function isEvaluableAccess(
+  access: FeatureAccessInput | undefined,
+): access is FeatureAccess | undefined {
+  return (
+    access === undefined ||
+    (typeof access === 'string' && access in EVALUABLE_ACCESS)
+  );
+}
+
+/**
+ * Rewrite a feature whose access rule the app cannot evaluate to
+ * `{ enabled: false }`, logging why. It happens here rather than in the schema
+ * because rejecting the rule would put the Zod issue on
+ * `features.<name>.access`; `parseStoreSettingsResilient` strips that leaf, and
+ * a feature with no `access` is open to everyone. See ADR-007.
+ */
+function normalizeFeatureAccess(
+  features: Record<string, FeatureConfig>,
+  hostname: string,
+): TenantConfig['features'] {
+  const normalized: TenantConfig['features'] = {};
+  for (const [name, { enabled, access }] of Object.entries(features)) {
+    if (isEvaluableAccess(access)) {
+      normalized[name] =
+        access === undefined ? { enabled } : { enabled, access };
+      continue;
+    }
+    // Zod strips unknown keys, so a parsed object carries exactly the one key of
+    // the union member that matched. A string rule is its own name — passing one
+    // to Object.keys() would name its character indices.
+    const retired =
+      typeof access === 'string' ? access : Object.keys(access).join(', ');
+    logger.warn(
+      `[tenant] Feature "${name}" for ${hostname} uses the retired access rule "${retired}"; disabling the feature`,
+    );
+    normalized[name] = { enabled: false };
+  }
+  return normalized;
+}
+
+/**
  * Builds a TenantConfig from validated StoreSettings.
  * Derives colors, merges override features, generates CSS + hash.
  */
@@ -447,15 +510,26 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
   // stockStatus carry the {enabled, access} shape; the other 11 portal
   // features default to {enabled: true}). overrides.features takes final
   // precedence below.
-  const features: Record<string, FeatureConfig> = {
+  const rawFeatures: Record<string, FeatureConfig> = {
     ...STOREFRONT_SETTINGS_DEFAULTS.features,
     ...merged.features,
   };
   if (merged.overrides?.features) {
     for (const [key, value] of Object.entries(merged.overrides.features)) {
-      features[key] = value;
+      rawFeatures[key] = value;
     }
   }
+  const features = normalizeFeatureAccess(rawFeatures, merged.hostname);
+
+  // Server-only, but typed with the same narrowed FeatureAccess.
+  const overrides: TenantConfig['overrides'] = merged.overrides
+    ? {
+        ...merged.overrides,
+        features: merged.overrides.features
+          ? normalizeFeatureAccess(merged.overrides.features, merged.hostname)
+          : merged.overrides.features,
+      }
+    : merged.overrides;
 
   const themeName = merged.theme.name ?? merged.tenantId;
 
@@ -527,7 +601,7 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     features,
     seo: merged.seo,
     contact: merged.contact,
-    overrides: merged.overrides,
+    overrides,
     cms,
     productMediaParameters,
     css,
