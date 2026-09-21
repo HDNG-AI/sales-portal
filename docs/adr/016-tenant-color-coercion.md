@@ -64,7 +64,7 @@ CSS color format and re-emit OKLCH:
 - Garbage input fails Zod validation with a truncated raw value (40 chars) in the issue
   message so the salvager can act on it.
 
-Every one of the 40 color keys in the store-settings schema goes through
+Every one of the 42 color keys in the store-settings schema goes through
 `CoercedColorSchema.nullable().optional()`.
 
 ### Layer 2: leaf-strip salvage (`parseStoreSettingsResilient` in `server/utils/tenant.ts`)
@@ -98,7 +98,7 @@ fields are never fatal.
 
 - A tenant whose admin contains any combination of bad color values still renders. The
   canonical default palette is the worst-case fallback.
-- Coverage is uniform across the 40 color keys, so future additions inherit the policy
+- Coverage is uniform across the 42 color keys, so future additions inherit the policy
   automatically as long as they go through `CoercedColorSchema`.
 - The salvager's leaf strip is general-purpose. Future non-fatal leaves elsewhere in the
   schema get the same recovery for free.

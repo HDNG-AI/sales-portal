@@ -125,7 +125,7 @@ describe('Tenant utilities', () => {
       expect(theme.displayName).toBe('my-tenant');
     });
 
-    it('should include 6 core colors and 26 null optionals', () => {
+    it('should include 6 core colors and 28 null optionals', () => {
       const theme = createDefaultTheme('test');
       expect(theme.colors.primary).toBeDefined();
       expect(theme.colors.secondary).toBeDefined();
@@ -164,7 +164,7 @@ describe('Tenant utilities', () => {
       expect(css).toContain("[data-theme='my-tenant']");
     });
 
-    it('should include all 32 color variables', () => {
+    it('should include all 42 color variables', () => {
       const css = generateTenantCss('test', defaultDerivedColors());
       expect(css).toContain('--primary:');
       expect(css).toContain('--primary-foreground:');

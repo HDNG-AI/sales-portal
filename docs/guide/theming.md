@@ -29,13 +29,13 @@ Each tenant defines a theme validated by a Zod schema (`server/schemas/store-set
 interface ThemeConfig {
   name: string; // Theme identifier
   displayName?: string | null; // Human-readable name
-  colors: ThemeColors; // 6 required + 34 optional OKLCH colors
+  colors: ThemeColors; // 6 required + 36 optional OKLCH colors
   radius?: string | null; // Base border radius (e.g., "0.625rem")
   typography?: ThemeTypography | null; // Font families
 }
 ```
 
-All colors use OKLCH format (e.g., `oklch(0.47 0.13 195.71)`). Only 6 core colors are required; the remaining 26 are derived automatically server-side when null/omitted.
+All colors use OKLCH format (e.g., `oklch(0.47 0.13 195.71)`). Only 6 core colors are required. Of the remaining 36, 28 are derived automatically server-side when null/omitted, and 8 are surface keys the CSS emitter resolves against a fallback chain (`SURFACE_FALLBACKS` in `server/utils/tenant-css.ts`).
 
 ## Available Color Tokens
 
@@ -50,7 +50,7 @@ All colors use OKLCH format (e.g., `oklch(0.47 0.13 195.71)`). Only 6 core color
 | `background`          | Page background             | `--background`           |
 | `foreground`          | Default text color          | `--foreground`           |
 
-### 26 Optional Colors (derived from core if omitted)
+### 28 Derived Colors (derived from core if omitted)
 
 | Token                                   | Derived From    | CSS Variable                                 |
 | --------------------------------------- | --------------- | -------------------------------------------- |
@@ -59,6 +59,7 @@ All colors use OKLCH format (e.g., `oklch(0.47 0.13 195.71)`). Only 6 core color
 | `muted` / `mutedForeground`             | dimmed bg / fg  | `--muted` / `--muted-foreground`             |
 | `accent` / `accentForeground`           | secondary       | `--accent` / `--accent-foreground`           |
 | `destructive` / `destructiveForeground` | red / white     | `--destructive` / `--destructive-foreground` |
+| `success` / `warning`                   | fixed defaults  | `--success` / `--warning`                    |
 | `border`                                | muted variant   | `--border`                                   |
 | `input`                                 | border variant  | `--input`                                    |
 | `ring`                                  | primary variant | `--ring`                                     |
@@ -100,7 +101,7 @@ The `generateTenantCss()` function in `server/utils/tenant.ts` creates CSS from 
 
 ```typescript
 // Input: 6 core OKLCH colors from API
-// Step 1: deriveThemeColors() fills all 40 colors
+// Step 1: deriveThemeColors() fills the 28 derived colors, returning all 42 keys
 // Step 2: generateTenantCss() produces CSS
 
 // Output
@@ -141,7 +142,7 @@ The base theme (zinc/neutral fallback) is defined in `app/assets/css/tailwind.cs
     --primary-foreground: oklch(0.985 0 0);
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
-    /* ... all 42 tokens as OKLCH fallback defaults */
+    /* ... all 34 standard tokens as fallback defaults */
   }
 }
 ```

@@ -10,7 +10,7 @@ tags: [tenant, zod, schema, service-layer]
 
 ## Context
 
-The tenant configuration grew from a simple set of flags to a rich contract with 32 OKLCH color tokens, feature flags with access control, SEO, contact info, and branding. The old approach had several problems:
+The tenant configuration grew from a simple set of flags to a rich contract with 42 OKLCH color tokens, feature flags with access control, SEO, contact info, and branding. The old approach had several problems:
 
 1. **No runtime validation** — configuration from the external API was trusted at compile time only. A malformed response would cause subtle runtime errors deep in the rendering pipeline.
 2. **Flat boolean feature flags** — `TenantFeatures` was `{ enableSearch?: boolean; enableCart?: boolean; ... }`, which couldn't express access control (e.g., "only authenticated users" or "only the staff group").
