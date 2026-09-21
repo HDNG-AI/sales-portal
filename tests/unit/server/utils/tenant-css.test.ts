@@ -210,8 +210,10 @@ describe('generateTenantCss override.css', () => {
 });
 
 /**
- * One test per colour group the type names, seven groups over the 34 keys plus
- * the three typography families.
+ * One test per colour group the type names: seven groups over the 34 keys this
+ * block covers, plus the three typography families. The remaining 8 of the 42 —
+ * `success`, `warning` and the six surface backgrounds — are asserted by the
+ * `generateTenantCss semantic colors` and `surface colors` describes above.
  *
  * A test may hang on several cells only when the fixture writes each of them
  * and a separate assertion discriminates each one: flip one sentinel and
@@ -402,10 +404,11 @@ describe('generateTenantCss configured colours reach their CSS variable', () => 
 });
 
 /**
- * The absent side of the 26 optional colours: one reference per derivation
+ * The absent side of 26 of the 28 optional colours: one reference per derivation
  * family rather than one test per key, because `deriveThemeColors` has six
  * rules and 26 assertions of the same arithmetic would prove the arithmetic,
- * not the field.
+ * not the field. `success` and `warning` are the other two; they fall back to
+ * fixed values, asserted in `tests/unit/server/utils/theme.test.ts`.
  *
  * The three *computed* families get two fixtures each, and this is not
  * thoroughness for its own sake — a single fixture proves one branch and leaves

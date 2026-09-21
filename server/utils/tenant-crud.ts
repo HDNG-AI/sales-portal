@@ -194,7 +194,7 @@ export async function createTenant(
   // theme/css/themeHash are placeholders here — mergeTenantConfig below is
   // the only place that actually derives them (mergeThemes(baseConfig.theme,
   // partialConfig?.theme) followed by buildDerivedTheme), so deriving them
-  // again here would just repeat the same 32-color computation, CSS
+  // again here would just repeat the same 42-color computation, CSS
   // generation, and hash for no reason.
   const baseConfig: TenantConfig = {
     ...identity,

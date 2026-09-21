@@ -125,7 +125,7 @@ describe('Tenant utilities', () => {
       expect(theme.displayName).toBe('my-tenant');
     });
 
-    it('should include 6 core colors and 26 null optionals', () => {
+    it('should include 6 core colors and 28 null optionals', () => {
       const theme = createDefaultTheme('test');
       expect(theme.colors.primary).toBeDefined();
       expect(theme.colors.secondary).toBeDefined();
@@ -164,7 +164,7 @@ describe('Tenant utilities', () => {
       expect(css).toContain("[data-theme='my-tenant']");
     });
 
-    it('should include all 32 color variables', () => {
+    it('should include all 42 color variables', () => {
       const css = generateTenantCss('test', defaultDerivedColors());
       expect(css).toContain('--primary:');
       expect(css).toContain('--primary-foreground:');
@@ -1281,6 +1281,35 @@ describe('Tenant utilities', () => {
       const out = parseStoreSettingsResilient(fullCandidate(), 'h');
       expect(out).not.toBeNull();
       expect(out?.tenantId).toBe('alpha');
+    });
+
+    it('salvages a malformed timezone to unset, keeping the rest of the config', () => {
+      // Without a SALVAGE_DEFAULTS entry the issue path for this field is a
+      // single segment, which skips the leaf-strip branch and returns null.
+      // A null resolution is negative-cached, so one bad date field would take
+      // the storefront down for the cache TTL. Looped rather than it.each so
+      // the title stays a literal the config coverage map could reference.
+      for (const bad of ['Ohio/United-States', '+01:00', '']) {
+        const candidate = fullCandidate();
+        candidate.timezone = bad;
+
+        const out = parseStoreSettingsResilient(candidate, 'h');
+
+        expect(out, bad).not.toBeNull();
+        expect(out?.timezone, bad).toBeUndefined();
+        // The surrounding config has to survive the strip, not just the parse.
+        expect(out?.tenantId, bad).toBe('alpha');
+        expect(out?.branding.name, bad).toBe('A');
+      }
+    });
+
+    it('keeps a valid timezone through the resilient path', () => {
+      const candidate = fullCandidate();
+      candidate.timezone = 'Europe/Stockholm';
+
+      expect(parseStoreSettingsResilient(candidate, 'h')?.timezone).toBe(
+        'Europe/Stockholm',
+      );
     });
 
     it('salvages a candidate with an unknown mode value by defaulting to commerce', () => {
