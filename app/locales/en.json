@@ -968,12 +968,13 @@
     "exit": "Exit"
   },
   "form": {
-    "submit": "Send",
+    "checkbox_checked": "Yes",
+    "country_placeholder": "Select country",
     "default_subject": "Website form submission",
     "fallback_email": "If nothing opens, email us at {recipient}",
     "field_required": "This field is required.",
     "invalid_email": "Please enter a valid email address.",
-    "country_placeholder": "Select country",
-    "checkbox_checked": "Yes"
+    "select_placeholder": "Select...",
+    "submit": "Send"
   }
 }
