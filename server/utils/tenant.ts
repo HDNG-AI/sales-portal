@@ -520,9 +520,7 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     geinsSettings: merged.geinsSettings,
     mode: merged.mode,
     checkoutMode: merged.checkoutMode,
-    // Defensive fallback, not just the schema default — this function also
-    // runs on hand-built configs that never go through
-    // StoreSettingsSchema.parse().
+    // Preserve an explicitly configured timezone; leave it unset otherwise.
     timezone: merged.timezone,
     theme,
     branding,
