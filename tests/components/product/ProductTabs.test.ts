@@ -683,3 +683,60 @@ describe('ProductTabs', () => {
     expect(relatedContent.find('.related-products').exists()).toBe(true);
   });
 });
+
+describe('ProductTabs parameter labels', () => {
+  function withParameter(param: Record<string, unknown>) {
+    return mountComponent(ProductTabs, {
+      props: {
+        // weight 0 so the synthetic measurements group is dropped — it renders
+        // its own spec-table, and these assertions are per table.
+        product: makeProduct({
+          weight: 0,
+          parameterGroups: [
+            { name: 'Mått', parameterGroupId: 1, parameters: [param] },
+          ],
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+  }
+
+  it('prefers the label over the name when both are present', () => {
+    // Both are per-language fields in the Geins admin; `label` is the
+    // merchant's display name and `name` is not a technical key.
+    const wrapper = withParameter({
+      name: 'Weight',
+      label: 'Vikt',
+      value: '500 g',
+      show: true,
+    });
+
+    const tables = wrapper.findAll('[data-testid="spec-table"]');
+    expect(tables.length).toBeGreaterThanOrEqual(2);
+    for (const table of tables) {
+      expect(table.text()).toContain('Vikt');
+      expect(table.text()).not.toContain('Weight');
+    }
+  });
+
+  it('falls back to the name when the label is an empty string', () => {
+    // An unfilled Label arrives as "" rather than a missing key, which is
+    // most parameters on most tenants — `??` would render a blank cell.
+    // Asserted per table: the panels disagreed here, desktop preferring
+    // `name` while the mobile accordion preferred `label`.
+    const wrapper = withParameter({
+      name: 'Weight',
+      label: '',
+      value: '500 g',
+      show: true,
+    });
+
+    const tables = wrapper.findAll('[data-testid="spec-table"]');
+    expect(tables.length).toBeGreaterThanOrEqual(2);
+    for (const table of tables) {
+      expect(table.text()).toContain('Weight');
+    }
+  });
+});
+

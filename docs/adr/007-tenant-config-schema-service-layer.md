@@ -23,7 +23,7 @@ The tenant configuration grew from a simple set of flags to a rich contract with
 
 All tenant configuration types are derived from a Zod schema in `server/schemas/store-settings.ts`. The schema defines the exact API contract:
 
-- 6 required OKLCH colors + 34 optional (nullable): 26 derived palette colors and 8 surface keys
+- 6 required OKLCH colors + 36 optional (nullable): 28 derived palette colors and 8 surface keys
 - Feature flags as `Record<string, { enabled: boolean; access?: FeatureAccess }>`
 - `mode: 'commerce' | 'catalog'`
 - `watermark: 'full' | 'minimal' | 'none'` on branding
@@ -96,7 +96,7 @@ Adding a new rule type = adding one evaluator function + extending `UserContext`
 
 ### Color derivation
 
-`server/utils/theme.ts` provides `deriveThemeColors()` which fills all 26 derived palette colors from the 6 core colors using OKLCH color-space manipulation. This runs once when building the tenant config and the result is cached.
+`server/utils/theme.ts` provides `deriveThemeColors()` which fills all 28 derived palette colors from the 6 core colors using OKLCH color-space manipulation. This runs once when building the tenant config and the result is cached.
 
 ## Consequences
 
