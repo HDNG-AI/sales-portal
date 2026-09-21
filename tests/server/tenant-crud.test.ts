@@ -9,6 +9,7 @@ import {
 import {
   tenantConfigKey,
   tenantIdKey,
+  resolveTenant,
   DEFAULT_GEINS_SETTINGS,
 } from '../../server/utils/tenant';
 
@@ -647,5 +648,66 @@ describe('deleteTenant', () => {
     await deleteTenant('a.example.com');
 
     expect(mockClearSdkCache).toHaveBeenCalledWith('a-tenant');
+  });
+});
+
+// These assert the negative cache's actual state, not a call to
+// clearNegativeCache. The cache is a module-level Map inside
+// server/utils/tenant.ts, and invalidateTenantCaches clears it from inside
+// that same module — a spy on the export would never see the call, so a test
+// written that way passes whether or not the hostnames are cleared. Driving
+// resolveTenant before and after is the only way to observe it.
+describe('negative cache invalidation across aliases', () => {
+  const PRIMARY = 'primary.example.com';
+  const ALIAS = 'alias.example.com';
+
+  /** Puts `hostname` in the negative cache by resolving it while unknown. */
+  async function negativeCache(hostname: string) {
+    const miss = await resolveTenant(hostname);
+    expect(miss, `${hostname} should not resolve yet`).toBeNull();
+  }
+
+  beforeEach(() => {
+    // Every KV miss falls through to the merchant API; a 404 is what puts the
+    // hostname in the negative cache in the first place.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not found', { status: 404 })),
+    );
+  });
+
+  it('clears the negative cache for an alias when the tenant is created', async () => {
+    await negativeCache(ALIAS);
+
+    await createTenant({
+      hostname: PRIMARY,
+      tenantId: 'aliased',
+      config: {
+        isActive: true,
+        aliases: [ALIAS],
+        geinsSettings: GEINS_SETTINGS,
+      },
+    });
+
+    // Without the alias in the invalidation set this stays null for the rest
+    // of the negative-cache TTL, with the fresh config already in KV.
+    const resolved = await resolveTenant(ALIAS);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.tenantId).toBe('aliased');
+  });
+
+  it('clears the negative cache for an alias added by updateTenant', async () => {
+    await createTenant({
+      hostname: PRIMARY,
+      tenantId: 'aliased',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+    await negativeCache(ALIAS);
+
+    await updateTenant(PRIMARY, { aliases: [ALIAS] });
+
+    const resolved = await resolveTenant(ALIAS);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.tenantId).toBe('aliased');
   });
 });

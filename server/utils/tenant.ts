@@ -362,6 +362,25 @@ export async function invalidateTenantCaches(
 // ---------------------------------------------------------------------------
 
 /**
+ * Every hostname whose negative-cache entry a write to this tenant has to
+ * clear: the ones the config claims, plus the one the caller named.
+ *
+ * The named hostname matters on its own because it is not always in the
+ * config. An alias just removed from the tenant, or a hostname being deleted,
+ * is precisely the one holding a stale entry — reading the set from the
+ * config alone silently stops clearing it. Aliases matter because
+ * resolveTenant consults the negative cache before KV, so an alias probed
+ * while the tenant was still unknown keeps answering 404 for the rest of its
+ * TTL with the fresh config already in storage.
+ */
+export function hostnamesToInvalidate(
+  named: string,
+  config?: TenantConfig | null,
+): Set<string> {
+  return new Set([named, ...(config ? collectAllHostnames(config) : [])]);
+}
+
+/**
  * Collects all hostnames associated with a tenant config.
  * Returns a Set of: hostname, aliases, and any other hostname fields.
  */

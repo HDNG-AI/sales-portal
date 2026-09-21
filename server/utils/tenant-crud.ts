@@ -11,6 +11,7 @@ import {
   tenantIdKey,
   tenantConfigKey,
   collectAllHostnames,
+  hostnamesToInvalidate,
   writeHostnameMappings,
   resolveTenant,
   DEFAULT_GEINS_SETTINGS,
@@ -182,7 +183,11 @@ export async function createTenant(
     // maps — neither depends on the other completing first.
     await Promise.all([
       writeHostnameMappings(storage, updatedConfig),
-      invalidateTenantCaches(finalTenantId, hostname, cacheStorage),
+      invalidateTenantCaches(
+        finalTenantId,
+        hostnamesToInvalidate(hostname, updatedConfig),
+        cacheStorage,
+      ),
     ]);
     return updatedConfig;
   }
@@ -219,7 +224,11 @@ export async function createTenant(
     // Clears any negative-cache entry from a lookup that happened before
     // this hostname was onboarded, so it resolves immediately rather than
     // waiting out the 5-minute TTL.
-    invalidateTenantCaches(finalTenantId, hostname, cacheStorage),
+    invalidateTenantCaches(
+      finalTenantId,
+      hostnamesToInvalidate(hostname, finalConfig),
+      cacheStorage,
+    ),
   ]);
   return finalConfig;
 }
@@ -249,7 +258,11 @@ export async function updateTenant(
   await persistCmsOverride(storage, tid, updates.cms);
   await Promise.all([
     writeHostnameMappings(storage, updatedConfig),
-    invalidateTenantCaches(tid, existing.hostname, useStorage('cache')),
+    invalidateTenantCaches(
+      tid,
+      hostnamesToInvalidate(existing.hostname, updatedConfig),
+      useStorage('cache'),
+    ),
   ]);
   return updatedConfig;
 }
@@ -278,7 +291,11 @@ export async function deleteTenant(hostname: string): Promise<boolean> {
     await Promise.all([
       storage.removeItem(tenantConfigKey(tid)),
       storage.removeItem(tenantOverrideKey(tid)),
-      invalidateTenantCaches(tid, hostname, useStorage('cache')),
+      invalidateTenantCaches(
+        tid,
+        hostnamesToInvalidate(hostname, config),
+        useStorage('cache'),
+      ),
     ]);
     return true;
   } catch {
