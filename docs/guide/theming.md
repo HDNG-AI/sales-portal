@@ -29,7 +29,7 @@ Each tenant defines a theme validated by a Zod schema (`server/schemas/store-set
 interface ThemeConfig {
   name: string; // Theme identifier
   displayName?: string | null; // Human-readable name
-  colors: ThemeColors; // 6 required + 26 optional OKLCH colors
+  colors: ThemeColors; // 6 required + 34 optional OKLCH colors
   radius?: string | null; // Base border radius (e.g., "0.625rem")
   typography?: ThemeTypography | null; // Font families
 }
@@ -100,7 +100,7 @@ The `generateTenantCss()` function in `server/utils/tenant.ts` creates CSS from 
 
 ```typescript
 // Input: 6 core OKLCH colors from API
-// Step 1: deriveThemeColors() fills all 32 colors
+// Step 1: deriveThemeColors() fills all 40 colors
 // Step 2: generateTenantCss() produces CSS
 
 // Output
