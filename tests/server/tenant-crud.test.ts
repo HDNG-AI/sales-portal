@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { TenantConfig } from '#shared/types/tenant-config';
 
 import {
   createTenant,
@@ -10,6 +11,7 @@ import {
   tenantConfigKey,
   tenantIdKey,
   resolveTenant,
+  hostnamesToInvalidate,
   DEFAULT_GEINS_SETTINGS,
 } from '../../server/utils/tenant';
 
@@ -709,5 +711,73 @@ describe('negative cache invalidation across aliases', () => {
     const resolved = await resolveTenant(ALIAS);
     expect(resolved).not.toBeNull();
     expect(resolved?.tenantId).toBe('aliased');
+  });
+});
+
+describe('hostnamesToInvalidate', () => {
+  const config = {
+    hostname: 'primary.example.com',
+    aliases: ['alias-one.example.com', 'alias-two.example.com'],
+  } as TenantConfig;
+
+  it('unions the config hostnames with the one the caller named', () => {
+    expect([...hostnamesToInvalidate('primary.example.com', config)]).toEqual(
+      expect.arrayContaining([
+        'primary.example.com',
+        'alias-one.example.com',
+        'alias-two.example.com',
+      ]),
+    );
+  });
+
+  it('keeps a named hostname the config no longer claims', () => {
+    // The whole reason the named hostname is a separate argument. An alias
+    // being removed is the one holding a stale entry, and it is gone from the
+    // config by the time the write completes.
+    expect(hostnamesToInvalidate('removed.example.com', config)).toContain(
+      'removed.example.com',
+    );
+  });
+
+  it('falls back to the named hostname alone when there is no config', () => {
+    expect([...hostnamesToInvalidate('only.example.com', null)]).toEqual([
+      'only.example.com',
+    ]);
+  });
+});
+
+describe('write ordering', () => {
+  it('publishes hostname mappings before clearing the negative cache', async () => {
+    // Clearing first leaves a window: a request for the alias arriving before
+    // tenantIdKey(<alias>) is durable misses KV and writes the negative entry
+    // straight back, undoing the invalidation. invocationCallOrder is a global
+    // counter across all vi.fn()s, so it orders calls on different mocks.
+    const kv = mockUseStorage('kv') as unknown as {
+      setItem: { mock: { calls: unknown[][]; invocationCallOrder: number[] } };
+    };
+    const cache = mockUseStorage('cache') as unknown as {
+      removeItem: { mock: { invocationCallOrder: number[] } };
+    };
+
+    await createTenant({
+      hostname: 'ordered.example.com',
+      tenantId: 'ordered',
+      config: {
+        isActive: true,
+        aliases: ['ordered-alias.example.com'],
+        geinsSettings: GEINS_SETTINGS,
+      },
+    });
+
+    const mappingWrites = kv.setItem.mock.calls
+      .map((call, i) => ({ key: call[0] as string, order: kv.setItem.mock.invocationCallOrder[i]! }))
+      .filter(({ key }) => key.startsWith('tenant:id:'));
+    const lastMappingWrite = Math.max(...mappingWrites.map((w) => w.order));
+    const firstInvalidation = Math.min(
+      ...cache.removeItem.mock.invocationCallOrder,
+    );
+
+    expect(mappingWrites.length).toBeGreaterThan(0);
+    expect(lastMappingWrite).toBeLessThan(firstInvalidation);
   });
 });
