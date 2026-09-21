@@ -56,6 +56,16 @@ vi.mock('../../../server/services/configurator', () => ({
     mockIsConfigurableProduct(...args),
 }));
 
+// cms-sanitize pulls DOMPurify in, which is a 3.4s cold transform — by far the
+// largest single cost in this file, and nothing here tests DOMPurify itself
+// (tests/unit/cms-sanitize.test.ts does). Mocked to a visible marker so the
+// handler's own contract — that every product text goes through the sanitizer
+// before leaving the API — becomes assertable instead of merely expensive.
+const mockSanitizeWidgetHtml = vi.fn((html: string) => `CLEAN(${html})`);
+vi.mock('../../../server/utils/cms-sanitize', () => ({
+  sanitizeWidgetHtml: (html: string) => mockSanitizeWidgetHtml(html),
+}));
+
 // Rate limiter — uses useStorage('kv'), must stay mocked
 vi.mock('../../../server/utils/rate-limiter', () => ({
   reviewPostRateLimiter: {
@@ -150,6 +160,34 @@ describe('Product API Routes', () => {
       const result = await handler(fakeEvent);
 
       expect(result).toEqual({ id: 1, name: 'My Product', ancestors: [] });
+    });
+
+    it('sanitizes every product text before it leaves the API', async () => {
+      // Merchant-API text reaches the client verbatim otherwise. The handler
+      // sanitizes text1/text2/text3 and nothing asserted that until now.
+      vi.mocked(getRouterParam).mockReturnValue('my-product');
+      mockSanitizeWidgetHtml.mockClear();
+      mockGraphqlQuery.mockResolvedValue({
+        product: {
+          id: 1,
+          texts: {
+            text1: '<img src=x onerror=alert(1)>',
+            text2: 'plain',
+            text3: '<b>bold</b>',
+          },
+        },
+      });
+
+      const result = (await handler(fakeEvent)) as {
+        texts: { text1: string; text2: string; text3: string };
+      };
+
+      expect(mockSanitizeWidgetHtml).toHaveBeenCalledTimes(3);
+      expect(result.texts).toEqual({
+        text1: 'CLEAN(<img src=x onerror=alert(1)>)',
+        text2: 'CLEAN(plain)',
+        text3: 'CLEAN(<b>bold</b>)',
+      });
     });
 
     it('throws NOT_FOUND when SDK returns null in default locale', async () => {
