@@ -963,11 +963,12 @@
     "exit": "Beenden"
   },
   "form": {
-    "submit": "Senden",
+    "country_placeholder": "Land auswählen",
     "default_subject": "Formularübermittlung von der Website",
     "fallback_email": "Falls sich nichts öffnet, schreiben Sie uns an {recipient}",
     "field_required": "Dieses Feld ist erforderlich.",
     "invalid_email": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
-    "country_placeholder": "Land auswählen"
+    "select_placeholder": "Auswählen...",
+    "submit": "Senden"
   }
 }
