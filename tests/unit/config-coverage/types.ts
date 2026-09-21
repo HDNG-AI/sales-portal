@@ -253,8 +253,8 @@ export type BrandingCoverage = {
 };
 
 export type LayoutCoverage = {
-  [K in keyof Layout]-?: K extends 'headerNavVariant'
-    ? Record<NonNullable<Layout['headerNavVariant']> | 'absent', Coverage>
+  [K in keyof Layout]-?: K extends 'headerNavVariant' | 'storefrontStyle'
+    ? Record<NonNullable<Layout[K]> | 'absent', Coverage>
     : Coverage;
 };
 

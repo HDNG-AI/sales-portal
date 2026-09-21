@@ -11,6 +11,8 @@ import {
   addCategoryPrefix,
 } from '#shared/utils/menu';
 
+const props = defineProps<{ branded?: boolean }>();
+
 // Call useCmsMenuData once per key. Composables cannot be called in a loop.
 const { menu: footerMenu } = useCmsMenuData(CMS_MENUS.FOOTER);
 const { menu: footerMenu2 } = useCmsMenuData(CMS_MENUS.FOOTER_2);
@@ -82,7 +84,11 @@ const countryName = computed(() => regionName(address.value?.country));
 
 // Render guard: show the wrapper only when there is something to display
 const shouldRender = computed(
-  () => menuColumns.value.length > 0 || hasContact.value || hasAddress.value,
+  () =>
+    props.branded ||
+    menuColumns.value.length > 0 ||
+    hasContact.value ||
+    hasAddress.value,
 );
 
 // Reuse the existing link helpers verbatim, operating on flat top-level items.
@@ -116,6 +122,9 @@ function linkAttrs(item: MenuItemType): Record<string, string | undefined> {
   >
     <div class="mx-auto max-w-7xl">
       <div class="grid grid-cols-2 gap-8 md:grid-cols-3 lg:grid-cols-5">
+        <div v-if="branded" data-slot="footer-brand">
+          <BrandLogo height="h-12" />
+        </div>
         <!-- Contact column -->
         <div v-if="hasContact">
           <h3 class="mb-4 text-sm font-bold">
