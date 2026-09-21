@@ -39,10 +39,14 @@ defineProps<{ product: DetailProduct }>();
           {{ product.name }}
         </h1>
 
-        <!-- Article number -->
+        <!-- Article number. Monospace because it is an identifier a buyer
+             reads character by character, and often reads aloud or copies
+             into an order: proportional digits make 0/O and 1/l/I ambiguous
+             at a glance. `font-mono` resolves through --mono-font-family, so
+             a tenant that sets `typography.monoFontFamily` gets its own. -->
         <p
           v-if="product.articleNumber"
-          class="text-muted-foreground text-[20px]"
+          class="text-muted-foreground font-mono text-[20px]"
           data-testid="product-article-number"
         >
           Art nr. {{ product.articleNumber }}
