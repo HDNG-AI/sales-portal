@@ -95,6 +95,7 @@ export interface TenantConfig {
   // Missing keys fall back to component defaults.
   layout?: {
     headerNavVariant?: 'grey' | 'white' | null;
+    storefrontStyle?: 'classic' | 'editorial' | null;
   } | null;
 
   // Features — keyed by feature name

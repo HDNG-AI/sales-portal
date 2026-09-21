@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import './transitions.css';
 @import './print.css';
+@import './storefront-editorial.css';
 
 /* App is light-only (no .dark class is ever applied). Tailwind v4 defaults the
    dark: variant to @media (prefers-color-scheme: dark), which makes shadcn base
@@ -143,7 +144,7 @@
     font-family: var(--font-family);
   }
   .rich-text :where(h1, h2, h3, h4, h5, h6) {
-    @apply mt-6 mb-2 font-bold leading-tight;
+    @apply mt-6 mb-2 leading-tight font-bold;
     font-family: var(--heading-font-family);
   }
   .rich-text :where(h1, h2, h3, h4, h5, h6):first-child {

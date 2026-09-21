@@ -33,6 +33,7 @@ import type {
   ThemeColors,
   StoreSettings,
 } from '../../server/schemas/store-settings';
+import { StoreSettingsSchema } from '../../server/schemas/store-settings';
 import { KV_STORAGE_KEYS } from '../../shared/constants/storage';
 
 // Mock logger BEFORE importing tenant utils so the defensive-code
@@ -580,6 +581,23 @@ describe('Tenant utilities', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
     }
+
+    it('preserves optional layout settings through validation and tenant building', () => {
+      const layout = {
+        headerNavVariant: 'white',
+        storefrontStyle: 'editorial',
+      };
+      const settings = StoreSettingsSchema.parse({
+        ...minimalSettings(),
+        layout,
+      });
+      expect(buildTenantConfig(settings).layout).toEqual(layout);
+    });
+
+    it('leaves existing tenants on the default layout when no variant is configured', () => {
+      const settings = StoreSettingsSchema.parse(minimalSettings());
+      expect(buildTenantConfig(settings).layout).toBeUndefined();
+    });
 
     it('empty appSettings applies canonical defaults (Studio-managed flags off)', () => {
       const built = buildTenantConfig(minimalSettings());

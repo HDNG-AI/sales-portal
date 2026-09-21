@@ -157,6 +157,14 @@ export const BrandingConfigSchema = z.object({
   ogImageUrl: SafeUrlSchema.nullable().optional(),
 });
 
+export const LayoutConfigSchema = z
+  .object({
+    headerNavVariant: z.enum(['grey', 'white']).nullable().optional(),
+    storefrontStyle: z.enum(['classic', 'editorial']).nullable().optional(),
+  })
+  .nullable()
+  .optional();
+
 /**
  * Feature access control — who can access a feature.
  * - "all": everyone
@@ -331,6 +339,7 @@ export const StoreSettingsSchema = z.object({
   timezone: TimezoneSchema.default('UTC'),
   theme: ThemeConfigSchema,
   branding: BrandingConfigSchema,
+  layout: LayoutConfigSchema,
   features: z.record(z.string(), FeatureConfigInputSchema).default({}),
   seo: SeoConfigSchema.nullable().optional(),
   contact: ContactConfigSchema.nullable().optional(),
