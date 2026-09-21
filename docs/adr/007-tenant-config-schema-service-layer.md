@@ -96,7 +96,7 @@ Adding a new rule type = adding one evaluator function + extending `UserContext`
 
 ### Color derivation
 
-`server/utils/theme.ts` provides `deriveThemeColors()` which fills all 26 derived palette colors from the 6 core colors using OKLCH color-space manipulation. This runs once when building the tenant config and the result is cached.
+`server/utils/theme.ts` provides `deriveThemeColors()` which fills all 28 derived palette colors from the 6 core colors using OKLCH color-space manipulation. This runs once when building the tenant config and the result is cached.
 
 ## Consequences
 

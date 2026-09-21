@@ -402,7 +402,7 @@ The 6 required colors are: `primary`, `primaryForeground`, `secondary`, `seconda
 
 ### Color Derivation
 
-The `deriveThemeColors()` function in `server/utils/theme.ts` fills in all 26 derived palette colors from the 6 core colors using OKLCH color space manipulation. The 8 surface keys are resolved separately by the CSS emitter via `SURFACE_FALLBACKS`, so every surface variable is always defined. API-provided non-null values are preserved.
+The `deriveThemeColors()` function in `server/utils/theme.ts` fills in all 28 derived palette colors from the 6 core colors using OKLCH color space manipulation. The 8 surface keys are resolved separately by the CSS emitter via `SURFACE_FALLBACKS`, so every surface variable is always defined. API-provided non-null values are preserved.
 
 ### Dynamic CSS Generation
 

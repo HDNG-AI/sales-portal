@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generateTenantCss } from '../../../../server/utils/tenant-css';
 import { deriveThemeColors } from '../../../../server/utils/theme';
+import { toSafariSafeColor } from '../../../../server/utils/color-coercion';
 import type { ThemeColors } from '../../../../server/schemas/store-settings';
 import { logger } from '../../../../server/utils/logger';
 
@@ -536,11 +537,15 @@ describe('generateTenantCss semantic status colors', () => {
 
     const css = generateTenantCss('acme', derived);
 
-    // Converted to sRGB hex like every other themed colour, so Safari renders
-    // them; the assertion is on the variable existing with the tenant's value,
-    // not on the exact conversion, which toSafariSafeColor owns.
-    expect(css).toMatch(/--success:\s*\S+;/);
-    expect(css).toMatch(/--warning:\s*\S+;/);
-    expect(css).not.toMatch(/--success:\s*;/);
+    // Each variable must carry its OWN tenant value. Asserting only that the
+    // declarations are non-empty passes a swapped mapping and a
+    // fallback-only implementation alike, so the two colours are deliberately
+    // far apart in hue and each is matched to its own converted value.
+    const successHex = toSafariSafeColor('oklch(0.527 0.154 150.069)');
+    const warningHex = toSafariSafeColor('oklch(0.7 0.2 90)');
+    expect(successHex).not.toBe(warningHex);
+
+    expect(css).toContain(`--success: ${successHex};`);
+    expect(css).toContain(`--warning: ${warningHex};`);
   });
 });
