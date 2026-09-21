@@ -59,9 +59,12 @@ query product(
       name
       parameterGroupId
       parameters {
-        # `label` is the merchant's localized display name, resolved against
-        # the languageId passed above; `name` is the technical PIM key and
-        # reads the same in every language, so consumers prefer label.
+        # Both `label` and `name` are per-language fields in the Geins admin,
+        # resolved against the languageId passed above — `name` is not a
+        # technical key, it is localized too. `label` is the merchant's
+        # display name and is left empty on most tenants, arriving as "" and
+        # not null, so consumers prefer it but must fall through on empty
+        # rather than on nullish.
         label
         name
         value
