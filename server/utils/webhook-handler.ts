@@ -163,23 +163,31 @@ export async function processConfigRefresh(
   // Load config to find all hostnames (primary + aliases)
   const config = await kvStorage.getItem<TenantConfig>(configKey);
 
-  if (config) {
-    // Remove all hostname → tenantId mappings
-    const hostnames = collectAllHostnames(config);
-    await Promise.all(
-      [...hostnames].map((h) => kvStorage.removeItem(tenantIdKey(h))),
-    );
-  } else {
-    // No config found — at least remove the mapping for this hostname
-    await kvStorage.removeItem(tenantIdKey(hostname));
-  }
+  // Every hostname the tenant answers on, plus the one the webhook named.
+  // The latter is not always among the former: when an alias has been removed
+  // from the tenant, KV can still map it while the stored config no longer
+  // claims it. That hostname is precisely the one whose mapping and negative
+  // entry need clearing, so it is included unconditionally.
+  const hostnames = new Set([
+    hostname,
+    ...(config ? collectAllHostnames(config) : []),
+  ]);
+  await Promise.all(
+    [...hostnames].map((h) => kvStorage.removeItem(tenantIdKey(h))),
+  );
 
   // Remove config under tenantId key
   await kvStorage.removeItem(configKey);
 
   // 13. Invalidate in-memory caches (SDK instances + negative tenant cache)
   clearSdkCache(tid);
-  clearNegativeCache(hostname);
+  // Every hostname, not just the one the webhook named. resolveTenant
+  // consults the negative cache before KV, so an alias probed while the
+  // tenant was still unknown keeps answering 404 for the rest of its TTL
+  // with the refreshed config already in storage.
+  for (const h of hostnames) {
+    clearNegativeCache(h);
+  }
 
   // 14. Invalidate Nitro handler cache.
   // Nitro 2.x stores defineCachedEventHandler entries at:
