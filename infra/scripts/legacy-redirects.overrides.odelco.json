@@ -1,0 +1,97 @@
+{
+  "_README": [
+    "Hand-curated input to generate-redirects.mjs for the odelco tenant.",
+    "Everything here is a HUMAN JUDGEMENT the Geins API cannot supply: the old",
+    "VirtueMart taxonomy was reorganised during migration, so old and new slugs",
+    "do not correspond by any string rule (7% auto-match — see PROPOSAL.md).",
+    "",
+    "category: old VirtueMart path -> Geins category ALIAS. Each row also becomes",
+    "          an ancestor-fallback for every descendant of that path, which is",
+    "          how ~32 curated rows cover 217 crawled category paths.",
+    "brand:    old /varumarken/<slug> -> Geins brand ALIAS (only where they differ;",
+    "          identical aliases are derived automatically).",
+    "cms:      old path -> Geins CMS page ALIAS.",
+    "exact:    old path -> full new path, verbatim. Used for the VirtueMart",
+    "          /produkter/manufacturer/<brand> listing shape.",
+    "",
+    "UNREVIEWED ROWS ARE MARKED _review. A merchant must confirm these before",
+    "this map goes live; several are 'closest surviving parent', not equivalents."
+  ],
+  "category": {
+    "/produkter/digital-switching": "digital-switching",
+    "/produkter/digital-switching/knappar-och-paneler": "knappar-paneler",
+    "/produkter/digital-switching/stroem-och-styrmoduler": "styrmoduler",
+    "/produkter/digital-switching/nmea-2000-naetverk": "nmea-2000-natverk",
+    "/produkter/digital-switching/kontakter-och-hus": "kontaktdon",
+    "/produkter/kontroll-ochovervakning": "kontroll-overvakning",
+    "/produkter/kontroll-ochovervakning/batterioevervakning": "batteriovervakning",
+    "/produkter/kontroll-ochovervakning/larm-och-kommunikation": "larm-kommunikation",
+    "/produkter/kontroll-ochovervakning/motordata": "motorovervakning",
+    "/produkter/kontroll-ochovervakning/nmea-2000-naetverk": "nmea-2000-natverk",
+    "/produkter/kontroll-ochovervakning/signalomvandlare": "gateways-omvandlare",
+    "/produkter/kontroll-ochovervakning/skaermar-datorer-och-program": "skarmar-displayer",
+    "/produkter/kontroll-ochovervakning/tankmaetning": "tank-nivamatning",
+    "/produkter/kontroll-ochovervakning/elektricitet-ac-dc": "kontroll-overvakning",
+    "/produkter/saekerhet": "sakerhet-1",
+    "/produkter/saekerhet/ais-produkter": "ais-produkter",
+    "/produkter/saekerhet/noedsaendare-ljus-och-vhf": "nodsandare-epirb",
+    "/produkter/saekerhet/vaermekameror": "varmekameror",
+    "/produkter/stroemfoersoerjning": "stromforsorjning-1",
+    "/produkter/stroemfoersoerjning/batterier-och-tillbehoer": "batterier-tillbehor",
+    "/produkter/stroemfoersoerjning/distribution-av-el": "eldistribution",
+    "/produkter/stroemfoersoerjning/generering-av-stroem": "generatorer",
+    "/produkter/stroemfoersoerjning/installationsmaterial": "installation-kabel",
+    "/produkter/stroemfoersoerjning/laddare-och-omvandlare": "batteriladdare",
+    "/produkter/stroemfoersoerjning/landstroem": "landstrom",
+    "/kontroll-och-overvakning": "kontroll-overvakning",
+    "/sakerhet": "sakerhet-1",
+    "/stromforsorjning": "stromforsorjning-1",
+    "_review": {
+      "/produkter/digital-switching/kontakter-och-hus": "no 1:1 target; nearest is installation-kabel/kontaktdon",
+      "/produkter/kontroll-ochovervakning/elektricitet-ac-dc": "split across several new categories; sent to the parent",
+      "/produkter/stroemfoersoerjning/generering-av-stroem": "old node covered generators AND solar; new 'generatorer' is narrower",
+      "/produkter/stroemfoersoerjning/laddare-och-omvandlare": "old node covered chargers AND inverters; new 'batteriladdare' is narrower",
+      "/produkter/utbildningar": "UNMAPPED — training pages have no catalog equivalent in Geins"
+    }
+  },
+  "brand": {
+    "egis-mobile": "egis",
+    "odelco": "odelco-diverse",
+    "_review": {
+      "nelco": "UNMAPPED — no Geins brand",
+      "star": "UNMAPPED — no Geins brand",
+      "arco-marine": "verify: Geins alias is arco-marine, derived automatically",
+      "sol-go": "verify: Geins alias is sol-go, derived automatically"
+    }
+  },
+  "cms": {
+    "/kontakt/kontakta-oss": "contact",
+    "/kontakt/contact-us": "contact",
+    "/kontakt/bli-kund": "bli-kund",
+    "/login/begaer-inloggningsuppgifter": "bli-kund",
+    "/allmanna-forsaljningsvillkor": "allmanna-villkor",
+    "/cookies": "integritetspolicy",
+    "/feedback": "support-formular",
+    "/service-support-och-reklamationer": "support-formular",
+    "_review": {
+      "/blog": "UNMAPPED — no blog in Geins CMS; decide: rebuild, or 410",
+      "/in-english": "UNMAPPED — channel serves sv-SE only; no English locale exists yet",
+      "/det-har-ar-nmea-2000": "UNMAPPED — editorial article, no Geins page",
+      "/cookies -> integritetspolicy": "cookie policy folded into the privacy page; confirm with legal"
+    }
+  },
+  "exact": {
+    "/produkter/manufacturer/actisense": "/se/sv/b/actisense",
+    "/produkter/manufacturer/blue-sea-systems": "/se/sv/b/blue-sea-systems",
+    "/produkter/manufacturer/maretron": "/se/sv/b/maretron",
+    "/produkter/manufacturer/murphy": "/se/sv/b/murphy",
+    "/produkter/manufacturer/veratron": "/se/sv/b/veratron",
+    "/produkter/manufacturer/victron-energy": "/se/sv/b/victron-energy",
+    "/produkter/manufacturer/yacht-devices": "/se/sv/b/yacht-devices",
+    "/produkter": "/se/sv/products",
+    "_review": {
+      "/produkter": "all-products page (app/pages/products/index.vue). EXACT only, never an ancestor row — the ~30 discontinued root-level product URLs must 404/410 rather than soft-404 into a 3470-item list.",
+      "/varumarken": "UNMAPPED — sales-portal has no brand index page (no app/pages/b/index.vue). Build one, or accept the 404."
+    }
+  }
+}
