@@ -1,5 +1,8 @@
 import type { TenantConfig } from '#shared/types/tenant-config';
+import type { CategoryNode } from '#shared/utils/breadcrumb-trail';
+import { categoryPath } from '#shared/utils/route-helpers';
 import { getTenantSDK, getChannelVariables } from '../../services/_sdk';
+import { getCategoryTree } from '../../services/categories';
 import { loadQuery } from '../../services/graphql/loader';
 import { unwrapGraphQL } from '../../services/graphql/unwrap';
 
@@ -7,10 +10,6 @@ interface SitemapEntry {
   loc: string;
   changefreq: string;
   priority: number;
-}
-
-interface CategoryNode {
-  alias?: string;
 }
 
 interface BrandNode {
@@ -66,15 +65,12 @@ export default defineEventHandler(async (event) => {
           availableLocales,
         );
 
+        // The category tree comes from the shared cached fetcher rather than a
+        // query of its own: this loop ran uncached, once per market × locale,
+        // on every sitemap request — 1564 categories and 341 KiB per pass on
+        // the largest tenant. A failure here is caught below, as before.
         const [categoriesRaw, brandsRaw] = await Promise.all([
-          wrapServiceCall(
-            () =>
-              sdk.core.graphql.query({
-                queryAsString: loadQuery('categories/categories.graphql'),
-                variables: channelVars,
-              }),
-            'categories',
-          ).then(unwrapGraphQL),
+          getCategoryTree(event, channelVars).catch(() => []),
           wrapServiceCall(
             () =>
               sdk.core.graphql.query({
@@ -93,9 +89,13 @@ export default defineEventHandler(async (event) => {
           : [];
 
         for (const category of categories) {
-          if (category.alias) {
+          if (category.canonicalUrl) {
             entries.push({
-              loc: `/${market}/${locale}/c/${category.alias}`,
+              // Tree = hierarchy, `canonicalUrl` = address, capped at the
+              // merchant's `MaxCategoryDepth`: a tree-built path is longer than
+              // the real one and answers 301 or 404. `categoryPath()` strips the
+              // canonical's own market/locale; the loop re-adds its own.
+              loc: `/${market}/${locale}${categoryPath(category.canonicalUrl)}`,
               changefreq: 'weekly',
               priority: 0.8,
             });

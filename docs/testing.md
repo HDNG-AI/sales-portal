@@ -84,7 +84,8 @@ After creating a test, add its path to the appropriate list in `vitest.workspace
 
 The full suite runs in ~70-80s:
 
-- **3687 tests** across **277 files**
+- The suite size is in [Overview](#overview), dated — not restated here, so
+  the two cannot drift apart
 - Transform: ~55s, setup: ~90s, collect: ~240s, tests: ~120s
 - Environment overhead: ~115s (shared across tiers)
 - Nuxt boot: single instance shared via `getVitestConfigFromNuxt()`
@@ -400,7 +401,6 @@ tests/
 ├── composables/        # Composable tests (tiers: node or nuxt)
 │   ├── useCmsPreview.test.ts             # nuxt tier (mockNuxtImport)
 │   ├── useErrorTracking.test.ts          # nuxt tier (useRuntimeConfig)
-│   ├── useRouteResolution.test.ts
 │   └── useTenant.test.ts                 # nuxt tier (useFetch)
 ├── e2e/               # Playwright E2E tests (13 specs x 3 browser projects, after preflight)
 │   ├── target.ts           # The environment the suite reads: origin, tenant, account

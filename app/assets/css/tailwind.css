@@ -33,6 +33,9 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-selected: var(--selected);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -59,6 +62,15 @@
   --color-footer-text: var(--footer-text);
 }
 
+/* Tailwind 4.1.18 emits nothing for this candidate — verified by compiling it.
+   `PortalShell.vue` has used the class since it was written. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   :root {
     --font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
@@ -81,6 +93,13 @@
     --accent-foreground: #171717;
     --destructive: #d80027;
     --destructive-foreground: #ffffff;
+    /* The three states the tenant theme does not carry. `selected` marks a
+       chosen row and is deliberately not themed: a tenant whose primary is a
+       near-black neutral would otherwise mark its choices in grey. Used as
+       `bg-x/10 text-x`, the way `destructive` already is. */
+    --selected: #0f766e;
+    --success: #047857;
+    --warning: #b45309;
     --border: #e5e5e5;
     --input: #e5e5e5;
     --ring: #4497f7;
@@ -139,7 +158,7 @@
     font-family: var(--font-family);
   }
   .rich-text :where(h1, h2, h3, h4, h5, h6) {
-    @apply mt-6 mb-2 font-bold leading-tight;
+    @apply mt-6 mb-2 leading-tight font-bold;
     font-family: var(--heading-font-family);
   }
   .rich-text :where(h1, h2, h3, h4, h5, h6):first-child {

@@ -92,7 +92,11 @@ const mockProductsStatus = ref('idle');
 // what binds these assertions to the config rather than to a handed-over area.
 const mockCmsAreas = new Map<string, { containers: unknown[] }>();
 
-type AreaQuery = { areaName?: string };
+type AreaQuery = {
+  areaName?: string;
+  categoryIds?: string;
+  brandAlias?: string;
+};
 
 function resolveAreaQuery(
   options?: Record<string, unknown>,
@@ -480,6 +484,53 @@ describe('ProductList.vue', () => {
         true,
       );
       expect(wrapper.find('[data-testid="plp-cms-top"]').exists()).toBe(false);
+    });
+
+    /** The CMS query has to carry the page, or a filtered collection never
+     *  resolves. Only this page's own category goes out: Geins returns one
+     *  collection and the lowest id wins, so sending an ancestor lets a parent's
+     *  collection shadow the one filtered to this category. */
+    it('sends its own category id, never its ancestors', async () => {
+      configureBothZones();
+      mockPageInfo.value = {
+        ...VALID_PAGE_INFO,
+        id: 12,
+        ancestors: [
+          { name: 'A', canonicalUrl: '/se/sv/c/a' },
+          { name: 'B', canonicalUrl: '/se/sv/c/a/b' },
+        ],
+      };
+
+      await mountProductList(categoryProps, { global: { stubs: cmsStubs } });
+
+      const areaCalls = mockUseFetch.mock.calls.filter(
+        ([url]) => typeof url === 'string' && url.includes('/api/cms/area'),
+      );
+      expect(areaCalls.length).toBeGreaterThan(0);
+      for (const [, options] of areaCalls) {
+        const query = resolveAreaQuery(options);
+        expect(query?.categoryIds).toBe('12');
+        expect(query?.brandAlias).toBeUndefined();
+      }
+    });
+
+    it('sends the brand alias as page context on a brand list', async () => {
+      configureBothZones();
+
+      await mountProductList(
+        { type: 'brand' as const, alias: 'kraftbo' },
+        { global: { stubs: cmsStubs } },
+      );
+
+      const areaCalls = mockUseFetch.mock.calls.filter(
+        ([url]) => typeof url === 'string' && url.includes('/api/cms/area'),
+      );
+      expect(areaCalls.length).toBeGreaterThan(0);
+      for (const [, options] of areaCalls) {
+        const query = resolveAreaQuery(options);
+        expect(query?.brandAlias).toBe('kraftbo');
+        expect(query?.categoryIds).toBeUndefined();
+      }
     });
 
     it('renders no bottom zone when product_list_bottom names another area', async () => {
@@ -1092,6 +1143,111 @@ describe('ProductList.vue', () => {
       await flushPromises();
 
       expect(lastReplacedQuery()?.sort).toBe('price-asc');
+    });
+  });
+  describe('breadcrumbs', () => {
+    // The shared stub is anonymous, so give the header a name here to find it.
+    const namedHeaderStubs = {
+      ...stubs,
+      ProductListHeader: {
+        name: 'ProductListHeader',
+        template: '<div data-testid="plp-header" />',
+        props: ['pageInfo', 'breadcrumbs'],
+      },
+    };
+
+    const headerBreadcrumbs = (wrapper: {
+      findComponent: (q: { name: string }) => {
+        props: (k: string) => unknown;
+      };
+    }) =>
+      wrapper
+        .findComponent({ name: 'ProductListHeader' })
+        .props('breadcrumbs') as Array<{
+        label: string;
+        href?: string;
+        current?: boolean;
+      }>;
+
+    it('renders the ancestor chain between Home and the current category', async () => {
+      mockPageInfo.value = {
+        ...VALID_PAGE_INFO,
+        name: 'Testkategori',
+        ancestors: [
+          { name: 'Fästelement', canonicalUrl: '/se/sv/c/fastelement' },
+        ],
+      };
+
+      const wrapper = await mountProductList(categoryProps, {
+        global: { stubs: namedHeaderStubs },
+      });
+
+      const items = headerBreadcrumbs(wrapper);
+      expect(items.map((i) => i.label)).toEqual([
+        'common.home',
+        'Fästelement',
+        'Testkategori',
+      ]);
+      // The canonical path, not the /c/<alias> short form that answers 301.
+      expect(items[1]?.href).toBe('/se/sv/c/fastelement');
+      expect(items.at(-1)?.current).toBe(true);
+    });
+
+    it('normalizes the prefix-less canonical shape other tenants return', async () => {
+      mockPageInfo.value = {
+        ...VALID_PAGE_INFO,
+        name: 'Skyddsutrustning',
+        ancestors: [
+          {
+            name: 'Säkerhet och övrigt',
+            canonicalUrl: '/se/sv/sakerhet-och-ovrigt',
+          },
+        ],
+      };
+
+      const wrapper = await mountProductList(categoryProps, {
+        global: { stubs: namedHeaderStubs },
+      });
+
+      expect(headerBreadcrumbs(wrapper)[1]?.href).toBe(
+        '/se/sv/c/sakerhet-och-ovrigt',
+      );
+    });
+
+    it('falls back to the short trail when no ancestors were resolved', async () => {
+      // An unresolvable chain arrives as [] rather than a partial list, so the
+      // page renders what it can prove instead of a trail with a gap.
+      mockPageInfo.value = { ...VALID_PAGE_INFO, ancestors: [] };
+
+      const wrapper = await mountProductList(categoryProps, {
+        global: { stubs: namedHeaderStubs },
+      });
+
+      expect(headerBreadcrumbs(wrapper).map((i) => i.label)).toEqual([
+        'common.home',
+        'Test Category',
+      ]);
+    });
+
+    it('renders no ancestors on a brand page', async () => {
+      // Brands have no hierarchy; the brand endpoint never sends ancestors.
+      mockPageInfo.value = {
+        ...VALID_PAGE_INFO,
+        name: 'Worksafe',
+        ancestors: [
+          { name: 'Fästelement', canonicalUrl: '/se/sv/c/fastelement' },
+        ],
+      };
+
+      const wrapper = await mountProductList(
+        { type: 'brand', alias: 'worksafe' },
+        { global: { stubs: namedHeaderStubs } },
+      );
+
+      expect(headerBreadcrumbs(wrapper).map((i) => i.label)).toEqual([
+        'common.home',
+        'Worksafe',
+      ]);
     });
   });
 });

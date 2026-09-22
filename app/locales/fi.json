@@ -308,6 +308,69 @@
     "on_demand": "Tilauksesta",
     "no_image": "Ei kuvaa saatavilla"
   },
+  "configurator": {
+    "required": "Pakollinen",
+    "read_only": "Määräytyy kokoonpanon mukaan",
+    "unavailable": "Ei käytettävissä nykyisillä valinnoilla",
+    "bounds": "{min}–{max} {unit}",
+    "optional": "Valinnainen",
+    "choose_many": "Valitse ei yhtään tai useampi",
+    "quantity": "Määrä",
+    "show_all": "Näytä kaikki {count} vaihtoehtoa",
+    "choose_in_group": "Valitse {name}",
+    "search": "Hae…",
+    "no_matches": "Ei osumia.",
+    "bounds_narrowed": "raja muuttunut aiemman valinnan vuoksi",
+    "summary": {
+      "none": "ei valintaa",
+      "many": "{count} valittu"
+    },
+    "yes": "Kyllä",
+    "no": "Ei",
+    "commit": "Viimeistele kokoonpano",
+    "starting": "Aloitetaan kokoonpanoa…",
+    "failed": "Jokin meni vikaan. Lataa sivu uudelleen ja yritä uudestaan.",
+    "configure_product": "Määritä tuote",
+    "product_configuration": "Tuotemääritys",
+    "reset": "Palauta",
+    "sections": "Osiot",
+    "remaining": "{count} jäljellä",
+    "previous": "Edellinen",
+    "next": "Seuraava",
+    "section_position": "Osio {current}/{total}",
+    "page_note": "Tämä on määritettävä tuote. Rakenna oma versiosi alla kohdassa {tab} — hinta ja voimassaolo lasketaan jatkuvasti.",
+    "severity": {
+      "error": "Virhe",
+      "warning": "Varoitus"
+    },
+    "committed": {
+      "heading": "Kokoonpano on valmis",
+      "unit_price": "Yksikköhinta"
+    },
+    "panel": {
+      "valid": "Kokoonpano on valmis ja tilattavissa.",
+      "invalid": "Puuttuu, ennen kuin voit jatkaa: {items}.",
+      "invalid_unspecified": "Kokoonpano ei ole valmis.",
+      "recomputing": "Lasketaan uudelleen…",
+      "time_left": "{time} jäljellä",
+      "renew": "Jatka istuntoa",
+      "renew_failed": "Istuntoa ei voitu jatkaa.",
+      "expired": "Kokoonpanoistunto on vanhentunut.",
+      "start_over": "Aloita alusta",
+      "title": "Erittely",
+      "prices_ex_vat": "hinnat ilman alv:tä",
+      "customer_type": {
+        "person": "Yksityisasiakas",
+        "organization": "Yritysasiakas"
+      },
+      "net_price": "Nettohinta",
+      "quantity_suffix": "{count} kpl",
+      "indicative": "Suuntaa antava hinta. Hinta vahvistetaan tarjouksessa.",
+      "copy": "Kopioi erittely",
+      "copied": "Kopioitu",
+      "copy_quantity": "Määrä: {count} kpl"
+    }
+  },
   "account": {
     "my_account": "Oma tili",
     "profile": "Profiili",

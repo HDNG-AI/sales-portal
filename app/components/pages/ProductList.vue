@@ -20,6 +20,7 @@ import {
   canonicalListRedirectTarget,
   productPath,
 } from '#shared/utils/route-helpers';
+import { ancestorCrumbs } from '#shared/utils/breadcrumb-trail';
 import { recoverEntityUrl } from '~/composables/useEntityUrlRecovery';
 
 const props = defineProps<{
@@ -234,10 +235,18 @@ const showingFrom = computed(() => {
 });
 const showingTo = computed(() => Math.min(skip.value + take, totalCount.value));
 
+// The ancestor chain is resolved server-side from the page's own canonicalUrl
+// and arrives with pageInfo, so there is no request here. It is empty for a
+// top-level category, for brands, and whenever the chain could not be resolved
+// in full — a trail with a gap would be indistinguishable from the truncated
+// one this replaced.
 const breadcrumbs = computed<BreadcrumbItem[]>(() => {
   const items: BreadcrumbItem[] = [
     { label: t('common.home'), href: localePath('/') },
   ];
+  if (!isBrand.value) {
+    items.push(...ancestorCrumbs(pageInfo.value?.ancestors, localePath));
+  }
   if (pageInfo.value?.name) {
     items.push({ label: pageInfo.value.name, current: true });
   }
@@ -362,12 +371,24 @@ function clearAllFilters() {
 const topSlot = useCmsSlot(CMS_SLOTS.PRODUCT_LIST_TOP);
 const bottomSlot = useCmsSlot(CMS_SLOTS.PRODUCT_LIST_BOTTOM);
 
+// Page context for the CMS container filters; see buildAreaFilters in
+// server/services/cms.ts. Ancestors are deliberately NOT sent: Geins returns a
+// single collection and the lowest id wins, so an older collection on a parent
+// category would shadow the one filtered to this page's own category.
+const listCmsContext = computed(() => {
+  if (isBrand.value) return { brandAlias: listSlug.value };
+
+  const own = pageInfo.value?.id;
+  return own ? { categoryIds: String(own) } : {};
+});
+
 function buildAreaQuery(slot: typeof topSlot) {
   return computed(() =>
     slot.value
       ? {
           family: slot.value.family,
           areaName: slot.value.areaName,
+          ...listCmsContext.value,
           ...(currentLocale.value ? { locale: currentLocale.value } : {}),
           ...(currentMarket.value ? { market: currentMarket.value } : {}),
         }

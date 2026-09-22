@@ -11,11 +11,21 @@ import {
   DEPARTED_RETENTION_HOURS,
 } from '../../../../server/services/configurator-fixture';
 import {
+  ARBETSBORD_PRO_GEINS_ID,
   ARBETSBORD_PRO_ID,
+  MONTERINGSSTATION_PRO_GEINS_ID,
+  MONTERINGSSTATION_PRO_ID,
+  SKAPSEKTION_PRO_GEINS_ID,
   SKAPSEKTION_PRO_ID,
   createSeedDocument,
 } from '../../../../server/services/configurator-fixture/seed';
 import type { ConfiguratorContext } from '../../../../server/services/configurator';
+import {
+  createSessionState,
+  evaluate,
+} from '../../../../server/services/configurator-fixture/evaluate';
+import { everySection } from '../../../../server/services/configurator-fixture/document';
+import { arbetsbordPro } from '../../../../server/services/configurator-fixture/seed/arbetsbord-pro';
 import {
   findOption,
   findOptionGroup,
@@ -67,7 +77,7 @@ async function statusOf(call: () => Promise<unknown>) {
 }
 
 async function start(
-  productId = ARBETSBORD_PRO_ID,
+  productId = ARBETSBORD_PRO_GEINS_ID,
   quantity = 1,
 ): Promise<Configuration> {
   return backend.create({ productId, quantity }, CTX);
@@ -112,18 +122,17 @@ async function withElectricLegs(): Promise<Configuration> {
 
 describe('create', () => {
   it('returns the seeded document and echoes the requested quantity', async () => {
-    const config = await start(ARBETSBORD_PRO_ID, 3);
+    const config = await start(ARBETSBORD_PRO_GEINS_ID, 3);
 
     expect(config.productId).toBe(ARBETSBORD_PRO_ID);
     expect(config.quantity).toBe(3);
     expect(config.templateId).toBe('TPL-KONF-1001');
     expect(config.unitPrice).toEqual({ net: 3200, currency: 'SEK' });
     // A required option group is empty in the seed, so a fresh document is
-    // never valid.
+    // never valid — through the requirement itself, with nothing written under
+    // a group the buyer has not reached yet.
     expect(config.isValid).toBe(false);
-    expect(findOptionGroup(config, 'color').messages).toContainEqual(
-      expect.objectContaining({ severity: 'error' }),
-    );
+    expect(findOptionGroup(config, 'color').messages).toEqual([]);
   });
 
   it('gives the session the configured lifetime', async () => {
@@ -139,13 +148,27 @@ describe('create', () => {
     expect(config.weightPerUnit).toBe(38.5);
     expect(legs.selected).toBe(true);
     expect(legs.selectionSource).toBe('initial');
-    expect(findOptionGroup(config, 'color').messages).toEqual([
-      { severity: 'error', text: 'Select a colour.' },
-    ]);
+    const colour = findOptionGroup(config, 'color');
+    expect(colour.minSelections).toBe(1);
+    expect(colour.options.some((option) => option.selected)).toBe(false);
+    expect(colour.messages).toEqual([]);
   });
 
   it('answers 404 for a product that is not seeded', async () => {
-    expect(await statusOf(() => start('900000000000999'))).toBe(404);
+    expect(await statusOf(() => start('999999'))).toBe(404);
+  });
+
+  // The portal identifies a product by its Geins product id everywhere, and
+  // translating that to the provider's part id is the backend's job. Asked for
+  // by the catalogue product, the document comes back carrying the part id.
+  it('resolves the second seed by its Geins product id too', async () => {
+    const config = await start(SKAPSEKTION_PRO_GEINS_ID);
+
+    expect(config.productId).toBe(SKAPSEKTION_PRO_ID);
+  });
+
+  it("answers 404 for the provider's part id, which is not a catalogue product", async () => {
+    expect(await statusOf(() => start(ARBETSBORD_PRO_ID))).toBe(404);
   });
 
   it('hands out a separate session per call', async () => {
@@ -269,6 +292,76 @@ describe('the cascades of the seeded workbench', () => {
 // Applying a batch
 // ---------------------------------------------------------------------------
 
+describe('what makes a document invalid', () => {
+  // The three paths are separate on purpose: a requirement nobody has answered
+  // yet, a required variable left empty, and a rule that actually objects.
+  function evaluateWith(
+    mutate: (config: Configuration) => void,
+  ): Configuration {
+    return evaluate(
+      { ...arbetsbordPro, cascades: [...arbetsbordPro.cascades, mutate] },
+      createSessionState(1),
+      { configurationId: 'test', expiresAt: '2030-01-01T00:00:00.000Z' },
+    );
+  }
+
+  it('blocks on an unmet requirement and writes no message for it', () => {
+    const config = evaluateWith(() => {});
+
+    expect(config.isValid).toBe(false);
+    expect(findOptionGroup(config, 'color').messages).toEqual([]);
+  });
+
+  it('blocks on an error a rule put on a group, with every requirement met', () => {
+    const config = evaluateWith((document) => {
+      const colour = findOption(document, 'ral-9005');
+      colour.selected = true;
+      findOptionGroup(document, 'color').messages = [
+        { severity: 'error', text: 'That finish is out of production.' },
+      ];
+    });
+
+    expect(config.isValid).toBe(false);
+  });
+
+  it('is valid once the requirement is met and nothing objects', () => {
+    const config = evaluateWith((document) => {
+      findOption(document, 'ral-9005').selected = true;
+    });
+
+    expect(config.isValid).toBe(true);
+  });
+
+  it('lets a warning stand without blocking', () => {
+    // Every rule the seeds have says its piece as a warning; none of them is a
+    // reason to refuse the configuration.
+    const config = evaluateWith((document) => {
+      findOption(document, 'ral-9005').selected = true;
+      findOption(document, 'acc-power').messages = [
+        { severity: 'warning', text: 'Electric legs require a power strip.' },
+      ];
+    });
+
+    expect(config.isValid).toBe(true);
+  });
+
+  it('blocks on a required variable left empty, and not on one resting at zero', () => {
+    // Every seeded variable starts at 0 and is required: counting a zero as
+    // missing would make the whole catalogue invalid on arrival.
+    const atZero = evaluateWith((document) => {
+      findOption(document, 'ral-9005').selected = true;
+    });
+    expect(findVariable(atZero, 'shelves').value).toBe(0);
+    expect(atZero.isValid).toBe(true);
+
+    const emptied = evaluateWith((document) => {
+      findOption(document, 'ral-9005').selected = true;
+      findVariable(document, 'width').value = null;
+    });
+    expect(emptied.isValid).toBe(false);
+  });
+});
+
 describe('a batch of changes', () => {
   it('applies a selection and a deselection in one response', async () => {
     const config = await start();
@@ -281,9 +374,8 @@ describe('a batch of changes', () => {
     expect(findOption(changed, 'ral-9005').selected).toBe(true);
     expect(findOptionGroup(changed, 'color').messages).toEqual([]);
     expect(findOption(changed, 'top-laminate').selected).toBe(false);
-    expect(findOptionGroup(changed, 'top').messages).toContainEqual(
-      expect.objectContaining({ severity: 'error' }),
-    );
+    // The emptied group blocks the document without saying anything about it.
+    expect(findOptionGroup(changed, 'top').messages).toEqual([]);
     expect(changed.isValid).toBe(false);
   });
 
@@ -429,7 +521,7 @@ describe('a batch of changes', () => {
   });
 
   it('rejects a change aimed at a locked option', async () => {
-    const config = await start(SKAPSEKTION_PRO_ID);
+    const config = await start(SKAPSEKTION_PRO_GEINS_ID);
 
     expect(
       await statusOf(() =>
@@ -508,7 +600,7 @@ describe('a batch of changes', () => {
   });
 
   it('rejects a change aimed at a formula variable', async () => {
-    const config = await start(SKAPSEKTION_PRO_ID);
+    const config = await start(SKAPSEKTION_PRO_GEINS_ID);
 
     expect(
       await statusOf(() =>
@@ -547,7 +639,7 @@ describe('the price the mock computes', () => {
   });
 
   it('prices the second product from its own base and rates', async () => {
-    const config = await start(SKAPSEKTION_PRO_ID);
+    const config = await start(SKAPSEKTION_PRO_GEINS_ID);
     // Base, the locked mounting rail and the glass doors that come with it.
     expect(config.unitPrice.net).toBe(5400 + 450);
 
@@ -704,7 +796,7 @@ describe('release', () => {
 
 describe('commit', () => {
   async function completed(): Promise<Configuration> {
-    const config = await start(ARBETSBORD_PRO_ID, 2);
+    const config = await start(ARBETSBORD_PRO_GEINS_ID, 2);
     return backend.applyChanges(
       config.configurationId,
       [
@@ -771,7 +863,7 @@ describe('commit', () => {
   });
 
   it('leaves a variable the provider computes without a price', async () => {
-    const config = await start(SKAPSEKTION_PRO_ID);
+    const config = await start(SKAPSEKTION_PRO_GEINS_ID);
     const committed = await backend.commit(config.configurationId, CTX);
     const area = committed.summary.find((line) => line.label === 'Front area');
 
@@ -833,7 +925,7 @@ describe('commit', () => {
 
 describe('the second seeded product', () => {
   it('has a section the UI must not show', async () => {
-    const config = await start(SKAPSEKTION_PRO_ID);
+    const config = await start(SKAPSEKTION_PRO_GEINS_ID);
     const hidden = config.sections.filter((section) => !section.visible);
 
     expect(hidden).toHaveLength(1);
@@ -841,14 +933,17 @@ describe('the second seeded product', () => {
   });
 
   it('has an option no change can touch', async () => {
-    const mount = findOption(await start(SKAPSEKTION_PRO_ID), 'mount-wall');
+    const mount = findOption(
+      await start(SKAPSEKTION_PRO_GEINS_ID),
+      'mount-wall',
+    );
 
     expect(mount.selected).toBe(true);
     expect(mount.selectionSource).toBe('locked');
   });
 
   it('has a string variable the buyer may set', async () => {
-    const config = await start(SKAPSEKTION_PRO_ID);
+    const config = await start(SKAPSEKTION_PRO_GEINS_ID);
     const changed = await backend.applyChanges(
       config.configurationId,
       [setVariable('pallet-code', 'PAL-120')],
@@ -868,7 +963,7 @@ describe('the second seeded product', () => {
   });
 
   it('computes the formula variable from the others', async () => {
-    const config = await start(SKAPSEKTION_PRO_ID);
+    const config = await start(SKAPSEKTION_PRO_GEINS_ID);
     const area = findVariable(config, 'front-area');
 
     expect(area.valueSource).toBe('formula');
@@ -886,13 +981,160 @@ describe('the second seeded product', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The third seed
+//
+// It exists for the two shapes no other seeded document has: a tree three
+// levels deep, and a hidden section holding a section that says it is visible.
+// A layout that pages a configuration by section is judged on those, and until
+// this seed they could only be built by hand in a test.
+// ---------------------------------------------------------------------------
+
+describe('the third seeded product', () => {
+  /** Every section of the document, parents before children. */
+  const flatten = (
+    sections: Configuration['sections'],
+    depth = 0,
+  ): { id: string; depth: number; visible: boolean }[] =>
+    sections.flatMap((section) => [
+      { id: section.id, depth, visible: section.visible },
+      ...flatten(section.sections, depth + 1),
+    ]);
+
+  it('nests three levels deep', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+    const sections = flatten(config.sections);
+
+    // Named, not counted: a tree that lost its middle level would still reach
+    // depth 2 through some other branch and a maximum would not notice.
+    expect(sections.find((s) => s.id === 'structure')?.depth).toBe(0);
+    expect(sections.find((s) => s.id === 'worktop')?.depth).toBe(1);
+    expect(sections.find((s) => s.id === 'edge')?.depth).toBe(2);
+  });
+
+  it('has three visible sections at the top and one that is hidden', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+
+    expect(config.sections.filter((s) => s.visible).map((s) => s.id)).toEqual([
+      'structure',
+      'storage',
+      'power',
+    ]);
+    expect(config.sections.filter((s) => !s.visible).map((s) => s.id)).toEqual([
+      'logistics',
+    ]);
+  });
+
+  it('hides a section whose child says it is visible', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+    const logistics = config.sections.find((s) => s.id === 'logistics');
+    const packaging = logistics?.sections[0];
+
+    // The document states the contradiction; resolving it is the consumer's
+    // job, and every consumer resolves it by not descending into a hidden
+    // parent at all. Without this pair the rule has nothing to run against.
+    expect(logistics?.visible).toBe(false);
+    expect(packaging?.id).toBe('packaging');
+    expect(packaging?.visible).toBe(true);
+  });
+
+  it('gives every visible section something to show', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+    const visible = flatten(config.sections).filter((s) => s.visible);
+    const contentOf = (id: string) => {
+      const found = everySection(config.sections).find((s) => s.id === id)!;
+      return found.optionGroups.length + found.variables.length;
+    };
+
+    expect(visible.length).toBeGreaterThan(0);
+    for (const section of visible) {
+      expect(contentOf(section.id)).toBeGreaterThan(0);
+    }
+  });
+
+  it('is valid on arrival', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+
+    // A page that cannot be committed from the start is a page nobody can
+    // judge. The hidden branch counts too: `validate` weighs the whole tree.
+    expect(config.isValid).toBe(true);
+    expect(
+      everySection(config.sections)
+        .flatMap((s) => s.optionGroups)
+        .some((group) => group.options.some((option) => option.selected)),
+    ).toBe(true);
+  });
+
+  it('computes the packed volume inside the hidden branch', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+    const volume = findVariable(config, 'crate-volume');
+
+    // (2400+120) × (900+120) × 400 mm³ = 1028.2 l
+    expect(volume.valueSource).toBe('formula');
+    expect(volume.value).toBe(1028.2);
+  });
+
+  it('adds the third leg pair once the station is long enough', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+    expect(findOption(config, 'legs-third').selected).toBe(false);
+
+    const changed = await backend.applyChanges(
+      config.configurationId,
+      [setVariable('length', 3200)],
+      CTX,
+    );
+    const third = findOption(changed, 'legs-third');
+
+    expect(third.selected).toBe(true);
+    expect(third.selectionSource).toBe('groupRule');
+  });
+
+  it('adds it at the length the rule names, not one step past it', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+    const changed = await backend.applyChanges(
+      config.configurationId,
+      [setVariable('length', 3000)],
+      CTX,
+    );
+
+    // The boundary itself: "3000 mm or more" is what the message says, and a
+    // rule that fired one step late would say something else.
+    expect(findOption(changed, 'legs-third').selected).toBe(true);
+  });
+
+  it('narrows the edge trim two levels down from the worktop', async () => {
+    const config = await start(MONTERINGSSTATION_PRO_GEINS_ID);
+    const chosen = await backend.applyChanges(
+      config.configurationId,
+      [selectOption('edge-beech')],
+      CTX,
+    );
+    expect(findOption(chosen, 'edge-beech').selected).toBe(true);
+
+    const steel = await backend.applyChanges(
+      config.configurationId,
+      [selectOption('top-steel')],
+      CTX,
+    );
+
+    // The rule reaches from a group in the second level into a group in the
+    // third, which is the direction only a nested document has.
+    expect(findOption(steel, 'edge-beech').available).toBe(false);
+    expect(findOption(steel, 'edge-beech').selected).toBe(false);
+    expect(findOption(steel, 'edge-abs').selected).toBe(true);
+    // The group it emptied is required, so the document must not have gone
+    // invalid on a change the buyer made somewhere else.
+    expect(steel.isValid).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The exported instance
 // ---------------------------------------------------------------------------
 
 describe('the default instance', () => {
   it('runs on the real clock', async () => {
     const config = await fixtureConfiguratorBackend.create(
-      { productId: ARBETSBORD_PRO_ID, quantity: 1 },
+      { productId: ARBETSBORD_PRO_GEINS_ID, quantity: 1 },
       CTX,
     );
 
@@ -905,10 +1147,44 @@ describe('the default instance', () => {
 // The seed a caller outside a session builds on
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The catalogue products the seeds stand for
+// ---------------------------------------------------------------------------
+
+describe("the seeds' catalogue reference", () => {
+  // These two ids are the only part of the fixture that points at something
+  // outside it — the products on the team tenant, created for this. Getting one
+  // wrong makes the page render an ordinary product with no way to tell why, and
+  // nothing else in the suite would notice: every other test asks by the
+  // constant, so it would follow the constant into being wrong.
+  it.each([
+    ['Arbetsbord Pro', ARBETSBORD_PRO_GEINS_ID, '1101'],
+    ['Skåpsektion Pro', SKAPSEKTION_PRO_GEINS_ID, '1102'],
+    ['Monteringsstation Pro', MONTERINGSSTATION_PRO_GEINS_ID, '1103'],
+  ])('has %s standing for catalogue product %s', (_label, declared, id) => {
+    expect(declared).toBe(id);
+  });
+
+  it('keeps the provider part ids distinct from the catalogue ids', () => {
+    expect(ARBETSBORD_PRO_ID).not.toBe(ARBETSBORD_PRO_GEINS_ID);
+    expect(SKAPSEKTION_PRO_ID).not.toBe(SKAPSEKTION_PRO_GEINS_ID);
+    expect(MONTERINGSSTATION_PRO_ID).not.toBe(MONTERINGSSTATION_PRO_GEINS_ID);
+  });
+});
+
 describe('createSeedDocument', () => {
+  it('builds the document from the Geins product id, as create does', () => {
+    const document = createSeedDocument(ARBETSBORD_PRO_GEINS_ID, {
+      configurationId: 'c1',
+      expiresAt: '2030-01-01T00:00:00.000Z',
+    });
+
+    expect(document.productId).toBe(ARBETSBORD_PRO_ID);
+  });
+
   it('refuses a product it has no seed for', () => {
     expect(() =>
-      createSeedDocument('900000000000999', {
+      createSeedDocument('999999', {
         configurationId: 'c1',
         expiresAt: '2030-01-01T00:00:00.000Z',
       }),

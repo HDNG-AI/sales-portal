@@ -19,11 +19,20 @@ import type { Seed } from './types';
 // seed, and that unmet `minSelections: 1` is what makes a fresh document
 // invalid.
 //
+// `sortIndex` is numbered in one preorder sequence over the document, the way
+// Monitor numbers it. The Frame section interleaves — a group, two fields, a
+// group — which is the arrangement measured on the demo install and the only
+// place in the repo where merging the two lists can be seen at all: the
+// platform's own mock numbers in preorder and never interleaves.
+//
 // Ids are the seed's slugs, readable on purpose. A real provider's ids are
 // opaque numeric strings — nothing may parse them.
 // ---------------------------------------------------------------------------
 
 export const ARBETSBORD_PRO_ID = '900000000000123';
+
+/** The catalogue product on the team tenant, alias `arbetsbord-pro`. */
+export const ARBETSBORD_PRO_GEINS_ID = '1101';
 
 const ARTICLE = 'KONF-1001';
 const BASE_PRICE = 3200;
@@ -79,6 +88,7 @@ function finishSection(): ConfigurationSection {
   return {
     id: 'finish',
     name: 'Finish',
+    sortIndex: 8,
     visible: true,
     sections: [],
     variables: [],
@@ -88,6 +98,7 @@ function finishSection(): ConfigurationSection {
         id: 'top',
         code: 'TOP',
         name: 'Table top',
+        sortIndex: 9,
         minSelections: 1,
         maxSelections: 1,
         options: [
@@ -103,6 +114,7 @@ function finishSection(): ConfigurationSection {
         id: 'color',
         code: 'COLOUR',
         name: 'Colour',
+        sortIndex: 10,
         minSelections: 1,
         maxSelections: 1,
         options: RAL_COLOURS.map(([id, name, net], index) =>
@@ -113,6 +125,7 @@ function finishSection(): ConfigurationSection {
         id: 'accessories',
         code: 'ACCESSORIES',
         name: 'Accessories',
+        sortIndex: 11,
         quantityEditable: true,
         options: [
           option('acc-pegboard', 'Tool pegboard', 900, 904_001, {
@@ -134,12 +147,14 @@ function buildSections(): ConfigurationSection[] {
     {
       id: 'frame',
       name: 'Frame',
+      sortIndex: 1,
       visible: true,
       messages: [],
       variables: [
         seedVariable({
           id: 'width',
           name: 'Width',
+          sortIndex: 3,
           description: 'Outer width of the bench.',
           value: 1200,
           defaultValue: 1200,
@@ -151,6 +166,7 @@ function buildSections(): ConfigurationSection[] {
         seedVariable({
           id: 'depth',
           name: 'Depth',
+          sortIndex: 4,
           description: 'Outer depth of the bench.',
           value: 700,
           defaultValue: 700,
@@ -162,6 +178,7 @@ function buildSections(): ConfigurationSection[] {
         seedVariable({
           id: 'shelves',
           name: 'Shelves',
+          sortIndex: 6,
           description: 'Number of shelves under the top.',
           required: false,
           min: 0,
@@ -172,6 +189,7 @@ function buildSections(): ConfigurationSection[] {
         seedVariable({
           id: 'oversize',
           name: 'Oversize margin',
+          sortIndex: 7,
           description: 'Manufacturing margin added to the ordered size.',
           required: false,
           min: 0,
@@ -185,6 +203,7 @@ function buildSections(): ConfigurationSection[] {
           id: 'legs',
           code: 'LEGS',
           name: 'Leg frame',
+          sortIndex: 2,
           minSelections: 1,
           maxSelections: 1,
           options: [
@@ -200,6 +219,7 @@ function buildSections(): ConfigurationSection[] {
           id: 'industrial',
           code: 'INDUSTRIAL',
           name: 'Industrial options',
+          sortIndex: 5,
           options: [
             option('ind-esd', 'ESD earthing kit', 1200, 905_001),
             option('ind-heavy', 'Reinforced frame, 600 kg', 2100, 905_002),
@@ -267,6 +287,7 @@ function steelTopNarrowsTheWidth(config: Configuration): void {
 
 export const arbetsbordPro: Seed = {
   productId: ARBETSBORD_PRO_ID,
+  geinsProductId: ARBETSBORD_PRO_GEINS_ID,
   templateId: `TPL-${ARTICLE}`,
   templateVersion: '4',
   basePrice: BASE_PRICE,
