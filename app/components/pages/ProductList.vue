@@ -371,12 +371,24 @@ function clearAllFilters() {
 const topSlot = useCmsSlot(CMS_SLOTS.PRODUCT_LIST_TOP);
 const bottomSlot = useCmsSlot(CMS_SLOTS.PRODUCT_LIST_BOTTOM);
 
+// Page context for the CMS container filters; see buildAreaFilters in
+// server/services/cms.ts. Ancestors are deliberately NOT sent: Geins returns a
+// single collection and the lowest id wins, so an older collection on a parent
+// category would shadow the one filtered to this page's own category.
+const listCmsContext = computed(() => {
+  if (isBrand.value) return { brandAlias: listSlug.value };
+
+  const own = pageInfo.value?.id;
+  return own ? { categoryIds: String(own) } : {};
+});
+
 function buildAreaQuery(slot: typeof topSlot) {
   return computed(() =>
     slot.value
       ? {
           family: slot.value.family,
           areaName: slot.value.areaName,
+          ...listCmsContext.value,
           ...(currentLocale.value ? { locale: currentLocale.value } : {}),
           ...(currentMarket.value ? { market: currentMarket.value } : {}),
         }

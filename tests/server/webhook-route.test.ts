@@ -8,6 +8,18 @@ import {
   type CacheStorage,
 } from '../../server/utils/webhook-handler';
 import { MAX_WEBHOOK_BODY_SIZE } from '../../server/utils/webhook';
+import { tenantConfigKey } from '../../server/utils/tenant';
+import type { TenantConfig } from '#shared/types/tenant-config';
+
+// clearNegativeCache mutates a module-level Map, so the only way to observe
+// which hostnames were cleared is to watch the call itself.
+const { clearNegativeCacheSpy } = vi.hoisted(() => ({
+  clearNegativeCacheSpy: vi.fn(),
+}));
+vi.mock('../../server/utils/tenant', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../server/utils/tenant')>()),
+  clearNegativeCache: clearNegativeCacheSpy,
+}));
 
 // Mock useStorage for KV-backed rate limiter
 const mockRateLimitStore = new Map<string, unknown>();
@@ -470,5 +482,87 @@ describe('processConfigRefresh', () => {
     ).rejects.toMatchObject({
       statusCode: 429,
     });
+  });
+});
+
+describe('negative cache invalidation across aliases', () => {
+  it('clears the negative cache for every hostname the tenant claims', async () => {
+    // resolveTenant consults the negative cache before KV, so an alias probed
+    // while the tenant was unknown keeps answering 404 for the rest of its
+    // TTL even though the refreshed config is already in storage.
+    const primary = 'primary.example';
+    const alias = 'alias.example';
+    const config = {
+      tenantId: 't-alias',
+      hostname: primary,
+      aliases: [alias],
+      isActive: true,
+    } as unknown as TenantConfig;
+
+    clearNegativeCacheSpy.mockClear();
+
+    const kvStorage = {
+      getItem: vi.fn(async (key: string) =>
+        key === tenantConfigKey('t-alias') ? config : 't-alias',
+      ),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+
+    await processConfigRefresh(
+      {
+        clientIp: '10.0.0.1',
+        secrets: [],
+        rawBody: JSON.stringify({ hostname: primary }),
+        signatureHeader: undefined,
+        webhookId: undefined,
+        contentLength: 40,
+      },
+      kvStorage as unknown as KvStorage,
+      { removeItem: vi.fn() } as unknown as CacheStorage,
+    );
+
+    const cleared = clearNegativeCacheSpy.mock.calls.map(([h]) => h);
+    expect(cleared).toContain(primary);
+    expect(cleared).toContain(alias);
+  });
+
+  it('still clears the hostname the webhook named when the config has dropped it', async () => {
+    // KV can map a hostname the stored config no longer claims — an alias
+    // removed from the tenant. That is exactly the hostname whose stale
+    // entry needs clearing, and reading the set from the config alone
+    // silently stops clearing it.
+    const removed = 'removed-alias.example';
+    const config = {
+      tenantId: 't-alias',
+      hostname: 'primary.example',
+      aliases: [],
+      isActive: true,
+    } as unknown as TenantConfig;
+
+    clearNegativeCacheSpy.mockClear();
+
+    const kvStorage = {
+      getItem: vi.fn(async (key: string) =>
+        key === tenantConfigKey('t-alias') ? config : 't-alias',
+      ),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+
+    await processConfigRefresh(
+      {
+        clientIp: '10.0.0.2',
+        secrets: [],
+        rawBody: JSON.stringify({ hostname: removed }),
+        signatureHeader: undefined,
+        webhookId: undefined,
+        contentLength: 40,
+      },
+      kvStorage as unknown as KvStorage,
+      { removeItem: vi.fn() } as unknown as CacheStorage,
+    );
+
+    expect(clearNegativeCacheSpy.mock.calls.map(([h]) => h)).toContain(removed);
   });
 });
