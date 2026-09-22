@@ -53,6 +53,14 @@ vi.mock('#imports', () => ({
 vi.mock('#app/composables/state', () => ({
   useState: (key: string, init: () => boolean) => mockUseState(key, init),
 }));
+
+// Withdrawal has to clear what was already dropped, not just stop the next
+// injection — spied rather than exercised, since the clearing itself is
+// covered against a real document in tests/unit/tracking-cookies.test.ts.
+const clearTrackingCookiesSpy = vi.fn(() => [] as string[]);
+vi.mock('../../app/utils/tracking-cookies', () => ({
+  clearTrackingCookies: () => clearTrackingCookiesSpy(),
+}));
 vi.stubGlobal('useState', (key: string, init: () => boolean) =>
   mockUseState(key, init),
 );
@@ -69,6 +77,7 @@ describe('useAnalyticsConsent', () => {
     storageRefs.clear();
     mockTenantId.value = 'test-tenant';
     nuxtState.clear();
+    clearTrackingCookiesSpy.mockClear();
 
     vi.resetModules();
     const mod = await import('../../app/composables/useAnalyticsConsent');
@@ -173,5 +182,19 @@ describe('useAnalyticsConsent', () => {
     link.reopen();
 
     expect(banner.isPrompting.value).toBe(true);
+  });
+
+  it('revoke() clears the cookies already set', () => {
+    const { revoke } = useAnalyticsConsent();
+    revoke();
+    expect(clearTrackingCookiesSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('accept() clears nothing', () => {
+    // Consenting is not a reason to drop anything, and clearing here would
+    // wipe the identifiers a returning visitor already agreed to.
+    const { accept } = useAnalyticsConsent();
+    accept();
+    expect(clearTrackingCookiesSpy).not.toHaveBeenCalled();
   });
 });

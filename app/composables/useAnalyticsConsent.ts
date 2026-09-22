@@ -1,5 +1,6 @@
 import { useStorage } from '@vueuse/core';
 import { LOCAL_STORAGE_KEYS } from '#shared/constants/storage';
+import { clearTrackingCookies } from '~/utils/tracking-cookies';
 
 type ConsentState = 'accepted' | 'declined' | null;
 
@@ -39,6 +40,11 @@ export function useAnalyticsConsent() {
   function revoke() {
     state.value = 'declined';
     reopened.value = false;
+    // Withdrawal has to stop the processing that is already happening, not
+    // only the next page's. The consent trigger keeps the scripts from being
+    // injected again, but the identifiers they already dropped would outlive
+    // the decision by up to two years otherwise.
+    clearTrackingCookies();
   }
 
   return { consent, hasInteracted, isPrompting, accept, revoke, reopen };
