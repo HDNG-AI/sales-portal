@@ -617,6 +617,7 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     timezone: merged.timezone,
     theme,
     branding,
+    layout: merged.layout,
     features,
     seo: merged.seo,
     contact: merged.contact,

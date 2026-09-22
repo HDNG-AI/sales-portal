@@ -20,6 +20,7 @@ function onSearch(query: string) {
     border; grey flows seamlessly into the grey nav, so the border is dropped.
   -->
   <div
+    data-slot="header-main"
     class="bg-background"
     :class="navVariant === 'white' ? 'border-b' : 'border-b lg:border-b-0'"
   >

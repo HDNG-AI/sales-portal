@@ -1834,6 +1834,39 @@ export const CONFIG_COVERAGE_MAP = {
 
   // --- Layout --------------------------------------------------------------
   layout: {
+    storefrontStyle: {
+      classic: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'keeps the classic layout and omits the price notice when storefrontStyle is classic',
+          kind: 'consumer',
+          drives: 'field',
+        },
+      },
+      editorial: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'enables the editorial layout and mounts the price notice when storefrontStyle is editorial',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note: 'Asserts the layout opt-in and price notice mount; responsive CSS and the branded footer require separate visual review.',
+      },
+      absent: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'keeps the classic layout and omits the price notice when storefrontStyle is absent',
+          kind: 'consumer',
+          drives: 'field',
+        },
+      },
+    },
     headerNavVariant: {
       grey: {
         status: 'has-test',
