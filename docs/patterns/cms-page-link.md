@@ -18,10 +18,13 @@ code (an icon button, a placed link) must point at one editor-owned page.
 Tags live in `CMS_TAGS` in `shared/constants/cms.ts` (lowercase, no leading `#`;
 `hasPageTag()` normalizes the `#` and casing the editor typed):
 
-| Constant                | Value       | Used by                  |
-| ----------------------- | ----------- | ------------------------ |
-| `CMS_TAGS.CONTACT_PAGE` | `'contact'` | Topbar "Contact us" link |
-| `CMS_TAGS.APPLY_PAGE`   | `'apply'`   | Topbar "Apply" link      |
+| Constant                | Value                  | Used by                       |
+| ----------------------- | ---------------------- | ----------------------------- |
+| `CMS_TAGS.CONTACT_PAGE` | `'contact'`            | Topbar "Contact us" link      |
+| `CMS_TAGS.APPLY_PAGE`   | `'apply'`              | Topbar "Apply" link           |
+| `CMS_TAGS.TERMS_PAGE`   | `'terms'`              | Checkout terms link           |
+| `CMS_TAGS.PRIVACY_PAGE` | `'integrity-policies'` | Cookie banner's policy link   |
+| `CMS_TAGS.SIDEBAR_MENU` | `'menu'`               | Renders the page with sidebar |
 
 ## Data Flow
 

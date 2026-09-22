@@ -456,6 +456,7 @@
     "accept": "Accepter cookies",
     "banner_text": "Vi bruger cookies til at analysere brugen af webstedet og forbedre din oplevelse.",
     "decline": "Afvis",
+    "privacy_policy": "Læs vores privatlivspolitik",
     "settings": "Cookieindstillinger"
   },
   "errors": {
