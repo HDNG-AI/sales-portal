@@ -453,9 +453,10 @@
     "active_campaigns": "Aktive kampanjer"
   },
   "cookies": {
-    "banner_text": "Vi bruker informasjonskapsler for å analysere bruken av nettstedet og forbedre opplevelsen din.",
     "accept": "Godta informasjonskapsler",
-    "decline": "Avslå"
+    "banner_text": "Vi bruker informasjonskapsler for å analysere bruken av nettstedet og forbedre opplevelsen din.",
+    "decline": "Avslå",
+    "settings": "Innstillinger for informasjonskapsler"
   },
   "errors": {
     "section_failed": "Denne delen kunne ikke lastes.",

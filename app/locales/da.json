@@ -453,9 +453,10 @@
     "active_campaigns": "Aktive kampagner"
   },
   "cookies": {
-    "banner_text": "Vi bruger cookies til at analysere brugen af webstedet og forbedre din oplevelse.",
     "accept": "Accepter cookies",
-    "decline": "Afvis"
+    "banner_text": "Vi bruger cookies til at analysere brugen af webstedet og forbedre din oplevelse.",
+    "decline": "Afvis",
+    "settings": "Cookieindstillinger"
   },
   "errors": {
     "section_failed": "Dette afsnit kunne ikke indlæses.",

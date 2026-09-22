@@ -453,9 +453,10 @@
     "active_campaigns": "Aktive Aktionen"
   },
   "cookies": {
-    "banner_text": "Wir verwenden Cookies, um die Nutzung der Website zu analysieren und Ihr Erlebnis zu verbessern.",
     "accept": "Cookies akzeptieren",
-    "decline": "Ablehnen"
+    "banner_text": "Wir verwenden Cookies, um die Nutzung der Website zu analysieren und Ihr Erlebnis zu verbessern.",
+    "decline": "Ablehnen",
+    "settings": "Cookie-Einstellungen"
   },
   "errors": {
     "section_failed": "Dieser Abschnitt konnte nicht geladen werden.",
