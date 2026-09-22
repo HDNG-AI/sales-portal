@@ -209,7 +209,7 @@ describe('PageSidebarNav', () => {
     // route. Asserted here and not only on stripGeinsPrefix because both
     // itemUrl and isActive have to pass the type through: if either one
     // stops, the link quietly points at /c/ or the highlight disappears.
-    mockRoutePath.value = '/b/volvo-penta';
+    mockRoutePath.value = '/se/sv/b/volvo-penta';
     mockMenu.value = {
       id: '1',
       title: 'Sidebar',
@@ -244,6 +244,47 @@ describe('PageSidebarNav', () => {
     const categoryLink = links.find((l) => l.text() === 'Epoxi');
     expect(categoryLink?.attributes('href')).toContain('/c/epoxi');
     expect(categoryLink?.attributes('aria-current')).toBeUndefined();
+  });
+
+  it('highlights a category item on its own /c/ page', () => {
+    // Geins emits `l` on the menu link but `c` on the category's own
+    // canonicalUrl, so the live route is /{market}/{locale}/c/<alias> while
+    // the menu builds /c/<alias>. Both sides have to normalise to the same
+    // string; dropping the `c` indicator instead of mapping it leaves the
+    // route as /<alias> and the item never lights up.
+    mockRoutePath.value = '/se/sv/c/epoxi';
+    mockMenu.value = {
+      id: '1',
+      title: 'Sidebar',
+      menuItems: [
+        {
+          id: '1',
+          label: 'Volvo Penta',
+          canonicalUrl: '/se/sv/l/volvo-penta',
+          type: 'brand',
+          order: 1,
+        },
+        {
+          id: '2',
+          label: 'Epoxi',
+          canonicalUrl: '/se/sv/l/epoxi',
+          order: 2,
+        },
+      ],
+    } as unknown as MenuType;
+
+    const wrapper = mountComponent(PageSidebarNav, {
+      props: { menuLocationId: 'sidebar' },
+      global: { stubs },
+    });
+
+    const links = wrapper.findAll('a');
+    const categoryLink = links.find((l) => l.text() === 'Epoxi');
+    expect(categoryLink?.attributes('href')).toContain('/c/epoxi');
+    expect(categoryLink?.attributes('aria-current')).toBe('page');
+
+    const brandLink = links.find((l) => l.text() === 'Volvo Penta');
+    expect(brandLink?.attributes('aria-current')).toBeUndefined();
   });
 
   it('highlights parent link when on a child page', () => {

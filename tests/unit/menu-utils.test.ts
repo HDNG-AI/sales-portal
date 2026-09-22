@@ -16,7 +16,7 @@ describe('stripGeinsPrefix', () => {
 
   // Regression: Geins' /l/ ("list") indicator is ambiguous — a brand's
   // canonicalUrl uses it too (e.g. /se/sv/l/sensar-marine), not just
-  // categories. Confirmed against boattools' real header menu data: the
+  // categories. Confirmed against real store header menu data: the
   // "Sensar Marine" item had canonicalUrl /se/sv/l/sensar-marine AND
   // type: 'brand' on the same object. Without the itemType override, that
   // link resolved to /c/sensar-marine, which app/pages/c/[...category].vue
