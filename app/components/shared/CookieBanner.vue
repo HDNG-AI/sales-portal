@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Button } from '~/components/ui/button';
 
-const { hasInteracted, accept, revoke } = useAnalyticsConsent();
+const { isPrompting, accept, revoke } = useAnalyticsConsent();
 const { hasFeature } = useTenant();
 
-const visible = computed(() => !hasInteracted.value && hasFeature('analytics'));
+const visible = computed(() => isPrompting.value && hasFeature('analytics'));
 </script>
 
 <template>

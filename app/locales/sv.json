@@ -453,9 +453,10 @@
     "active_campaigns": "Aktiva kampanjer"
   },
   "cookies": {
-    "banner_text": "Vi använder cookies för att analysera webbplatsens användning och förbättra din upplevelse.",
     "accept": "Acceptera cookies",
-    "decline": "Avvisa"
+    "banner_text": "Vi använder cookies för att analysera webbplatsens användning och förbättra din upplevelse.",
+    "decline": "Avvisa",
+    "settings": "Cookie-inställningar"
   },
   "errors": {
     "section_failed": "Det gick inte att läsa in det här avsnittet.",

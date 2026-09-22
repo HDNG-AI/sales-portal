@@ -453,9 +453,10 @@
     "active_campaigns": "Active campaigns"
   },
   "cookies": {
-    "banner_text": "We use cookies to analyze site usage and improve your experience.",
     "accept": "Accept cookies",
-    "decline": "Decline"
+    "banner_text": "We use cookies to analyze site usage and improve your experience.",
+    "decline": "Decline",
+    "settings": "Cookie settings"
   },
   "errors": {
     "section_failed": "This section could not be loaded.",

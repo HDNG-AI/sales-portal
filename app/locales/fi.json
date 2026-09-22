@@ -453,9 +453,10 @@
     "active_campaigns": "Voimassa olevat kampanjat"
   },
   "cookies": {
-    "banner_text": "Käytämme evästeitä sivuston käytön analysointiin ja käyttökokemuksen parantamiseen.",
     "accept": "Hyväksy evästeet",
-    "decline": "Hylkää"
+    "banner_text": "Käytämme evästeitä sivuston käytön analysointiin ja käyttökokemuksen parantamiseen.",
+    "decline": "Hylkää",
+    "settings": "Eväasetukset"
   },
   "errors": {
     "section_failed": "Tämän osion lataaminen epäonnistui.",
