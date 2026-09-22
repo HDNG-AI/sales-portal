@@ -20,6 +20,16 @@ function setFeatures(features: PublicTenantConfig['features']) {
   tenant.value.features = features;
 }
 
+/**
+ * Analytics only counts as configured when the feature is on AND a provider id
+ * is present — the prompt must not ask about cookies nothing would set.
+ */
+function enableAnalytics() {
+  assert.isDefined(tenant.value);
+  tenant.value.features = { analytics: { enabled: true } };
+  tenant.value.seo = { ...tenant.value.seo, googleAnalyticsId: 'G-TEST123' };
+}
+
 // Teleport renders to document.body, which the wrapper cannot see; stubbing it
 // keeps the dialog inline. Precedent:
 // tests/components/layout/LayoutHeaderMobileSearch.test.ts:17.
@@ -41,7 +51,7 @@ describe('CookieBanner', () => {
   });
 
   it('shows the cookie banner when analytics is enabled', () => {
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     const banner = findBanner();
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('cookies.banner_text');
@@ -58,7 +68,7 @@ describe('CookieBanner', () => {
   });
 
   it('hides the cookie banner once a choice is stored', () => {
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     assert.isDefined(tenant.value);
     localStorage.setItem(
       `analytics-consent-${tenant.value.tenantId}`,
@@ -70,7 +80,7 @@ describe('CookieBanner', () => {
   it('shows the banner again after reopen(), with the stored choice intact', async () => {
     // The whole point of the footer entry point: `revoke()` is otherwise
     // unreachable once a choice is stored, so consent cannot be withdrawn.
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     assert.isDefined(tenant.value);
     localStorage.setItem(
       `analytics-consent-${tenant.value.tenantId}`,
@@ -88,5 +98,24 @@ describe('CookieBanner', () => {
     expect(
       localStorage.getItem(`analytics-consent-${tenant.value.tenantId}`),
     ).toBe(JSON.stringify('accepted'));
+  });
+
+  it('stays hidden when analytics is enabled but no provider is configured', () => {
+    // The bug this gate fixes: with the feature on and no id, the analytics
+    // plugin returns early and sets nothing, so a prompt here would ask the
+    // visitor to consent to cookies that never arrive.
+    assert.isDefined(tenant.value);
+    tenant.value.features = { analytics: { enabled: true } };
+    tenant.value.seo = { googleAnalyticsId: '', googleTagManagerId: '' };
+
+    expect(findBanner().exists()).toBe(false);
+  });
+
+  it('shows when only a tag manager id is configured', () => {
+    assert.isDefined(tenant.value);
+    tenant.value.features = { analytics: { enabled: true } };
+    tenant.value.seo = { googleTagManagerId: 'GTM-TEST' };
+
+    expect(findBanner().exists()).toBe(true);
   });
 });

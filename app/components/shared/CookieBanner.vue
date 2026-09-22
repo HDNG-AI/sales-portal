@@ -2,9 +2,12 @@
 import { Button } from '~/components/ui/button';
 
 const { isPrompting, accept, revoke } = useAnalyticsConsent();
-const { hasFeature } = useTenant();
+const { analyticsConfigured } = useTenant();
 
-const visible = computed(() => isPrompting.value && hasFeature('analytics'));
+// Gated on analyticsConfigured, not the feature flag alone: with the flag on
+// and no provider id, tenant-analytics.ts returns early and sets nothing, so
+// the flag alone asks the visitor to consent to cookies that never arrive.
+const visible = computed(() => isPrompting.value && analyticsConfigured.value);
 </script>
 
 <template>

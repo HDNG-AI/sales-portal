@@ -18,12 +18,12 @@ const props = defineProps<{
 }>();
 
 const { reopen } = useAnalyticsConsent();
-const { hasFeature } = useTenant();
+const { analyticsConfigured } = useTenant();
 </script>
 
 <template>
   <button
-    v-if="hasFeature('analytics')"
+    v-if="analyticsConfigured"
     type="button"
     data-slot="cookie-settings-link"
     data-testid="cookie-settings-link"
