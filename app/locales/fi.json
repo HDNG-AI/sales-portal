@@ -454,10 +454,11 @@
   },
   "cookies": {
     "accept": "Hyväksy evästeet",
-    "banner_text": "Käytämme evästeitä sivuston käytön analysointiin ja käyttökokemuksen parantamiseen.",
+    "banner_text": "Haluaisimme käyttää analytiikkaevästeitä nähdäksemme, miten sivustoa käytetään — millä sivuilla vieraillaan ja mihin käyttäjät jumittuvat — jotta voimme korjata sen, mikä ei toimi. Niitä ei tarvita ostamiseen: kirjautuminen, ostoskori ja kieliasetukset toimivat joka tapauksessa.",
     "decline": "Hylkää",
     "privacy_policy": "Lue tietosuojakäytäntömme",
-    "settings": "Eväasetukset"
+    "settings": "Evästeasetukset",
+    "withdraw_note": "Voit muuttaa valintaasi milloin tahansa — katso Evästeasetukset sivun alaosasta."
   },
   "errors": {
     "section_failed": "Tämän osion lataaminen epäonnistui.",

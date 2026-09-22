@@ -133,4 +133,35 @@ describe('CookieBanner', () => {
       false,
     );
   });
+
+  it('gives Accept and Decline the same visual weight', () => {
+    // A primary Accept beside a muted Decline steers the answer, which goes to
+    // whether the consent is freely given at all (GDPR Recital 43) — regulators
+    // have fined on exactly this asymmetry.
+    setFeatures({ analytics: { enabled: true } });
+
+    const buttons = mountComponent(CookieBanner, { global: { stubs } })
+      .find(BANNER)
+      .findAll('button');
+
+    expect(buttons.length).toBe(2);
+    const [accept, decline] = buttons;
+    expect(accept!.classes().sort()).toEqual(decline!.classes().sort());
+  });
+
+  it('tells the visitor they can withdraw before they consent', () => {
+    // GDPR Art. 7(3): the right to withdraw must be communicated *prior to*
+    // consent, not merely exist afterwards. The footer control satisfies the
+    // "as easy as" half; this sentence is the other half.
+    setFeatures({ analytics: { enabled: true } });
+
+    const banner = mountComponent(CookieBanner, { global: { stubs } }).find(
+      BANNER,
+    );
+
+    expect(banner.find('[data-testid="cookie-withdraw-note"]').exists()).toBe(
+      true,
+    );
+    expect(banner.text()).toContain('cookies.withdraw_note');
+  });
 });

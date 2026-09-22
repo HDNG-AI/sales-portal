@@ -454,10 +454,11 @@
   },
   "cookies": {
     "accept": "Godta informasjonskapsler",
-    "banner_text": "Vi bruker informasjonskapsler for å analysere bruken av nettstedet og forbedre opplevelsen din.",
+    "banner_text": "Vi vil gjerne bruke analysekapsler for å se hvordan nettstedet brukes — hvilke sider folk besøker og hvor de stopper opp — slik at vi kan rette det som ikke virker. De trengs ikke for å handle: innlogging, handlekurv og språkvalg fungerer uansett.",
     "decline": "Avslå",
     "privacy_policy": "Les personvernerklæringen vår",
-    "settings": "Innstillinger for informasjonskapsler"
+    "settings": "Innstillinger for informasjonskapsler",
+    "withdraw_note": "Du kan ombestemme deg når som helst — se Innstillinger for informasjonskapsler nederst på siden."
   },
   "errors": {
     "section_failed": "Denne delen kunne ikke lastes.",

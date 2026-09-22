@@ -454,10 +454,11 @@
   },
   "cookies": {
     "accept": "Accepter cookies",
-    "banner_text": "Vi bruger cookies til at analysere brugen af webstedet og forbedre din oplevelse.",
+    "banner_text": "Vi vil gerne bruge analysecookies for at se, hvordan siden bruges — hvilke sider folk besøger, og hvor de går i stå — så vi kan rette det, der ikke virker. De er ikke nødvendige for at handle: login, kurv og sprogvalg fungerer alligevel.",
     "decline": "Afvis",
     "privacy_policy": "Læs vores privatlivspolitik",
-    "settings": "Cookieindstillinger"
+    "settings": "Cookieindstillinger",
+    "withdraw_note": "Du kan altid ombestemme dig — se Cookieindstillinger nederst på siden."
   },
   "errors": {
     "section_failed": "Dette afsnit kunne ikke indlæses.",
