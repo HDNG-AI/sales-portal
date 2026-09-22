@@ -59,6 +59,13 @@ query product(
       name
       parameterGroupId
       parameters {
+        # Both `label` and `name` are per-language fields in the Geins admin,
+        # resolved against the languageId passed above — `name` is not a
+        # technical key, it is localized too. `label` is the merchant's
+        # display name and is left empty on most tenants, arriving as "" and
+        # not null, so consumers prefer it but must fall through on empty
+        # rather than on nullish.
+        label
         name
         value
         show
