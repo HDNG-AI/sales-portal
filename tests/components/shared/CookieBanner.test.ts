@@ -24,6 +24,7 @@ function setFeatures(features: PublicTenantConfig['features']) {
 // instance the component tier has not got. Same shape as the topbar spec's
 // mock (tests/components/layout/LayoutHeaderTopbar.test.ts:36), with refs the
 // tests drive so both the resolved and unresolved branches are reachable.
+// The resolved URL, not the tag: the page keeps its localized alias.
 const privacyToRef = ref('/se/sv/integritetspolicy');
 const privacyResolvedRef = ref(true);
 

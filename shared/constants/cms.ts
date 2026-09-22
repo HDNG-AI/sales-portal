@@ -108,11 +108,11 @@ export const CMS_TAGS = {
    * The consent prompt has to say what is collected and why, and a banner that
    * only offers Accept/Decline does not.
    *
-   * The value is `integrity-policies` rather than `privacy` because that is the
-   * tag already in use — "integritetspolicy" is the Swedish term, and this
-   * registry names the string editors type, not the English word for it.
+   * `privacy` for consistency with the singular, English tags above, rather
+   * than the `integrity-policies` some tenants carry today — the localized
+   * name belongs on the page, not in the tag editors type.
    */
-  PRIVACY_PAGE: 'integrity-policies',
+  PRIVACY_PAGE: 'privacy',
 } as const;
 
 export type CmsTagKey = (typeof CMS_TAGS)[keyof typeof CMS_TAGS];
