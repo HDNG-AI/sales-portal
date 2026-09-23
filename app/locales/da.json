@@ -959,12 +959,12 @@
     "exit": "Afslut"
   },
   "form": {
-    "country_placeholder": "Vælg land",
+    "submit": "Send",
     "default_subject": "Formularindsendelse fra webstedet",
     "fallback_email": "Hvis der ikke åbnes noget, så send os en e-mail på {recipient}",
     "field_required": "Dette felt er obligatorisk.",
     "invalid_email": "Angiv en gyldig e-mailadresse.",
-    "select_placeholder": "Vælg...",
-    "submit": "Send"
+    "country_placeholder": "Vælg land",
+    "select_placeholder": "Vælg..."
   }
 }

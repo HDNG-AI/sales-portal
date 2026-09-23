@@ -959,12 +959,12 @@
     "exit": "Exit"
   },
   "form": {
-    "country_placeholder": "Select country",
+    "submit": "Send",
     "default_subject": "Website form submission",
     "fallback_email": "If nothing opens, email us at {recipient}",
     "field_required": "This field is required.",
     "invalid_email": "Please enter a valid email address.",
-    "select_placeholder": "Select...",
-    "submit": "Send"
+    "country_placeholder": "Select country",
+    "select_placeholder": "Select..."
   }
 }

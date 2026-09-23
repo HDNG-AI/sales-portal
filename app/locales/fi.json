@@ -959,12 +959,12 @@
     "exit": "Poistu"
   },
   "form": {
-    "country_placeholder": "Valitse maa",
+    "submit": "Lähetä",
     "default_subject": "Verkkosivuston lomakelähetys",
     "fallback_email": "Jos mitään ei avaudu, lähetä meille sähköpostia osoitteeseen {recipient}",
     "field_required": "Tämä kenttä on pakollinen.",
     "invalid_email": "Anna kelvollinen sähköpostiosoite.",
-    "select_placeholder": "Valitse...",
-    "submit": "Lähetä"
+    "country_placeholder": "Valitse maa",
+    "select_placeholder": "Valitse..."
   }
 }

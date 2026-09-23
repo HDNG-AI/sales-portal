@@ -959,12 +959,12 @@
     "exit": "Avsluta"
   },
   "form": {
-    "country_placeholder": "Välj land",
+    "submit": "Skicka",
     "default_subject": "Formulärinlämning",
     "fallback_email": "Om inget öppnas, maila oss på {recipient}",
     "field_required": "Detta fält är obligatoriskt.",
     "invalid_email": "Ange en giltig e-postadress.",
-    "select_placeholder": "Välj...",
-    "submit": "Skicka"
+    "country_placeholder": "Välj land",
+    "select_placeholder": "Välj..."
   }
 }
