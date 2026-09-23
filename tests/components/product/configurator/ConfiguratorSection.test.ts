@@ -55,45 +55,63 @@ describe('ConfiguratorSection', () => {
     expect(wrapper.find('h4').exists()).toBe(false);
   });
 
-  it('puts the choices before the measurements', () => {
+  it('renders its members in the order the indices give', () => {
     const cabinet = makeCabinetConfiguration();
 
     const wrapper = mountSection(sectionOf(cabinet.sections, 'cabinet'));
 
-    // The contract gives a section two lists and no order between them, so
-    // this is the design reference's order, pinned so a refactor cannot
-    // quietly swap it back.
-    const first = wrapper.find(
-      '[data-testid="configurator-group"], [data-testid="configurator-variable"]',
-    );
-    expect(first.attributes('data-testid')).toBe('configurator-group');
-  });
-
-  it('heads the measurements as a block of their own', () => {
-    const cabinet = makeCabinetConfiguration();
-
-    const wrapper = mountSection(sectionOf(cabinet.sections, 'cabinet'));
-
-    // A column of lone fields under the choices reads as leftovers; the
-    // measurements get the same headed, foldable block a group gets.
-    const header = wrapper.find(
-      '[data-testid="configurator-measurements-header"]',
-    );
-    expect(header.text()).toContain('configurator.measurements');
-    expect(header.attributes('aria-expanded')).toBe('true');
-  });
-
-  it('summarises the measurements it holds once folded', async () => {
-    const workbench = makeInitialConfiguration();
-
-    const wrapper = mountSection(sectionOf(workbench.sections, 'frame'));
-    await wrapper
-      .find('[data-testid="configurator-measurements-header"]')
-      .trigger('click');
-
+    // The seed interleaves this section: a list, two fields, a list, a field.
+    // Neither of the document's two arrays can express that on its own, which
+    // is the whole reason `sortIndex` exists.
     expect(
-      wrapper.find('[data-testid="configurator-measurements-summary"]').text(),
-    ).toBe('(1200 mm · 700 mm · 0 pcs · 0 %)');
+      wrapper
+        .findAll(
+          '[data-testid="configurator-group"], [data-testid="configurator-variable"]',
+        )
+        .map(
+          (node) =>
+            node.attributes('data-group-id') ??
+            node.attributes('data-variable-id'),
+        ),
+    ).toEqual(['mount', 'cab-width', 'cab-height', 'doors', 'front-area']);
+  });
+
+  it('writes no heading over the fields', () => {
+    const cabinet = makeCabinetConfiguration();
+
+    const wrapper = mountSection(sectionOf(cabinet.sections, 'cabinet'));
+
+    // A variable is the section's own field and the section is already named;
+    // any heading here would claim something about content `valueType` does
+    // not carry. Once the fields are interleaved among the lists there is no
+    // block for one to sit over anyway.
+    expect(
+      wrapper.find('[data-testid="configurator-measurements"]').exists(),
+    ).toBe(false);
+    expect(wrapper.text()).not.toContain('configurator.measurements');
+  });
+
+  it('gives every field a row of its own, never a shared grid', () => {
+    const cabinet = makeCabinetConfiguration();
+
+    const wrapper = mountSection(sectionOf(cabinet.sections, 'cabinet'));
+
+    // A date, a free text and a measurement side by side would say they belong
+    // together. They are the section's own fields and nothing more, so each one
+    // gets a rule and air of its own across the full width.
+    const rows = wrapper.findAll('[data-testid="configurator-variable-row"]');
+
+    expect(rows).toHaveLength(
+      wrapper.findAll('[data-testid="configurator-variable"]').length,
+    );
+    expect(
+      rows.map(
+        (row) => row.findAll('[data-testid="configurator-variable"]').length,
+      ),
+    ).toEqual(rows.map(() => 1));
+    expect(
+      wrapper.find('[data-testid="configurator-variables"]').exists(),
+    ).toBe(false);
   });
 
   it('renders its own content only, never a child section\u2019s', () => {

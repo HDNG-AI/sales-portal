@@ -314,7 +314,6 @@
     "unavailable": "Ikke tilgængeligt med dine nuværende valg",
     "bounds": "{min}–{max} {unit}",
     "optional": "Valgfrit",
-    "measurements": "Mål & variabler",
     "choose_many": "Vælg ingen eller flere",
     "quantity": "Antal",
     "show_all": "Vis alle {count} valg",
@@ -339,6 +338,8 @@
     "previous": "Forrige",
     "next": "Næste",
     "section_position": "Sektion {current} af {total}",
+    "choose_subsection": "Vælg en undersektion for at fortsætte.",
+    "subsections_only": "Denne sektion har undersektioner. Vælg en for at fortsætte.",
     "page_note": "Dette er et konfiguratorprodukt. Byg din variant under {tab} nedenfor — pris og gyldighed beregnes løbende.",
     "severity": {
       "error": "Fejl",
@@ -359,11 +360,6 @@
       "expired": "Konfigurationssessionen er udløbet.",
       "start_over": "Start forfra",
       "title": "Specifikation",
-      "prices_ex_vat": "priser ekskl. moms",
-      "customer_type": {
-        "person": "Privatkunde",
-        "organization": "Erhvervskunde"
-      },
       "net_price": "Nettopris",
       "quantity_suffix": "{count} stk.",
       "indicative": "Vejledende pris. Prisen bekræftes i tilbuddet.",

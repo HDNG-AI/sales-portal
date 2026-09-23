@@ -21,6 +21,12 @@ import type { Seed } from './types';
 //     `Packaging` inside it does not: the document says show one and not the
 //     other, and the rule that a hidden parent takes its whole subtree with it
 //     had no data behind it until now.
+//   * a section that is a way in rather than a page. `Accessories` has two
+//     visible children and nothing of its own, and `Tool holding` inside it has
+//     one child and nothing of its own. Neither shape existed in a document.
+//   * option groups inside option groups, in `Storage`: `Drawer unit` holds
+//     one nested list and `Small parts storage` holds three. The contract
+//     nests them and no seed did, so the shape was only ever unit-tested.
 //
 // Every section carries real choices, so no page of it is empty, and every
 // required group arrives with a selection — the document is valid at `create`
@@ -67,6 +73,7 @@ function edgeSection(): ConfigurationSection {
   return {
     id: 'edge',
     name: 'Edge trim',
+    sortIndex: 11,
     visible: true,
     sections: [],
     messages: [],
@@ -74,6 +81,7 @@ function edgeSection(): ConfigurationSection {
       seedVariable({
         id: 'edge-radius',
         name: 'Corner radius',
+        sortIndex: 13,
         description: 'Radius the trim is mitred to at the corners.',
         required: false,
         value: 5,
@@ -89,6 +97,7 @@ function edgeSection(): ConfigurationSection {
         id: 'edge-profile',
         code: 'EDGE',
         name: 'Edge profile',
+        sortIndex: 12,
         minSelections: 1,
         maxSelections: 1,
         options: [
@@ -109,12 +118,14 @@ function worktopSection(): ConfigurationSection {
   return {
     id: 'worktop',
     name: 'Worktop',
+    sortIndex: 7,
     visible: true,
     messages: [],
     variables: [
       seedVariable({
         id: 'overhang',
         name: 'Front overhang',
+        sortIndex: 10,
         description: 'How far the top reaches past the frame.',
         required: false,
         value: 20,
@@ -130,6 +141,7 @@ function worktopSection(): ConfigurationSection {
         id: 'top',
         code: 'TOP',
         name: 'Worktop material',
+        sortIndex: 8,
         minSelections: 1,
         maxSelections: 1,
         options: [
@@ -145,6 +157,7 @@ function worktopSection(): ConfigurationSection {
         id: 'top-treatment',
         code: 'TREATMENT',
         name: 'Surface treatment',
+        sortIndex: 9,
         options: [
           option('treat-esd', 'ESD-dissipative coating', 1250, 907_013),
           option('treat-oil', 'Oiled finish', 480, 907_014),
@@ -163,6 +176,7 @@ function logisticsSection(): ConfigurationSection {
     // buyer was never shown, whatever the child says about itself.
     id: 'logistics',
     name: 'Logistics',
+    sortIndex: 26,
     visible: false,
     messages: [],
     optionGroups: [],
@@ -170,6 +184,7 @@ function logisticsSection(): ConfigurationSection {
       seedVariable({
         id: 'ship-class',
         name: 'Shipping class',
+        sortIndex: 27,
         description: 'Freight class the assembled station ships under.',
         valueType: 'string',
         value: 'FRK-3',
@@ -183,6 +198,7 @@ function logisticsSection(): ConfigurationSection {
         // branch. Nothing here may reach the buyer.
         id: 'packaging',
         name: 'Packaging',
+        sortIndex: 28,
         visible: true,
         sections: [],
         messages: [],
@@ -190,6 +206,7 @@ function logisticsSection(): ConfigurationSection {
           seedVariable({
             id: 'crate-volume',
             name: 'Crate volume',
+            sortIndex: 30,
             description: 'Packed volume, computed from the ordered size.',
             required: false,
             decimals: 1,
@@ -203,6 +220,7 @@ function logisticsSection(): ConfigurationSection {
             id: 'crate',
             code: 'CRATE',
             name: 'Crate type',
+            sortIndex: 29,
             minSelections: 1,
             maxSelections: 1,
             options: [
@@ -219,17 +237,107 @@ function logisticsSection(): ConfigurationSection {
   };
 }
 
+/**
+ * A section that is a way in rather than a page: no groups and no variables of
+ * its own, two visible children. The document had no such shape, and both the
+ * subsection menu and the fallback under it are rules no seed could show.
+ *
+ * `Tool holding` is the fallback's data — one child and nothing of its own to
+ * answer — and `Waste handling` is the ordinary page beside it.
+ *
+ * It sits last in the array, numbered from 31: the seed runs one counter
+ * through the whole document and nothing is free between `Power and lighting`'s
+ * last member and `Logistics`. Order comes from `sortIndex`, and `Logistics` is
+ * invisible, so the buyer still reads this as the fourth section.
+ */
+function accessoriesSection(): ConfigurationSection {
+  return {
+    id: 'accessories',
+    name: 'Accessories',
+    sortIndex: 31,
+    visible: true,
+    messages: [],
+    variables: [],
+    optionGroups: [],
+    sections: [
+      {
+        id: 'tool-holding',
+        name: 'Tool holding',
+        sortIndex: 32,
+        visible: true,
+        messages: [],
+        variables: [],
+        optionGroups: [],
+        sections: [
+          {
+            id: 'tool-rails',
+            name: 'Tool rails',
+            sortIndex: 33,
+            visible: true,
+            sections: [],
+            messages: [],
+            variables: [],
+            optionGroups: [
+              seedGroup({
+                id: 'rail-length',
+                code: 'RAIL',
+                name: 'Rail length',
+                sortIndex: 34,
+                minSelections: 1,
+                maxSelections: 1,
+                options: [
+                  option('rail-half', 'Half the worktop length', 0, 907_070, {
+                    selected: true,
+                    selectionSource: 'initial',
+                  }),
+                  option('rail-full', 'Full worktop length', 460, 907_071),
+                ],
+              }),
+            ],
+          },
+        ],
+      },
+      {
+        id: 'waste',
+        name: 'Waste handling',
+        sortIndex: 35,
+        visible: true,
+        sections: [],
+        messages: [],
+        variables: [],
+        optionGroups: [
+          seedGroup({
+            id: 'waste-bin',
+            code: 'WASTE',
+            name: 'Waste bin',
+            sortIndex: 36,
+            quantityEditable: true,
+            options: [
+              option('waste-chute', 'Worktop chute with bin', 890, 907_072),
+              option('waste-sorter', 'Two-way sorting frame', 1340, 907_073, {
+                maxQuantity: 2,
+              }),
+            ],
+          }),
+        ],
+      },
+    ],
+  };
+}
+
 function buildSections(): ConfigurationSection[] {
   return [
     {
       id: 'structure',
       name: 'Structure',
+      sortIndex: 1,
       visible: true,
       messages: [],
       variables: [
         seedVariable({
           id: 'length',
           name: 'Length',
+          sortIndex: 4,
           description: 'Outer length of the station.',
           value: 2400,
           defaultValue: 2400,
@@ -241,6 +349,7 @@ function buildSections(): ConfigurationSection[] {
         seedVariable({
           id: 'depth',
           name: 'Depth',
+          sortIndex: 5,
           description: 'Outer depth of the station.',
           value: 900,
           defaultValue: 900,
@@ -252,6 +361,7 @@ function buildSections(): ConfigurationSection[] {
         seedVariable({
           id: 'height',
           name: 'Working height',
+          sortIndex: 6,
           description: 'Height from floor to the top of the worktop.',
           value: 900,
           defaultValue: 900,
@@ -266,6 +376,7 @@ function buildSections(): ConfigurationSection[] {
           id: 'frame',
           code: 'FRAME',
           name: 'Frame',
+          sortIndex: 2,
           minSelections: 1,
           maxSelections: 1,
           options: [
@@ -286,6 +397,7 @@ function buildSections(): ConfigurationSection[] {
           id: 'legs',
           code: 'LEGS',
           name: 'Leg pairs',
+          sortIndex: 3,
           options: [
             option('legs-third', 'Third leg pair, centre', 1400, 907_033),
             option('legs-levelling', 'Levelling feet', 380, 907_034),
@@ -297,6 +409,7 @@ function buildSections(): ConfigurationSection[] {
     {
       id: 'storage',
       name: 'Storage',
+      sortIndex: 14,
       visible: true,
       sections: [],
       messages: [],
@@ -304,6 +417,7 @@ function buildSections(): ConfigurationSection[] {
         seedVariable({
           id: 'shelves',
           name: 'Shelves',
+          sortIndex: 21,
           description: 'Number of shelves under the worktop.',
           required: false,
           min: 0,
@@ -317,6 +431,7 @@ function buildSections(): ConfigurationSection[] {
           id: 'drawers',
           code: 'DRAWERS',
           name: 'Drawer unit',
+          sortIndex: 15,
           minSelections: 1,
           maxSelections: 1,
           options: [
@@ -327,11 +442,26 @@ function buildSections(): ConfigurationSection[] {
             option('drawers-three', 'Three drawers', 2400, 907_041),
             option('drawers-six', 'Six drawers', 4100, 907_042),
           ],
+          // One nested list under a group whose rows come first, which is the
+          // shallow half of what the contract allows.
+          optionGroups: [
+            seedGroup({
+              id: 'drawer-locks',
+              code: 'DRAWER_LOCKS',
+              name: 'Drawer locks',
+              sortIndex: 16,
+              options: [
+                option('lock-keyed', 'Keyed lock', 340, 907_045),
+                option('lock-code', 'Combination lock', 520, 907_046),
+              ],
+            }),
+          ],
         }),
         seedGroup({
           id: 'bins',
           code: 'BINS',
           name: 'Small parts storage',
+          sortIndex: 17,
           quantityEditable: true,
           options: [
             option('bin-rail', 'Louvre panel with bins', 1100, 907_043, {
@@ -341,12 +471,62 @@ function buildSections(): ConfigurationSection[] {
               maxQuantity: 4,
             }),
           ],
+          // Three nested lists under one group, the deeper half: the rows
+          // above come first, and the nested lists follow in their own order.
+          optionGroups: [
+            seedGroup({
+              id: 'bin-small',
+              code: 'BINS_SMALL',
+              name: 'Small bins',
+              sortIndex: 18,
+              quantityEditable: true,
+              options: [
+                option('bin-s-blue', 'Small bin, blue', 45, 907_060, {
+                  maxQuantity: 20,
+                }),
+                option('bin-s-red', 'Small bin, red', 45, 907_061, {
+                  maxQuantity: 20,
+                }),
+              ],
+            }),
+            seedGroup({
+              id: 'bin-medium',
+              code: 'BINS_MEDIUM',
+              name: 'Medium bins',
+              sortIndex: 19,
+              quantityEditable: true,
+              options: [
+                option('bin-m-blue', 'Medium bin, blue', 70, 907_062, {
+                  maxQuantity: 12,
+                }),
+                option('bin-m-red', 'Medium bin, red', 70, 907_063, {
+                  maxQuantity: 12,
+                }),
+              ],
+            }),
+            seedGroup({
+              id: 'bin-large',
+              code: 'BINS_LARGE',
+              name: 'Large bins',
+              sortIndex: 20,
+              quantityEditable: true,
+              options: [
+                option('bin-l-blue', 'Large bin, blue', 95, 907_064, {
+                  maxQuantity: 8,
+                }),
+                option('bin-l-red', 'Large bin, red', 95, 907_065, {
+                  maxQuantity: 8,
+                }),
+              ],
+            }),
+          ],
         }),
       ],
     },
     {
       id: 'power',
       name: 'Power and lighting',
+      sortIndex: 22,
       visible: true,
       sections: [],
       messages: [],
@@ -354,6 +534,7 @@ function buildSections(): ConfigurationSection[] {
         seedVariable({
           id: 'sockets',
           name: 'Sockets',
+          sortIndex: 25,
           description: 'Outlets on the power rail.',
           required: false,
           value: 4,
@@ -369,6 +550,7 @@ function buildSections(): ConfigurationSection[] {
           id: 'supply',
           code: 'SUPPLY',
           name: 'Power supply',
+          sortIndex: 23,
           minSelections: 1,
           maxSelections: 1,
           options: [
@@ -383,6 +565,7 @@ function buildSections(): ConfigurationSection[] {
           id: 'lighting',
           code: 'LIGHTING',
           name: 'Lighting',
+          sortIndex: 24,
           quantityEditable: true,
           options: [
             option('light-bar', 'LED light bar', 780, 907_052),
@@ -394,6 +577,7 @@ function buildSections(): ConfigurationSection[] {
       ],
     },
     logisticsSection(),
+    accessoriesSection(),
   ];
 }
 

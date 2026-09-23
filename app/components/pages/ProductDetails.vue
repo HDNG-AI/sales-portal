@@ -310,12 +310,27 @@ const variantProductsByAlias = computed<Record<string, VariantRowMeta>>(() => {
 const { currentLocale, currentMarket } = useLocaleMarket();
 const pdpSlot = useCmsSlot(CMS_SLOTS.PRODUCT_DETAIL);
 
+// Page context for the CMS container filters; see buildAreaFilters in
+// server/services/cms.ts for why the whole category closure is sent.
+const cmsCategoryIds = computed(() =>
+  (props.product.categoryIds ?? []).join(','),
+);
+
+const pdpCmsContext = computed(() => ({
+  ...(props.product.alias ? { productAlias: props.product.alias } : {}),
+  ...(props.product.brand?.alias
+    ? { brandAlias: props.product.brand.alias }
+    : {}),
+  ...(cmsCategoryIds.value ? { categoryIds: cmsCategoryIds.value } : {}),
+}));
+
 const { data: pdpCmsArea } = useFetch<ContentAreaType>('/api/cms/area', {
   query: computed(() =>
     pdpSlot.value
       ? {
           family: pdpSlot.value.family,
           areaName: pdpSlot.value.areaName,
+          ...pdpCmsContext.value,
           ...(currentLocale.value ? { locale: currentLocale.value } : {}),
           ...(currentMarket.value ? { market: currentMarket.value } : {}),
         }
@@ -566,11 +581,16 @@ useProductSeo({
             <button
               v-if="hasFeature('wishlist') && authStore.isAuthenticated"
               type="button"
-              class="text-muted-foreground hover:text-foreground flex items-center gap-2 py-2.5 text-left text-[13px] transition-colors"
+              class="hover:text-foreground flex items-center gap-2 py-2.5 text-left text-[13px] transition-colors"
+              :class="isFavorited ? 'text-foreground' : 'text-muted-foreground'"
               data-testid="pdp-save-favourite"
+              :data-favorited="isFavorited"
               @click="toggleFavourite"
             >
-              <Star class="size-4" />
+              <Star
+                class="size-4"
+                :fill="isFavorited ? 'currentColor' : 'none'"
+              />
               <span>
                 {{
                   isFavorited

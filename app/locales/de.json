@@ -314,7 +314,6 @@
     "unavailable": "Mit Ihrer aktuellen Auswahl nicht verfügbar",
     "bounds": "{min}–{max} {unit}",
     "optional": "Optional",
-    "measurements": "Maße & Variablen",
     "choose_many": "Keine oder mehrere wählen",
     "quantity": "Menge",
     "show_all": "Alle {count} Optionen anzeigen",
@@ -339,6 +338,8 @@
     "previous": "Zurück",
     "next": "Weiter",
     "section_position": "Abschnitt {current} von {total}",
+    "choose_subsection": "Wählen Sie einen Unterabschnitt, um fortzufahren.",
+    "subsections_only": "Dieser Abschnitt hat Unterabschnitte. Wählen Sie einen, um fortzufahren.",
     "page_note": "Dies ist ein konfigurierbares Produkt. Stellen Sie Ihre Variante unten unter {tab} zusammen — Preis und Gültigkeit werden laufend berechnet.",
     "severity": {
       "error": "Fehler",
@@ -359,11 +360,6 @@
       "expired": "Die Konfigurationssitzung ist abgelaufen.",
       "start_over": "Neu beginnen",
       "title": "Spezifikation",
-      "prices_ex_vat": "Preise exkl. MwSt.",
-      "customer_type": {
-        "person": "Privatkunde",
-        "organization": "Geschäftskunde"
-      },
       "net_price": "Nettopreis",
       "quantity_suffix": "{count} Stk.",
       "indicative": "Richtpreis. Der Preis wird im Angebot bestätigt.",

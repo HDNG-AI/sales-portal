@@ -3,14 +3,18 @@ import type {
   ConfigurationChange,
   ConfigurationSection,
 } from '#shared/types/configurator';
-import { variablesSummary } from '~/utils/configurator-form';
+import { sectionMembers } from '~/utils/configurator-order';
 
 /**
- * One `ConfigurationSection`'s own content — its groups and its variables.
+ * One `ConfigurationSection`'s own content — its groups and its variables, in
+ * the order `sortIndex` puts them.
  *
  * Not its children: a nested section is an entry of its own in the rail, so
  * rendering `section.sections` here would put a child's content on two pages at
- * once. The heading is the page's too, because it carries the section's number
+ * once. That is also the one place the provider's order cannot be followed —
+ * Monitor can number a child section between its parent's groups, and a page
+ * cannot hold half of another page. A limit of the page model, not an ordering
+ * bug. The heading is the page's too, because it carries the section's number
  * in the rail.
  *
  * `visible: false` renders nothing at all. The provider keeps data on the
@@ -24,12 +28,7 @@ const { section, disabled = false } = defineProps<{
 
 const emit = defineEmits<{ change: [ConfigurationChange] }>();
 
-const { t } = useI18n();
-
-/** Empty rather than a bare separator when nothing readable is set yet. */
-const summary = computed(
-  () => variablesSummary(section.variables) || undefined,
-);
+const members = computed(() => sectionMembers(section));
 </script>
 
 <template>
@@ -41,38 +40,36 @@ const summary = computed(
   >
     <ConfiguratorMessages :messages="section.messages" />
 
-    <!-- Choices first, measurements last. The contract puts variables and
-         option groups in two lists and says nothing about which comes first,
-         so the order follows the design reference until it does.
-         `5` is one below the `h4` the page renders over this section. -->
-    <ConfiguratorOptionGroup
-      v-for="group in section.optionGroups"
-      :key="group.id"
-      :group="group"
-      :level="5"
-      :disabled="disabled"
-      @change="emit('change', $event)"
-    />
+    <!-- The merchant's own arrangement, so nothing gathers the fields and no
+         heading is invented over them: a variable is the section's own field
+         and the section is already named. `5` is one below the `h4` the page
+         renders over this section. -->
+    <template v-for="member in members">
+      <ConfiguratorOptionGroup
+        v-if="member.kind === 'group'"
+        :key="member.group.id"
+        :group="member.group"
+        :level="5"
+        :disabled="disabled"
+        @change="emit('change', $event)"
+      />
 
-    <!-- The measurements are one headed block of their own, like a group, and
-         two columns where there is room: a column of lone fields under the
-         choices reads as leftovers. -->
-    <ConfiguratorFoldable
-      v-if="section.variables.length"
-      name="configurator-measurements"
-      :title="t('configurator.measurements')"
-      :summary="summary"
-      :level="5"
-    >
-      <div class="grid gap-4 sm:grid-cols-2">
+      <!-- A field with no group over it gets a rule and air of its own, which
+           is all the framing it has. One field per row and never a shared grid:
+           a date, a free text and a measurement side by side would say they
+           belong together, and a section's fields are only its own. -->
+      <div
+        v-else
+        :key="member.variable.id"
+        data-testid="configurator-variable-row"
+        class="border-border border-t py-5"
+      >
         <ConfiguratorVariableField
-          v-for="variable in section.variables"
-          :key="variable.id"
-          :variable="variable"
+          :variable="member.variable"
           :disabled="disabled"
           @change="emit('change', $event)"
         />
       </div>
-    </ConfiguratorFoldable>
+    </template>
   </section>
 </template>
