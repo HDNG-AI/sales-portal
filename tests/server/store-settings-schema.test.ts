@@ -1319,6 +1319,51 @@ describe('buildGoogleFontsUrl', () => {
 });
 
 // Helper to create minimal valid config for testing
+describe('StoreSettingsSchema timezone', () => {
+  it('accepts an IANA zone name', () => {
+    const result = StoreSettingsSchema.safeParse(
+      createMinimalConfig({ timezone: 'Europe/Stockholm' }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.timezone).toBe('Europe/Stockholm');
+  });
+
+  it('accepts UTC, which Intl.supportedValuesOf omits', () => {
+    const result = StoreSettingsSchema.safeParse(
+      createMinimalConfig({ timezone: 'UTC' }),
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it.each(['+01:00', '-0500', '+00:00'])(
+    'rejects the UTC offset %s, which cannot express DST',
+    (offset) => {
+      const result = StoreSettingsSchema.safeParse(
+        createMinimalConfig({ timezone: offset }),
+      );
+
+      expect(result.success).toBe(false);
+    },
+  );
+
+  it('rejects a zone name that does not exist', () => {
+    const result = StoreSettingsSchema.safeParse(
+      createMinimalConfig({ timezone: 'Europe/Atlantis' }),
+    );
+
+    expect(result.success).toBe(false);
+  });
+
+  it('leaves timezone undefined when absent, substituting no zone', () => {
+    const result = StoreSettingsSchema.safeParse(createMinimalConfig());
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.timezone).toBeUndefined();
+  });
+});
+
 function createMinimalConfig(overrides: Record<string, unknown> = {}) {
   return {
     tenantId: 'test',

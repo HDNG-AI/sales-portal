@@ -18,6 +18,7 @@ const mockTenantConfig: TenantConfig = {
   },
   mode: 'commerce',
   checkoutMode: 'custom',
+  timezone: 'Europe/Stockholm',
   theme: {
     name: 'test-theme',
     colors: {
@@ -185,6 +186,14 @@ describe('Tenant Config Service', () => {
       expect(
         (pub as unknown as Record<string, unknown>).updatedAt,
       ).toBeUndefined();
+    });
+
+    it('should include timezone', async () => {
+      // The server-to-client hop for this field: without the mapping in
+      // getPublicConfig the tenant's zone never reaches the browser, and a
+      // client test that injects it into mocked public data would still pass.
+      const pub = await service.getPublicConfig(createMockEvent());
+      expect(pub?.timezone).toBe('Europe/Stockholm');
     });
 
     it('should include locale from geinsSettings', async () => {

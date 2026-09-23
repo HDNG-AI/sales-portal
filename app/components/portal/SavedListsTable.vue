@@ -5,6 +5,7 @@ import { useAuthStore } from '~/stores/auth';
 
 const { t } = useI18n();
 const { formatLocale } = useFormatLocale();
+const { timezone } = useTenant();
 const { localePath } = useLocaleMarket();
 const authStore = useAuthStore();
 
@@ -26,6 +27,7 @@ function formatDate(value: number | string | undefined): string {
   if (value == null) return '-';
   try {
     return new Date(value).toLocaleDateString(formatLocale.value, {
+      ...(timezone.value ? { timeZone: timezone.value } : {}),
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

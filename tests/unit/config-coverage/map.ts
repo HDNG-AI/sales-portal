@@ -157,6 +157,8 @@ const BRAND_LOGO_FALLBACK = 'tests/components/BrandLogoFallback.test.ts';
 const POWERED_BY = 'tests/components/PoweredBy.test.ts';
 const HEADER_TOPBAR = 'tests/components/layout/LayoutHeaderTopbar.test.ts';
 const PORTAL_SHELL = 'tests/components/portal/PortalShell.test.ts';
+const PORTAL_ORDERS_TABLE = 'tests/components/portal/PortalOrdersTable.test.ts';
+const TENANT_CONFIG_SERVICE = 'tests/server/tenant-config-service.test.ts';
 const PRICE_DISPLAY = 'tests/components/commerce/PriceDisplay.test.ts';
 const STOCK_BADGE = 'tests/components/commerce/StockBadge.test.ts';
 const STOCK_BADGE_UNIT = 'tests/unit/StockBadge.test.ts';
@@ -1182,6 +1184,47 @@ export const CONFIG_COVERAGE_MAP = {
         'The hand-off is split: the client branch here, the token endpoint in ' +
         'tests/server/api/checkout/token-post.test.ts.',
     },
+  },
+
+  timezone: {
+    status: 'has-test',
+    test: [
+      {
+        spec: USE_TENANT,
+        title: 'should return timezone from config',
+        kind: 'carrier',
+      },
+      {
+        spec: USE_TENANT,
+        title: 'should return undefined when the tenant has not set a timezone',
+        kind: 'carrier',
+      },
+      {
+        spec: TENANT_CONFIG_SERVICE,
+        title: 'should include timezone',
+        kind: 'carrier',
+      },
+      {
+        spec: SERVER_TENANT,
+        title:
+          'salvages a malformed timezone to unset, keeping the rest of the config',
+        kind: 'carrier',
+      },
+      {
+        spec: PORTAL_ORDERS_TABLE,
+        title: 'renders createdAt on the calendar day of the tenant timezone',
+        kind: 'consumer',
+        drives: 'field',
+      },
+    ],
+    note:
+      'Eight date sites across seven portal files pass the field straight to ' +
+      'Intl as `timeZone`; the orders table is the one asserted, on two zones ' +
+      'that straddle the fixture instant so the day cannot come from the ' +
+      "runner's own zone. Absent is not a fourth state to cover here — the " +
+      'field is omitted from the Intl options entirely, which is the runtime ' +
+      'zone, and no assertion on it could be anything but a restatement of ' +
+      'where the test runs.',
   },
 
   // --- Theme ---------------------------------------------------------------
