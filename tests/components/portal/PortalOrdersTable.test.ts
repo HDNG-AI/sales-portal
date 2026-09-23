@@ -118,12 +118,16 @@ describe('PortalOrdersTable', () => {
     // the test runner happens to be in — only from the tenant's own.
     mockTenantTimezone.value = 'Pacific/Auckland';
     expect(
-      mountComponent(PortalOrdersTable, { props: { orders: mockOrders } }).text(),
+      mountComponent(PortalOrdersTable, {
+        props: { orders: mockOrders },
+      }).text(),
     ).toContain('12/23/2025');
 
     mockTenantTimezone.value = 'UTC';
     expect(
-      mountComponent(PortalOrdersTable, { props: { orders: mockOrders } }).text(),
+      mountComponent(PortalOrdersTable, {
+        props: { orders: mockOrders },
+      }).text(),
     ).toContain('12/22/2025');
   });
 

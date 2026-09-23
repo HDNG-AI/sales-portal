@@ -157,8 +157,7 @@ const BRAND_LOGO_FALLBACK = 'tests/components/BrandLogoFallback.test.ts';
 const POWERED_BY = 'tests/components/PoweredBy.test.ts';
 const HEADER_TOPBAR = 'tests/components/layout/LayoutHeaderTopbar.test.ts';
 const PORTAL_SHELL = 'tests/components/portal/PortalShell.test.ts';
-const PORTAL_ORDERS_TABLE =
-  'tests/components/portal/PortalOrdersTable.test.ts';
+const PORTAL_ORDERS_TABLE = 'tests/components/portal/PortalOrdersTable.test.ts';
 const TENANT_CONFIG_SERVICE = 'tests/server/tenant-config-service.test.ts';
 const PRICE_DISPLAY = 'tests/components/commerce/PriceDisplay.test.ts';
 const STOCK_BADGE = 'tests/components/commerce/StockBadge.test.ts';
