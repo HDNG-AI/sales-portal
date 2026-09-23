@@ -50,11 +50,18 @@ export function resolveKvMount(env: NodeJS.ProcessEnv): KvMount {
   return { driver: 'redis', url };
 }
 
-export default defineNitroPlugin(() => {
+export default defineNitroPlugin(async () => {
   const mount = resolveKvMount(process.env);
 
   // nitro.storage already mounts 'kv' as memory, so there is nothing to do.
   if (mount.driver === 'memory') return;
+
+  // That existing memory mount has to go first: unstorage refuses to mount an
+  // occupied base ("already mounted at kv:"), so mounting straight over it
+  // throws and the container never finishes starting. `false` keeps the
+  // in-memory items from being migrated onto Redis — at this point they are
+  // whatever nitro seeded, not tenant data worth carrying over.
+  await useStorage().unmount('kv', false);
 
   // `base` is the Redis key prefix, unrelated to the 'kv' mount point.
   useStorage().mount('kv', redisDriver({ url: mount.url, base: 'kv' }));

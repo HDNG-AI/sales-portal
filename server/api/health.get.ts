@@ -82,7 +82,13 @@ async function checkStorage(): Promise<ComponentHealth> {
   // 'redis' for a build whose mount was frozen as memory — the one failure
   // this check exists to catch. Read outside the try so the failure path
   // can report which driver it was that failed.
-  const storageDriver = storage.getMount().driver.name ?? 'unknown';
+  //
+  // Asked of the root storage with an explicit 'kv:' base, not of the
+  // prefixed view: `useStorage('kv')` is a prefixStorage wrapper whose
+  // getMount() resolves the root mount, which is memory for ever regardless
+  // of what 'kv' was mounted on — reporting the exact failure this check
+  // exists to catch.
+  const storageDriver = useStorage().getMount('kv:').driver.name ?? 'unknown';
 
   try {
     // Try to read and write a test key
@@ -103,20 +109,15 @@ async function checkStorage(): Promise<ComponentHealth> {
       };
     }
 
-    // Only counted for in-process storage. Over Redis this is a full
-    // keyspace scan, and container probes run it every 30s against a
-    // keyspace that only grows — the webhook dedup keys are written with
-    // no TTL. The key list itself is never returned: it enumerates every
-    // tenant id in the deployment.
-    const storageItems =
-      storageDriver === 'memory' ? (await storage.keys()).length : undefined;
-
+    // No key count. The write, read and remove above already prove the store
+    // works; enumerating it adds nothing and costs a full keyspace scan on
+    // every probe — every 30s, against a keyspace that only grows, since the
+    // webhook dedup keys are written with no TTL.
     return {
       status: 'healthy',
       latency,
       details: {
         driver: storageDriver,
-        ...(storageItems === undefined ? {} : { storageItems }),
       },
     };
   } catch (error) {
