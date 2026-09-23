@@ -1,4 +1,5 @@
 import type {
+  BrandType,
   PriceType,
   ProductImageType,
   ProductType,
@@ -6,6 +7,7 @@ import type {
   SkuType,
   MetadataType,
 } from '@geins/types';
+import type { CategoryAncestor } from '../utils/breadcrumb-trail';
 
 export type {
   ProductType,
@@ -182,6 +184,17 @@ export interface ListProduct {
 // Detail Product (ProductType with enriched pricing fields from GraphQL)
 // ---------------------------------------------------------------------------
 /**
+ * The brand fields `products/product.graphql` actually selects. The SDK's
+ * `BrandType` stops at brandId/name/logoUrl; the query also asks for `alias`
+ * and `canonicalUrl`, and the alias is what a CMS container's Brand filter
+ * matches on.
+ */
+export interface DetailBrand extends BrandType {
+  alias?: string;
+  canonicalUrl?: string;
+}
+
+/**
  * Extends the SDK ProductType with fields that come from our enriched
  * GraphQL product queries (discount campaigns, discount type, lowest price).
  * The SDK types use different shapes (e.g. DiscountType enum vs string,
@@ -189,8 +202,13 @@ export interface ListProduct {
  */
 export interface DetailProduct extends Omit<
   ProductType,
-  'discountType' | 'lowestPrice' | 'parameterGroups' | 'alternativeUrls'
+  | 'discountType'
+  | 'lowestPrice'
+  | 'parameterGroups'
+  | 'alternativeUrls'
+  | 'brand'
 > {
+  brand?: DetailBrand;
   parameterGroups?: ParameterGroupType[];
   discountCampaigns?: { name: string; hideTitle: boolean }[];
   lowestPrice?: LowestPriceInfo;
@@ -203,6 +221,20 @@ export interface DetailProduct extends Omit<
    * name is ours and stays stable whatever the API calls the field.
    */
   configurable?: boolean;
+  /**
+   * Ancestor categories of the product's PRIMARY category, root first, walked
+   * server-side in `/api/products/[alias]` out of the category closure the Geins
+   * response carries. Empty when the primary category is top-level, or when the
+   * chain could not be resolved in full — see `ancestorsFromCategories`.
+   */
+  ancestors?: CategoryAncestor[];
+  /**
+   * Ids of every category the product is assigned to, ancestors included, from
+   * the closure the Geins response carries. Only the ids are forwarded — the
+   * closure itself is dropped in `/api/products/[alias]` for payload size — and
+   * they exist for the CMS content area's Category filters.
+   */
+  categoryIds?: number[];
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +269,8 @@ export interface ListPageInfo {
   canonicalUrl: string;
   primaryImage: string;
   name: string;
-  id: string;
+  /** The categoryId; `/api/product-lists/category/[alias]` relies on that. */
+  id: number;
   primaryDescription: string;
   secondaryDescription: string;
   hideTitle: boolean;
@@ -246,6 +279,8 @@ export interface ListPageInfo {
   meta: MetadataType;
   subCategories?: { name: string; alias: string; canonicalUrl: string }[];
   alternativeUrls?: LocaleAlternateUrl[];
+  /** Ancestor categories, root first. See `DetailProduct.ancestors`. */
+  ancestors?: CategoryAncestor[];
 }
 
 // ---------------------------------------------------------------------------

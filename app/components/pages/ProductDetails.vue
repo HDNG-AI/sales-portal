@@ -5,7 +5,6 @@ import type { ContentAreaType } from '#shared/types/cms';
 import { CMS_SLOTS } from '#shared/types/cms-slots';
 import { BADGE_DESTRUCTIVE } from '~/lib/badge-styles';
 import {
-  AlertTriangle as AlertTriangleIcon,
   BadgeCheck,
   Download,
   ListPlus,
@@ -19,12 +18,24 @@ import {
   productPath as buildProductPath,
   categoryPath,
 } from '#shared/utils/route-helpers';
-import { recoverEntityUrl } from '~/composables/useEntityUrlRecovery';
+import { ancestorCrumbs } from '#shared/utils/breadcrumb-trail';
 
 const props = defineProps<{
+  product: DetailProduct;
+  /**
+   * The alias from the URL, which is not always the loaded product's own:
+   * under a locale fallback the default-language product answers at the
+   * requested address. Every request built below keeps asking under the
+   * address the visitor is on.
+   */
   alias: string;
 }>();
 
+// The route loads the product and hands it down. It keeps the name `product`
+// so everything below reads as it did when the fetch lived here — and it is a
+// computed, so a locale switch that swaps the product inside this same
+// instance still moves the watches. A different alias remounts the page.
+const product = computed(() => props.product);
 const slug = computed(() => props.alias);
 
 const { localeQuery, localePath } = useLocaleMarket();
@@ -34,65 +45,6 @@ const { localeQuery, localePath } = useLocaleMarket();
 // selector. Gating here keeps those blocks out of the layout entirely.
 const { showPrice } = usePriceVisibility();
 const { showStock } = useStockVisibility();
-
-const {
-  data: product,
-  error,
-  status,
-} = await useFetch<DetailProduct>(() => `/api/products/${slug.value}`, {
-  query: localeQuery,
-  dedupe: 'defer',
-});
-
-// On a content miss (missing product or fetch error) the old slug may be a
-// renamed/old product that should 301 to its canonical instead of 404ing
-// (Problem B). recoverEntityUrl consults the resolver, 301s to the canonical
-// (or a urlHistory redirect), and throws a fatal 404 only on a terminal miss.
-// Kept in the setup await position so the redirect/404 carries a real SSR
-// status before render. Without this, crawlers would index phantom URLs.
-if (error.value || !product.value?.productId) {
-  await recoverEntityUrl(useRoute().path);
-}
-
-const isLoading = computed(() => status.value === 'pending');
-
-// When the loaded product's canonicalUrl differs from the URL the user is
-// on, issue a real 301 to the canonical. Geins returns prefix-less
-// canonicals (e.g. /se/sv/material/grenror/grenror-150-150-88) that 404 on
-// refresh, so we normalize the canonical to the ROUTABLE /p/ form via the
-// route helper rather than redirecting to the raw value. navigateTo is
-// SSR-safe and crawler-grade (a single clean render at the final URL with no
-// hydration risk), so this replaces the former client-only
-// history.replaceState. Only fires when the canonical stays in the same
-// /market/locale/ prefix; a fallback that crossed locales (server served
-// default-language content on a missing-translation request) must not yank the
-// user back out of the locale they asked for, so samePrefix is checked on the
-// RAW canonical before normalizing. No-op when the routable target equals the
-// current path (loop guard).
-{
-  const canonical = product.value?.canonicalUrl;
-  const path = useRoute().path;
-  if (
-    canonical &&
-    typeof canonical === 'string' &&
-    samePrefix(canonical, path)
-  ) {
-    const routable = localePath(buildProductPath(canonical));
-    if (routable !== path) {
-      await navigateTo(routable, { redirectCode: 301, replace: true });
-    }
-  }
-}
-
-// Returns true when both paths share the same /market/locale/ prefix, or
-// when either is too short to have one. Used to suppress the canonical 301
-// when a locale fallback returned a canonicalUrl in a different locale.
-function samePrefix(a: string, b: string): boolean {
-  const aSeg = a.split('/').slice(1, 3);
-  const bSeg = b.split('/').slice(1, 3);
-  if (aSeg.length < 2 || bSeg.length < 2) return true;
-  return aSeg[0] === bSeg[0] && aSeg[1] === bSeg[1];
-}
 
 const { data: related } = useFetch<ListProduct[]>(
   () => `/api/products/${slug.value}/related`,
@@ -358,12 +310,27 @@ const variantProductsByAlias = computed<Record<string, VariantRowMeta>>(() => {
 const { currentLocale, currentMarket } = useLocaleMarket();
 const pdpSlot = useCmsSlot(CMS_SLOTS.PRODUCT_DETAIL);
 
+// Page context for the CMS container filters; see buildAreaFilters in
+// server/services/cms.ts for why the whole category closure is sent.
+const cmsCategoryIds = computed(() =>
+  (props.product.categoryIds ?? []).join(','),
+);
+
+const pdpCmsContext = computed(() => ({
+  ...(props.product.alias ? { productAlias: props.product.alias } : {}),
+  ...(props.product.brand?.alias
+    ? { brandAlias: props.product.brand.alias }
+    : {}),
+  ...(cmsCategoryIds.value ? { categoryIds: cmsCategoryIds.value } : {}),
+}));
+
 const { data: pdpCmsArea } = useFetch<ContentAreaType>('/api/cms/area', {
   query: computed(() =>
     pdpSlot.value
       ? {
           family: pdpSlot.value.family,
           areaName: pdpSlot.value.areaName,
+          ...pdpCmsContext.value,
           ...(currentLocale.value ? { locale: currentLocale.value } : {}),
           ...(currentMarket.value ? { market: currentMarket.value } : {}),
         }
@@ -423,18 +390,29 @@ const visibleCampaigns = computed(() =>
 // Breadcrumbs
 const { t } = useI18n();
 
+// The trail follows the PRIMARY category's path, always — not the category the
+// visitor navigated in from. A product has one place it lives, so the trail,
+// the canonical URL and the structured data agree; a visitor arriving from a
+// secondary category sees a trail that does not mention it, deliberately.
+//
+// Ancestors are walked server-side out of the category closure the product
+// response already carries, so there is no request here. The category's own
+// href comes from its canonicalUrl: rebuilding it from the bare alias produced
+// `/c/<alias>`, which answers 301 on every nested category.
 const breadcrumbItems = computed(() => {
   const items: { label: string; href?: string }[] = [
     { label: t('common.home'), href: localePath('/') },
   ];
 
-  // Extract category from the product's primaryCategory if available
+  items.push(...ancestorCrumbs(product.value?.ancestors, localePath));
+
   const category = product.value?.primaryCategory;
   if (category?.name) {
-    const catAlias = category.alias || category.name.toLowerCase();
     items.push({
       label: category.name,
-      href: localePath(categoryPath(`/${catAlias}`)),
+      href: localePath(
+        categoryPath(category.canonicalUrl || `/${category.alias ?? ''}`),
+      ),
     });
   }
 
@@ -446,101 +424,23 @@ const breadcrumbItems = computed(() => {
 });
 
 // SEO
-const plainDescription = computed(
-  () =>
-    product.value?.texts?.text1?.replace(/<[^>]*>/g, '').slice(0, 160) ?? '',
-);
-
-const primaryImageUrl = computed(
-  () =>
-    product.value?.productImages?.find((i) => i.isPrimary)?.url ??
-    product.value?.productImages?.[0]?.url ??
-    '',
-);
-
 const productPath = computed(() => `/p/${slug.value}`);
 // localeAlternates holds the real per-locale slugs published by setAlternates
 // above (populated with immediate:true so the watch fires before this line).
 // It is useState-backed (SSR-safe, no window) and reactive so hreflang stays
 // correct after client-side navigation without any hydration mismatch.
-const { seoLinks } = useSeoLinks(productPath, localeAlternates);
-
-useHead({
-  title: () => product.value?.name ?? '',
+useProductSeo({
+  product: () => product.value,
+  path: () => productPath.value,
+  breadcrumbs: () => breadcrumbItems.value,
+  localeAlternates,
+  sku: () => resolvedSku.value?.skuId?.toString() ?? '',
+  withOffers: true,
 });
-
-useSeoMeta({
-  description: () => plainDescription.value,
-  ogTitle: () => product.value?.name ?? '',
-  ogDescription: () => plainDescription.value,
-  ogImage: () => primaryImageUrl.value || undefined,
-  ogUrl: () => seoLinks.value.find((l) => l.rel === 'canonical')?.href ?? '',
-});
-
-// JSON-LD structured data (Schema.org Product + BreadcrumbList)
-useSchemaOrg([
-  defineProduct({
-    name: () => product.value?.name ?? '',
-    description: () => plainDescription.value,
-    image: () =>
-      product.value?.productImages?.map((img) => img.url).filter(Boolean) ?? [],
-    brand: () =>
-      product.value?.brand?.name
-        ? { '@type': 'Brand', name: product.value.brand.name }
-        : undefined,
-    sku: () => resolvedSku.value?.skuId?.toString() ?? '',
-    offers: () =>
-      product.value?.unitPrice
-        ? {
-            '@type': 'Offer' as const,
-            price: product.value.unitPrice.sellingPriceIncVat ?? 0,
-            priceCurrency: product.value.unitPrice.currency?.code ?? 'SEK',
-            availability: product.value.totalStock?.inStock
-              ? 'https://schema.org/InStock'
-              : 'https://schema.org/OutOfStock',
-            itemCondition: 'https://schema.org/NewCondition',
-          }
-        : undefined,
-    aggregateRating: () =>
-      product.value?.rating?.reviewCount
-        ? {
-            '@type': 'AggregateRating' as const,
-            ratingValue: product.value.rating.averageRating ?? 0,
-            reviewCount: product.value.rating.reviewCount,
-          }
-        : undefined,
-  }),
-  defineBreadcrumb({
-    itemListElement: () =>
-      breadcrumbItems.value.map((bc, i) => ({
-        '@type': 'ListItem' as const,
-        position: i + 1,
-        name: bc.label,
-        item: bc.href,
-      })),
-  }),
-]);
 </script>
 
 <template>
-  <!-- Loading skeleton -->
-  <ProductDetailsSkeleton
-    v-if="isLoading && !product"
-    data-testid="pdp-loading"
-  />
-
-  <!-- Error state -->
-  <EmptyState
-    v-else-if="error"
-    :icon="AlertTriangleIcon"
-    :title="$t('product.failed_to_load')"
-    :description="$t('common.something_went_wrong')"
-    action-label="Home"
-    :action-to="localePath('/')"
-    data-testid="pdp-error"
-  />
-
-  <div v-else-if="product" class="px-4 py-8 lg:px-6">
+  <div class="px-4 py-8 lg:px-6">
     <div class="mx-auto max-w-7xl space-y-8">
       <!-- Print-only header: store logo + timestamp + product URL.
          Hidden on screen, shown via @media print. -->
@@ -549,54 +449,8 @@ useSchemaOrg([
       <!-- Breadcrumbs -->
       <AppBreadcrumbs v-if="breadcrumbItems.length" :items="breadcrumbItems" />
 
-      <!-- PDP top area: 3-column layout per Figma
-         lg+: gallery (max 400) | main info | right card
-         md:  gallery + info on first row, right card below
-         mobile: stacked single column -->
-      <div
-        class="bg-card grid gap-6 rounded-lg border p-4 md:p-6 lg:grid-cols-[400px_1fr_265px] lg:gap-10"
-        data-testid="pdp-top-area"
-      >
-        <!-- Left: Gallery -->
-        <ErrorBoundary section="product-gallery">
-          <ProductGallery
-            v-if="product.productImages?.length"
-            :images="product.productImages"
-            :product-name="product.name ?? ''"
-            class="w-full max-w-[400px]"
-          />
-        </ErrorBoundary>
-
-        <!-- Middle: Product info -->
-        <div class="flex flex-col gap-6">
-          <!-- Product name + meta -->
-          <div class="flex flex-col gap-1">
-            <h1
-              class="font-heading my-[15px] text-3xl leading-tight font-bold"
-              data-testid="product-name"
-            >
-              {{ product.name }}
-            </h1>
-
-            <!-- Article number -->
-            <p
-              v-if="product.articleNumber"
-              class="text-muted-foreground text-[20px]"
-              data-testid="product-article-number"
-            >
-              Art nr. {{ product.articleNumber }}
-            </p>
-
-            <!-- Brand -->
-            <p
-              v-if="product.brand?.name"
-              class="text-muted-foreground"
-              data-testid="product-brand"
-            >
-              {{ product.brand.name }}
-            </p>
-          </div>
-
+      <ProductTopArea :product="product">
+        <template #info>
           <!-- Price: sits above the long-form description so the dominant
              commerce signal anchors the column. -->
           <PriceDisplay
@@ -669,10 +523,9 @@ useSchemaOrg([
             :product-article-number="product.articleNumber ?? null"
             :variant-products="variantProductsByAlias"
           />
-        </div>
+        </template>
 
-        <!-- Right: actions + info card -->
-        <aside class="flex flex-col gap-4">
+        <template #aside>
           <!-- Quantity + Add to cart + Wishlist -->
           <template v-if="canPurchase">
             <OutOfStockBlock v-if="isOutOfStock" />
@@ -728,11 +581,16 @@ useSchemaOrg([
             <button
               v-if="hasFeature('wishlist') && authStore.isAuthenticated"
               type="button"
-              class="text-muted-foreground hover:text-foreground flex items-center gap-2 py-2.5 text-left text-[13px] transition-colors"
+              class="hover:text-foreground flex items-center gap-2 py-2.5 text-left text-[13px] transition-colors"
+              :class="isFavorited ? 'text-foreground' : 'text-muted-foreground'"
               data-testid="pdp-save-favourite"
+              :data-favorited="isFavorited"
               @click="toggleFavourite"
             >
-              <Star class="size-4" />
+              <Star
+                class="size-4"
+                :fill="isFavorited ? 'currentColor' : 'none'"
+              />
               <span>
                 {{
                   isFavorited
@@ -772,8 +630,8 @@ useSchemaOrg([
               </span>
             </NuxtLink>
           </div>
-        </aside>
-      </div>
+        </template>
+      </ProductTopArea>
 
       <!-- Product tabs (full width) -->
       <ErrorBoundary section="product-tabs">

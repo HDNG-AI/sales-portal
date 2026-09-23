@@ -165,27 +165,6 @@ POST /api/log/error
 }
 ```
 
-## Route Resolution API
-
-### Resolve Route
-
-Resolves a URL path to its corresponding page type and data.
-
-```
-GET /api/resolve-route?path=/products/123
-```
-
-**Response:**
-
-```json
-{
-  "type": "product",
-  "data": {
-    "productId": "123"
-  }
-}
-```
-
 ## Client-Side API Usage
 
 ### useFetch

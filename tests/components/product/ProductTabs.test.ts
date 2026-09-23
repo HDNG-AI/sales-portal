@@ -271,3 +271,110 @@ describe('ProductTabs', () => {
     expect(relatedContent.find('.related-products').exists()).toBe(true);
   });
 });
+
+describe('ProductTabs localized parameter labels', () => {
+  it('prefers the label over the name when both are present', () => {
+    // Both are per-language fields in the Geins admin; `label` is
+    // the merchant's display name, resolved against the requested language.
+    // Showing `name` gives every non-default locale the English key.
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          parameterGroups: [
+            {
+              name: 'Mått',
+              parameterGroupId: 1,
+              parameters: [
+                {
+                  name: 'Weight',
+                  label: 'Vikt',
+                  value: '500 g',
+                  show: true,
+                },
+              ],
+            },
+          ],
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+
+    const text = wrapper.text();
+    expect(text).toContain('Vikt');
+    expect(text).not.toContain('Weight');
+  });
+
+  it('falls back to the name when a parameter carries no label', () => {
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          parameterGroups: [
+            {
+              name: 'Mått',
+              parameterGroupId: 1,
+              parameters: [{ name: 'Weight', value: '500 g', show: true }],
+            },
+          ],
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.text()).toContain('Weight');
+  });
+
+  it('falls back to the name in both the desktop and mobile tables', () => {
+    // Both panels render the same rows, so a bare wrapper.text() assertion
+    // passes when only one of them is right. Each table is checked on its own.
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          parameterGroups: [
+            {
+              name: 'Mått',
+              parameterGroupId: 1,
+              parameters: [
+                { name: 'Weight', label: '', value: '500 g', show: true },
+              ],
+            },
+          ],
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+
+    const tables = wrapper.findAll('[data-testid="spec-table"]');
+    expect(tables.length).toBeGreaterThanOrEqual(2);
+    for (const table of tables) {
+      expect(table.text()).toContain('Weight');
+    }
+  });
+
+  it('falls back to the name when the label is an empty string', () => {
+    // How an unfilled Label actually arrives from Geins — "" rather than a
+    // missing key, which is most parameters on most tenants. Omitting the key
+    // (the test above) passes under `??` as well, so it never caught this.
+    const wrapper = mountComponent(ProductTabs, {
+      props: {
+        product: makeProduct({
+          parameterGroups: [
+            {
+              name: 'Mått',
+              parameterGroupId: 1,
+              parameters: [
+                { name: 'Weight', label: '', value: '500 g', show: true },
+              ],
+            },
+          ],
+        }),
+        related: [],
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.text()).toContain('Weight');
+  });
+});

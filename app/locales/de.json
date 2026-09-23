@@ -308,6 +308,66 @@
     "on_demand": "Auf Anfrage",
     "no_image": "Kein Bild verfügbar"
   },
+  "configurator": {
+    "required": "Pflichtfeld",
+    "read_only": "Wird von der Konfiguration festgelegt",
+    "unavailable": "Mit Ihrer aktuellen Auswahl nicht verfügbar",
+    "bounds": "{min}–{max} {unit}",
+    "optional": "Optional",
+    "choose_many": "Keine oder mehrere wählen",
+    "quantity": "Menge",
+    "show_all": "Alle {count} Optionen anzeigen",
+    "choose_in_group": "{name} wählen",
+    "search": "Suchen…",
+    "no_matches": "Keine Treffer.",
+    "bounds_narrowed": "Grenze durch eine frühere Auswahl angepasst",
+    "summary": {
+      "none": "nichts gewählt",
+      "many": "{count} gewählt"
+    },
+    "yes": "Ja",
+    "no": "Nein",
+    "commit": "Konfiguration abschließen",
+    "starting": "Konfiguration wird gestartet…",
+    "failed": "Etwas ist schiefgelaufen. Laden Sie die Seite neu und versuchen Sie es erneut.",
+    "configure_product": "Produkt konfigurieren",
+    "product_configuration": "Produktkonfiguration",
+    "reset": "Zurücksetzen",
+    "sections": "Abschnitte",
+    "remaining": "{count} offen",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "section_position": "Abschnitt {current} von {total}",
+    "choose_subsection": "Wählen Sie einen Unterabschnitt, um fortzufahren.",
+    "subsections_only": "Dieser Abschnitt hat Unterabschnitte. Wählen Sie einen, um fortzufahren.",
+    "page_note": "Dies ist ein konfigurierbares Produkt. Stellen Sie Ihre Variante unten unter {tab} zusammen — Preis und Gültigkeit werden laufend berechnet.",
+    "severity": {
+      "error": "Fehler",
+      "warning": "Warnung"
+    },
+    "committed": {
+      "heading": "Die Konfiguration ist fertig",
+      "unit_price": "Preis pro Einheit"
+    },
+    "panel": {
+      "valid": "Die Konfiguration ist vollständig und bestellbar.",
+      "invalid": "Fehlt noch, bevor Sie fortfahren können: {items}.",
+      "invalid_unspecified": "Die Konfiguration ist nicht vollständig.",
+      "recomputing": "Wird neu berechnet…",
+      "time_left": "{time} verbleibend",
+      "renew": "Sitzung verlängern",
+      "renew_failed": "Die Sitzung konnte nicht verlängert werden.",
+      "expired": "Die Konfigurationssitzung ist abgelaufen.",
+      "start_over": "Neu beginnen",
+      "title": "Spezifikation",
+      "net_price": "Nettopreis",
+      "quantity_suffix": "{count} Stk.",
+      "indicative": "Richtpreis. Der Preis wird im Angebot bestätigt.",
+      "copy": "Spezifikation kopieren",
+      "copied": "Kopiert",
+      "copy_quantity": "Menge: {count} Stk."
+    }
+  },
   "account": {
     "my_account": "Mein Konto",
     "profile": "Profil",
