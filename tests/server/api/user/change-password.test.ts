@@ -53,6 +53,8 @@ vi.stubGlobal('ErrorCode', {
   BAD_REQUEST: 'BAD_REQUEST',
 });
 vi.stubGlobal('wrapServiceCall', async (fn: () => Promise<unknown>) => fn());
+const mockSetAuthCookies = vi.fn();
+vi.stubGlobal('setAuthCookies', mockSetAuthCookies);
 
 describe('POST /api/user/change-password', () => {
   const mockEvent = {} as import('h3').H3Event;
@@ -99,6 +101,18 @@ describe('POST /api/user/change-password', () => {
     await expect(handler(mockEvent)).rejects.toThrow('RATE_LIMITED');
   });
 
+  it('throws BAD_REQUEST when the platform refuses the change', async () => {
+    // @geins/crm answers a wrong current password, a Geins error and a timeout
+    // alike with { succeeded: false }.
+    mockPasswordChange.mockResolvedValue({ succeeded: false });
+
+    const handler = (
+      await import('../../../../server/api/user/change-password.post')
+    ).default;
+    await expect(handler(mockEvent)).rejects.toThrow('BAD_REQUEST');
+    expect(mockSetAuthCookies).not.toHaveBeenCalled();
+  });
+
   it('throws BAD_REQUEST when SDK returns undefined', async () => {
     mockPasswordChange.mockResolvedValue(undefined);
 
@@ -106,5 +120,40 @@ describe('POST /api/user/change-password', () => {
       await import('../../../../server/api/user/change-password.post')
     ).default;
     await expect(handler(mockEvent)).rejects.toThrow('BAD_REQUEST');
+  });
+
+  it('keeps the session: sets the pair Geins issued in exchange for the old refresh token', async () => {
+    // The password endpoint takes the refresh token and answers with a new one,
+    // the same exchange as a refresh.
+    mockPasswordChange.mockResolvedValue({
+      succeeded: true,
+      tokens: {
+        token: 'new-token',
+        refreshToken: 'new-refresh',
+        expiresIn: 900,
+      },
+    });
+
+    const handler = (
+      await import('../../../../server/api/user/change-password.post')
+    ).default;
+    await handler(mockEvent);
+
+    expect(mockSetAuthCookies).toHaveBeenCalledWith(mockEvent, {
+      token: 'new-token',
+      refreshToken: 'new-refresh',
+      expiresIn: 900,
+    });
+  });
+
+  it('leaves the cookies alone when the answer carries no new pair', async () => {
+    mockPasswordChange.mockResolvedValue({ succeeded: true });
+
+    const handler = (
+      await import('../../../../server/api/user/change-password.post')
+    ).default;
+    await handler(mockEvent);
+
+    expect(mockSetAuthCookies).not.toHaveBeenCalled();
   });
 });
