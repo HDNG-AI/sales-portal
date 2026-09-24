@@ -264,17 +264,23 @@ test.describe('Mobile search overlay', () => {
 });
 
 test.describe('Search results add to cart', () => {
+  // Declared before `test.use`, not inside the test body: `storageState` is
+  // resolved during fixture setup, which happens before the body runs. A
+  // check inside the body is therefore too late to prevent the login state
+  // from being read, and without credentials that file was never written —
+  // the test fails on ENOENT instead of reporting itself out of scope. Same
+  // order as cart.spec.ts.
+  outOfScope(
+    !hasE2ECredentials(),
+    'no-credentials',
+    'add-to-cart needs an authenticated customer (set E2E_USERNAME / E2E_PASSWORD in .env)',
+  );
+
   test.use({ storageState: STORAGE_STATE });
 
   test('a search result card adds its product to the cart', async ({
     page,
   }) => {
-    outOfScope(
-      !hasE2ECredentials(),
-      'no-credentials',
-      'add-to-cart needs an authenticated customer (set E2E_USERNAME / E2E_PASSWORD in .env)',
-    );
-
     const product = await discoverPurchasableProduct(page);
     await page.goto(`/search?q=${encodeURIComponent(product.name)}`);
 
