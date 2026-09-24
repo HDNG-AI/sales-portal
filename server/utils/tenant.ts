@@ -466,6 +466,7 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     geinsSettings: merged.geinsSettings,
     mode: merged.mode,
     checkoutMode: merged.checkoutMode,
+    timezone: merged.timezone,
     theme,
     branding,
     features,
@@ -728,6 +729,11 @@ export function parseStoreSettingsResilient(
     contact: null,
     overrides: null,
     cms: undefined,
+    // Presentation config: a malformed value must degrade to unset, not fail
+    // the parse. Without an entry the issue path is a single segment, which
+    // skips the leaf-strip branch and returns null — and a null resolution is
+    // negative-cached, so one bad date field takes a storefront down.
+    timezone: undefined,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

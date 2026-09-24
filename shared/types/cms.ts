@@ -138,6 +138,13 @@ export interface FormWidgetField {
   type: FormFieldType;
   options?: { value: string; label: string }[];
   /**
+   * Placeholder for a `select` before anything is chosen. Defaults to a
+   * neutral "Select…" when the field brings its own `options`, and to the
+   * country prompt only when it falls back to the country list — the same
+   * branch `options` itself takes.
+   */
+  placeholder?: string;
+  /**
    * Submitted value for a checkbox. Boxes sharing a `name` and differing by
    * `value` are one multi-select group, reported on a single line under
    * `groupLabel`. A box with no `value` stands alone — a consent tick, whose

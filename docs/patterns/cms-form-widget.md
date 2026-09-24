@@ -24,6 +24,7 @@ interface FormWidgetField {
   required: boolean;
   type: 'input' | 'email' | 'textarea' | 'select' | 'checkbox';
   options?: { value: string; label: string }[];
+  placeholder?: string; // select only; overrides the default prompt
   value?: string; // checkbox: submitted value; presence makes it a group option
   groupLabel?: string; // checkbox group heading, on the first box that carries one
 }
@@ -52,6 +53,14 @@ interface FormWidgetData {
   `app/utils/country-options.ts` (full ISO 3166-1 alpha-2 list,
   localized via `Intl.DisplayNames`, exposed as a computed so it
   reacts to locale changes).
+
+  The prompt shown before a choice follows the same branch, which is the
+  point: a field carrying its own `options` gets the neutral
+  `form.select_placeholder` ("Select…"), and only a field falling through to
+  the country list gets `form.country_placeholder` ("Select country"). Set
+  `placeholder` to override it per field — `"Välj ärendetyp"` reads better
+  than a generic prompt on a support form, and it is plain text rather than a
+  translation key, so a multi-locale form is better served by the default.
 
 Validation is zod-on-blur: required fields must be non-empty, `email`
 fields must parse as an address even when optional. Error messages are

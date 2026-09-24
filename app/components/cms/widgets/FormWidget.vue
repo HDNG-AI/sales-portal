@@ -304,6 +304,19 @@ function selectOptionsFor(field: FormWidgetField) {
   }
   return countryOptions.value;
 }
+
+/**
+ * The prompt shown before a choice is made. It has to follow the same branch
+ * selectOptionsFor takes: the country prompt is only honest when the list
+ * actually is countries, and every other select was showing it regardless.
+ */
+function selectPlaceholderFor(field: FormWidgetField): string {
+  if (field.placeholder) return field.placeholder;
+  if (field.options && field.options.length > 0) {
+    return t('form.select_placeholder');
+  }
+  return t('form.country_placeholder');
+}
 </script>
 
 <template>
@@ -443,7 +456,7 @@ function selectOptionsFor(field: FormWidgetField) {
               "
               :aria-required="entry.field.required ? 'true' : undefined"
             >
-              <SelectValue :placeholder="t('form.country_placeholder')" />
+              <SelectValue :placeholder="selectPlaceholderFor(entry.field)" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem

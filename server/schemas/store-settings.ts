@@ -90,6 +90,34 @@ export const ThemeConfigSchema = z.object({
   typography: ThemeTypographySchema.nullable().optional(),
 });
 
+/**
+ * IANA timezone identifier (e.g. 'Europe/Stockholm'), never a raw UTC offset.
+ *
+ * Validated by attempting construction rather than against
+ * Intl.supportedValuesOf('timeZone'), which omits 'UTC' itself. Offsets are
+ * refused explicitly: Intl accepts "+01:00" and "-0500" as timeZone values,
+ * but an offset cannot express DST, so a tenant stored as "+01:00" reads an
+ * hour wrong for the whole summer — the precise failure a named zone exists
+ * to prevent.
+ *
+ * Deliberately carries no `.default()`. See the field on TenantConfig.
+ */
+export const TimezoneSchema = z.string().refine(
+  (val) => {
+    if (/^[+-]/.test(val)) return false;
+    try {
+      new Intl.DateTimeFormat(undefined, { timeZone: val });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  {
+    message:
+      'Must be a valid IANA timezone identifier, e.g. "Europe/Stockholm"',
+  },
+);
+
 export const GeinsSettingsSchema = z.object({
   apiKey: z.string(),
   accountName: z.string(),
@@ -287,6 +315,7 @@ export const StoreSettingsSchema = z.object({
   geinsSettings: GeinsSettingsSchema,
   mode: TenantModeSchema,
   checkoutMode: z.enum(['custom', 'hosted']).default('custom'),
+  timezone: TimezoneSchema.optional(),
   theme: ThemeConfigSchema,
   branding: BrandingConfigSchema,
   features: z.record(z.string(), FeatureConfigInputSchema).default({}),

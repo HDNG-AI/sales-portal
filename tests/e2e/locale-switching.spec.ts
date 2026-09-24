@@ -206,10 +206,16 @@ async function switchToLocale(page: Page, code: string): Promise<void> {
   const target = await revealLocaleLink(page, code);
 
   await Promise.all([
-    page.waitForURL(new RegExp(`/se/${code}/`), { timeout: 20000 }),
+    // `domcontentloaded`, not the default `load`: the assertion below only
+    // needs the document parsed, and waiting for every subresource made this
+    // flake on webkit — the navigation had already happened and fired
+    // `domcontentloaded` when the 20s ran out waiting for `load`.
+    page.waitForURL(new RegExp(`/se/${code}/`), {
+      timeout: 20000,
+      waitUntil: 'domcontentloaded',
+    }),
     target.click(),
   ]);
-  await page.waitForLoadState('domcontentloaded');
 }
 
 test.describe('Locale switching', () => {

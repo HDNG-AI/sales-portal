@@ -22,6 +22,7 @@ definePageMeta({
 
 const { t } = useI18n();
 const { formatLocale } = useFormatLocale();
+const { timezone } = useTenant();
 const { localePath } = useLocaleMarket();
 
 // ---------------------------------------------------------------------------
@@ -106,6 +107,7 @@ function formatDate(dateStr: string | number | null | undefined): string {
   if (dateStr == null) return '-';
   try {
     return new Date(dateStr).toLocaleDateString(formatLocale.value, {
+      ...(timezone.value ? { timeZone: timezone.value } : {}),
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
