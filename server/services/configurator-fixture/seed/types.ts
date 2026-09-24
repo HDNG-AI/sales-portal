@@ -9,7 +9,7 @@ import type {
  * variables the provider computes, and the rules it re-runs after every change.
  */
 export interface Seed {
-  /** The provider's part id: what the document and every option row carry. */
+  /** The provider's part id, which the document carries. */
   productId: string;
   /**
    * The catalogue product this seed stands for, as its Geins product id. The
@@ -22,6 +22,8 @@ export interface Seed {
   templateId: string;
   templateVersion: string;
   basePrice: number;
+  /** A percentage, as Geins writes `discountPercentage`. */
+  vatRate: number;
   weightPerUnit: number;
   /**
    * Net money per unit of a variable's value above its default. The document

@@ -37,6 +37,7 @@ export const ARBETSBORD_PRO_GEINS_ID = '1101';
 const ARTICLE = 'KONF-1001';
 const BASE_PRICE = 3200;
 const CATEGORY = 'Workbenches';
+const VAT_RATE = 25;
 
 /** The width the steel top cannot exceed. */
 const STEEL_MAX_WIDTH = 1600;
@@ -49,7 +50,15 @@ function option(
   overrides: Partial<ConfigurationOption> = {},
 ): ConfigurationOption {
   return seedOption(
-    { id, name, net, productId, article: ARTICLE, category: CATEGORY },
+    {
+      id,
+      name,
+      net,
+      productId,
+      article: ARTICLE,
+      category: CATEGORY,
+      vatRate: VAT_RATE,
+    },
     overrides,
   );
 }
@@ -89,6 +98,7 @@ function finishSection(): ConfigurationSection {
     id: 'finish',
     name: 'Finish',
     sortIndex: 8,
+    description: '',
     visible: true,
     sections: [],
     variables: [],
@@ -151,6 +161,7 @@ function buildSections(): ConfigurationSection[] {
       id: 'frame',
       name: 'Frame',
       sortIndex: 1,
+      description: '',
       visible: true,
       messages: [],
       variables: [
@@ -294,6 +305,7 @@ export const arbetsbordPro: Seed = {
   templateId: `TPL-${ARTICLE}`,
   templateVersion: '4',
   basePrice: BASE_PRICE,
+  vatRate: VAT_RATE,
   weightPerUnit: 38.5,
   variableRates: { width: 1.5, depth: 1, shelves: 450, oversize: 120 },
   formulas: {},

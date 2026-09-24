@@ -46,6 +46,7 @@ export const MONTERINGSSTATION_PRO_GEINS_ID = '1103';
 const ARTICLE = 'KONF-1003';
 const BASE_PRICE = 7400;
 const CATEGORY = 'Assembly stations';
+const VAT_RATE = 25;
 
 /** The length above which a station needs the third leg pair. */
 const THIRD_LEG_LENGTH = 3000;
@@ -60,7 +61,15 @@ function option(
   overrides: Partial<ConfigurationOption> = {},
 ): ConfigurationOption {
   return seedOption(
-    { id, name, net, productId, article: ARTICLE, category: CATEGORY },
+    {
+      id,
+      name,
+      net,
+      productId,
+      article: ARTICLE,
+      category: CATEGORY,
+      vatRate: VAT_RATE,
+    },
     overrides,
   );
 }
@@ -76,6 +85,7 @@ function edgeSection(): ConfigurationSection {
     id: 'edge',
     name: 'Edge trim',
     sortIndex: 11,
+    description: '',
     visible: true,
     sections: [],
     messages: [],
@@ -121,12 +131,14 @@ function worktopSection(): ConfigurationSection {
     id: 'worktop',
     name: 'Worktop',
     sortIndex: 7,
+    description: '',
     visible: true,
     messages: [],
     variables: [
       seedVariable({
         id: 'overhang',
         name: 'Front overhang',
+        readOnly: true,
         sortIndex: 10,
         description: 'How far the top reaches past the frame.',
         required: false,
@@ -162,7 +174,9 @@ function worktopSection(): ConfigurationSection {
         sortIndex: 9,
         options: [
           option('treat-esd', 'ESD-dissipative coating', 1250, 907_013),
-          option('treat-oil', 'Oiled finish', 480, 907_014),
+          // A treatment is a part number, not a sellable article: the real
+          // provider embeds no product on most rows.
+          option('treat-oil', 'Oiled finish', 480, 907_014, { product: null }),
         ],
       }),
     ],
@@ -179,6 +193,7 @@ function logisticsSection(): ConfigurationSection {
     id: 'logistics',
     name: 'Logistics',
     sortIndex: 26,
+    description: '',
     visible: false,
     messages: [],
     optionGroups: [],
@@ -201,6 +216,7 @@ function logisticsSection(): ConfigurationSection {
         id: 'packaging',
         name: 'Packaging',
         sortIndex: 28,
+        description: '',
         visible: true,
         sections: [],
         messages: [],
@@ -256,6 +272,7 @@ function accessoriesSection(): ConfigurationSection {
     id: 'accessories',
     name: 'Accessories',
     sortIndex: 31,
+    description: '',
     visible: true,
     messages: [],
     variables: [],
@@ -276,6 +293,7 @@ function accessoriesSection(): ConfigurationSection {
         id: 'tool-holding',
         name: 'Tool holding',
         sortIndex: 33,
+        description: '',
         visible: true,
         messages: [],
         variables: [],
@@ -285,6 +303,7 @@ function accessoriesSection(): ConfigurationSection {
             id: 'tool-rails',
             name: 'Tool rails',
             sortIndex: 34,
+            description: '',
             visible: true,
             sections: [],
             messages: [],
@@ -313,6 +332,7 @@ function accessoriesSection(): ConfigurationSection {
         id: 'waste',
         name: 'Waste handling',
         sortIndex: 36,
+        description: '',
         visible: true,
         sections: [],
         messages: [],
@@ -343,6 +363,7 @@ function buildSections(): ConfigurationSection[] {
       id: 'structure',
       name: 'Structure',
       sortIndex: 1,
+      description: '',
       visible: true,
       messages: [],
       variables: [
@@ -422,6 +443,7 @@ function buildSections(): ConfigurationSection[] {
       id: 'storage',
       name: 'Storage',
       sortIndex: 14,
+      description: '',
       visible: true,
       sections: [],
       messages: [],
@@ -539,6 +561,7 @@ function buildSections(): ConfigurationSection[] {
       id: 'power',
       name: 'Power and lighting',
       sortIndex: 22,
+      description: '',
       visible: true,
       sections: [],
       messages: [],
@@ -646,6 +669,7 @@ export const monteringsstationPro: Seed = {
   templateId: `TPL-${ARTICLE}`,
   templateVersion: '1',
   basePrice: BASE_PRICE,
+  vatRate: VAT_RATE,
   weightPerUnit: 92,
   variableRates: {
     length: 1.8,

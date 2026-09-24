@@ -10,8 +10,9 @@ import type {
   ConfigurationOptionGroup,
   ConfigurationValue,
   ConfigurationVariable,
-  Money,
 } from '#shared/types/configurator';
+import type { PriceType } from '#shared/types/commerce';
+import { currencyCode, exVatAmount } from '#shared/utils/configurator-price';
 import { useAuthStore } from '~/stores/auth';
 
 // ---------------------------------------------------------------------------
@@ -287,8 +288,8 @@ interface TreeRow {
   messages: ConfigurationMessage[];
 }
 
-function money(value: Money): string {
-  return `${value.net} ${value.currency}`;
+function money(value: PriceType): string {
+  return `${exVatAmount(value)} ${currencyCode(value) ?? ''}`;
 }
 
 function shown(value: ConfigurationValue): string {
@@ -333,7 +334,7 @@ function pushGroups(
         key: `option:${option.id}:${rows.length}`,
         depth: depth + 1,
         kind: 'option',
-        name: option.product.name,
+        name: option.name,
         id: option.id,
         facts: facts([
           `selected ${option.selected}`,
