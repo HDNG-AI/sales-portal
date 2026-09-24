@@ -27,9 +27,17 @@ function setFeatures(features: PublicTenantConfig['features']) {
 // The resolved URL, not the tag: the page keeps its localized alias.
 const privacyToRef = ref('/se/sv/integritetspolicy');
 const privacyResolvedRef = ref(true);
+const { useCmsPageLinkMock } = vi.hoisted(() => ({
+  useCmsPageLinkMock: vi.fn(),
+}));
+
+useCmsPageLinkMock.mockImplementation(() => ({
+  to: privacyToRef,
+  isResolved: privacyResolvedRef,
+}));
 
 vi.mock('../../../app/composables/useCmsPageLink', () => ({
-  useCmsPageLink: () => ({ to: privacyToRef, isResolved: privacyResolvedRef }),
+  useCmsPageLink: useCmsPageLinkMock,
 }));
 
 // Teleport renders to document.body, which the wrapper cannot see; stubbing it
@@ -48,6 +56,7 @@ describe('CookieBanner', () => {
     setFeatures({});
     privacyToRef.value = '/se/sv/integritetspolicy';
     privacyResolvedRef.value = true;
+    useCmsPageLinkMock.mockClear();
     // useAnalyticsConsent is backed by useStorage, and `isolate: false` lets
     // localStorage outlive a single spec. A stored choice would make
     // hasInteracted true and hide the banner whatever the feature says.
@@ -59,16 +68,19 @@ describe('CookieBanner', () => {
     const banner = findBanner();
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('cookies.banner_text');
+    expect(useCmsPageLinkMock).toHaveBeenCalledOnce();
   });
 
   it('hides the cookie banner when analytics is disabled', () => {
     setFeatures({ analytics: { enabled: false } });
     expect(findBanner().exists()).toBe(false);
+    expect(useCmsPageLinkMock).not.toHaveBeenCalled();
   });
 
   it('hides the cookie banner when analytics is absent from features', () => {
     setFeatures({});
     expect(findBanner().exists()).toBe(false);
+    expect(useCmsPageLinkMock).not.toHaveBeenCalled();
   });
 
   it('hides the cookie banner once a choice is stored', () => {
