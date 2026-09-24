@@ -1,17 +1,8 @@
 <script setup lang="ts">
 import { Button } from '~/components/ui/button';
-import { CMS_TAGS } from '#shared/constants/cms';
 
 const { isPrompting, accept, revoke } = useAnalyticsConsent();
 const { analyticsConfigured } = useTenant();
-
-// The prompt has to say what is collected and why, and two buttons do not.
-// Resolved by tag rather than a hardcoded slug so each locale's own page wins
-// — see docs/patterns/cms-page-link.md. A tenant that has not tagged one gets
-// the banner without the link rather than a dead link.
-const { to: privacyTo, isResolved: privacyResolved } = useCmsPageLink(
-  CMS_TAGS.PRIVACY_PAGE,
-);
 
 // Gated on analyticsConfigured, not the feature flag alone: with the flag on
 // and no provider id, tenant-analytics.ts returns early and sets nothing, so
@@ -34,14 +25,7 @@ const visible = computed(() => isPrompting.value && analyticsConfigured.value);
           <div class="flex flex-col gap-1">
             <p class="text-sm">
               {{ $t('cookies.banner_text') }}
-              <NuxtLink
-                v-if="privacyResolved"
-                :to="privacyTo"
-                data-testid="cookie-privacy-link"
-                class="underline underline-offset-4"
-              >
-                {{ $t('cookies.privacy_policy') }}
-              </NuxtLink>
+              <CookieBannerPrivacyLink />
             </p>
             <!-- GDPR Art. 7(3): the right to withdraw has to be communicated
                BEFORE consent is given, not merely be available afterwards. It
