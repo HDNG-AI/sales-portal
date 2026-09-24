@@ -355,3 +355,246 @@ describe('FormWidget', () => {
     expect(wrapper.find('[data-testid="form-fallback"]').exists()).toBe(false);
   });
 });
+
+describe('FormWidget checkbox fields', () => {
+  const interests: FormWidgetData['fields'] = [
+    {
+      label: 'Power',
+      name: 'interest',
+      value: 'Power',
+      groupLabel: 'Interested in',
+      required: false,
+      type: 'checkbox',
+    },
+    {
+      label: 'Monitoring',
+      name: 'interest',
+      value: 'Monitoring',
+      required: false,
+      type: 'checkbox',
+    },
+    {
+      label: 'I accept the terms',
+      name: 'terms',
+      required: true,
+      type: 'checkbox',
+    },
+  ];
+
+  function decodedBody(): string {
+    const url = String(navigateToMock.mock.calls[0]?.[0] ?? '');
+    return decodeURIComponent(url.split('&body=')[1] ?? '');
+  }
+
+  beforeEach(() => navigateToMock.mockClear());
+
+  it('renders a checkbox rather than a text input', () => {
+    const wrapper = mountWidget({ fields: interests });
+
+    expect(wrapper.findAll('[role="checkbox"]').length).toBe(3);
+    expect(wrapper.findAll('input[type="text"]').length).toBe(0);
+  });
+
+  it('reports a group on one line under its group label', async () => {
+    const wrapper = mountWidget({ fields: interests });
+    const boxes = wrapper.findAll('[role="checkbox"]');
+
+    await boxes[0]!.trigger('click');
+    await boxes[1]!.trigger('click');
+    await boxes[2]!.trigger('click');
+    await wrapper.find('form').trigger('submit');
+
+    // One line for the pair, not one per ticked option repeating the answer.
+    expect(decodedBody()).toContain('Interested in: Power, Monitoring');
+    expect(decodedBody()).not.toContain('Monitoring: Power');
+  });
+
+  it('reports a standalone tick under its own label', async () => {
+    const wrapper = mountWidget({ fields: interests });
+    const boxes = wrapper.findAll('[role="checkbox"]');
+
+    await boxes[2]!.trigger('click');
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).toContain('I accept the terms:');
+  });
+
+  it('omits unticked boxes from the body', async () => {
+    const wrapper = mountWidget({ fields: interests });
+    const boxes = wrapper.findAll('[role="checkbox"]');
+
+    await boxes[2]!.trigger('click');
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).not.toContain('Interested in');
+  });
+
+  it('blocks submit until a required checkbox is ticked', async () => {
+    const wrapper = mountWidget({ fields: interests });
+
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).not.toHaveBeenCalled();
+
+    await wrapper.findAll('[role="checkbox"]')[2]!.trigger('click');
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves an unfilled optional text field out of the body', async () => {
+    // Every field was reported unconditionally before, so an optional field
+    // left blank contributed a bare "Label:" line.
+    const wrapper = mountWidget({
+      fields: [
+        { label: 'Company', name: 'company', required: true, type: 'input' },
+        { label: 'Phone', name: 'phone', required: false, type: 'input' },
+      ],
+    });
+
+    await wrapper.find('input[type="text"]').setValue('Acme');
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).toContain('Company: Acme');
+    expect(decodedBody()).not.toContain('Phone:');
+  });
+});
+
+describe('FormWidget checkbox group edge cases', () => {
+  // groupLabel sits on the first option; a required box sits later in the
+  // same group. Both are the shapes the per-box handling got wrong.
+  const group: FormWidgetData['fields'] = [
+    {
+      label: 'Power',
+      name: 'interest',
+      value: 'Power',
+      groupLabel: 'Interested in',
+      required: false,
+      type: 'checkbox',
+    },
+    {
+      label: 'Monitoring',
+      name: 'interest',
+      value: 'Monitoring',
+      required: true,
+      type: 'checkbox',
+    },
+    {
+      label: 'Safety',
+      name: 'interest',
+      value: 'Safety',
+      required: false,
+      type: 'checkbox',
+    },
+  ];
+
+  function decodedBody(): string {
+    const url = String(navigateToMock.mock.calls[0]?.[0] ?? '');
+    return decodeURIComponent(url.split('&body=')[1] ?? '');
+  }
+
+  beforeEach(() => navigateToMock.mockClear());
+
+  it('keeps a required option enforced when a later option clears the slot', async () => {
+    // The group shares one error slot. Written per box, the required option's
+    // error was overwritten by the optional box after it, and the form
+    // submitted without it.
+    const wrapper = mountWidget({ fields: group });
+
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).not.toHaveBeenCalled();
+
+    await wrapper.findAll('[role="checkbox"]')[1]!.trigger('click');
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the group label even when the box carrying it is unticked', async () => {
+    const wrapper = mountWidget({ fields: group });
+    const boxes = wrapper.findAll('[role="checkbox"]');
+
+    // Leave "Power" — which carries groupLabel — unticked.
+    await boxes[1]!.trigger('click');
+    await boxes[2]!.trigger('click');
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).toContain('Interested in: Monitoring, Safety');
+    expect(decodedBody()).not.toContain('Monitoring: Monitoring');
+  });
+
+  it('gives every box in a group its own id', () => {
+    const wrapper = mountWidget({ fields: group });
+    const ids = wrapper
+      .findAll('[role="checkbox"]')
+      .map((input) => input.attributes('id'));
+
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('FormWidget checkbox group markup', () => {
+  const group: FormWidgetData['fields'] = [
+    {
+      label: 'Power',
+      name: 'interest',
+      value: 'Power',
+      groupLabel: 'Interested in',
+      required: true,
+      type: 'checkbox',
+    },
+    {
+      label: 'Monitoring',
+      name: 'interest',
+      value: 'Monitoring',
+      required: false,
+      type: 'checkbox',
+    },
+    {
+      label: 'I accept the terms',
+      name: 'terms',
+      required: true,
+      type: 'checkbox',
+    },
+  ];
+
+  it('wraps a group in a fieldset whose legend is the group label', () => {
+    const wrapper = mountWidget({ fields: group });
+
+    const fieldsets = wrapper.findAll('fieldset');
+    expect(fieldsets.length).toBe(1);
+    expect(fieldsets[0]!.find('legend').text()).toContain('Interested in');
+    expect(fieldsets[0]!.findAll('[role="checkbox"]').length).toBe(2);
+  });
+
+  it('leaves a standalone tick outside any fieldset', () => {
+    const wrapper = mountWidget({ fields: group });
+
+    const terms = wrapper.find('[data-testid="form-field-terms"]');
+    expect(terms.element.tagName).toBe('DIV');
+    expect(terms.find('[role="checkbox"]').exists()).toBe(true);
+  });
+
+  it('gives the group one wrapper rather than one per option', () => {
+    const wrapper = mountWidget({ fields: group });
+
+    // Rendered flat, every box in the group claimed `form-field-interest`.
+    const wrappers = wrapper.findAll('[data-testid="form-field-interest"]');
+    expect(wrappers.length).toBe(1);
+  });
+
+  it('reports one error for the group, not one per option', async () => {
+    const wrapper = mountWidget({ fields: group });
+    await wrapper.find('form').trigger('submit');
+
+    const errors = wrapper.findAll('[data-testid="form-field-interest-error"]');
+    expect(errors.length).toBe(1);
+  });
+
+  it('marks a required group required on every option', () => {
+    const wrapper = mountWidget({ fields: group });
+
+    const boxes = wrapper
+      .find('fieldset')
+      .findAll('[role="checkbox"]')
+      .map((b) => b.attributes('aria-required'));
+    expect(boxes).toEqual(['true', 'true']);
+  });
+});

@@ -965,6 +965,7 @@
     "field_required": "Detta fält är obligatoriskt.",
     "invalid_email": "Ange en giltig e-postadress.",
     "country_placeholder": "Välj land",
-    "select_placeholder": "Välj..."
+    "select_placeholder": "Välj...",
+    "checkbox_checked": "Ja"
   }
 }

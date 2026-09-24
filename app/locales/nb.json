@@ -965,6 +965,7 @@
     "field_required": "Dette feltet er obligatorisk.",
     "invalid_email": "Oppgi en gyldig e-postadresse.",
     "country_placeholder": "Velg land",
-    "select_placeholder": "Velg..."
+    "select_placeholder": "Velg...",
+    "checkbox_checked": "Ja"
   }
 }

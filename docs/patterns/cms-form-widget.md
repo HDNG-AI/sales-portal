@@ -22,9 +22,11 @@ interface FormWidgetField {
   label: string;
   name: string;
   required: boolean;
-  type: 'input' | 'email' | 'textarea' | 'select';
+  type: 'input' | 'email' | 'textarea' | 'select' | 'checkbox';
   options?: { value: string; label: string }[];
   placeholder?: string; // select only; overrides the default prompt
+  value?: string; // checkbox: submitted value; presence makes it a group option
+  groupLabel?: string; // checkbox group heading, on the first box that carries one
 }
 
 interface FormWidgetData {
@@ -43,6 +45,9 @@ interface FormWidgetData {
 
 - `input` / `email` → `Input` (email gets `type="email"`).
 - `textarea` → native textarea styled to match the UI kit.
+- `checkbox` → `Checkbox`. Boxes sharing a `name` and differing by `value`
+  are one multi-select group; a box with no `value` stands alone (a consent
+  tick, whose own `label` is the question).
 - `select` → `Select`. Options prefer `field.options` when present;
   otherwise they fall back to `getCountryOptions(locale)` from
   `app/utils/country-options.ts` (full ISO 3166-1 alpha-2 list,
@@ -60,6 +65,19 @@ interface FormWidgetData {
 Validation is zod-on-blur: required fields must be non-empty, `email`
 fields must parse as an address even when optional. Error messages are
 i18n keys resolved at render time.
+
+A checkbox group renders as one `fieldset` with the `groupLabel` as its
+`legend`, the same shape `CheckoutShippingOptions` uses. That is not only
+markup: the group is one control. Its boxes share a `name`, so they share
+one validation slot, one error line and one wrapper `data-testid`. Rendering
+them flat gave every box a wrapper claiming the same `name`, which duplicated
+both the error and the id. Per-box identity is `name:value` — see
+`checkboxKey` — and that is what the input id and the option `data-testid`
+use.
+
+`required` on a checkbox means the box has to be ticked, not merely filled:
+a required standalone box is a consent tick, and a required group needs at
+least one option ticked.
 
 ## Submit = mailto
 
@@ -79,6 +97,15 @@ and opens it via `safeLocationRedirect`, which is guarded on
 - The submit button label comes from `data.submitLabel`, falling back to a
   neutral translated default (`form.submit`).
 - The body is one `Label: value` line per field, joined with `\r\n`.
+- Empty fields are omitted, so a mostly-optional form does not report a
+  column of bare `Label:` lines.
+- A checkbox group reports on a single line under its `groupLabel`, with the
+  ticked options comma-joined — `Interested in: Power, Monitoring` rather
+  than a line per option. The label is read from whichever box in the group
+  carries `groupLabel`, not from the first ticked one, so leaving that option
+  unticked does not retitle the group.
+- A ticked standalone box reports under its own label, with a translated
+  affirmative as the value.
 
 If no mail client opens, a fallback line `If nothing opens, email us at
 {recipient}` links the recipient address directly.

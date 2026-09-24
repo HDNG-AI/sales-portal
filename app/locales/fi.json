@@ -965,6 +965,7 @@
     "field_required": "Tämä kenttä on pakollinen.",
     "invalid_email": "Anna kelvollinen sähköpostiosoite.",
     "country_placeholder": "Valitse maa",
-    "select_placeholder": "Valitse..."
+    "select_placeholder": "Valitse...",
+    "checkbox_checked": "Kyllä"
   }
 }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Button } from '~/components/ui/button';
+import { Checkbox } from '~/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -10,7 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import type { ContentConfigType, FormWidgetData, FormWidgetField } from '#shared/types/cms';
+import type {
+  ContentConfigType,
+  FormWidgetData,
+  FormWidgetField,
+} from '#shared/types/cms';
 import type { SupportedLocale } from '#shared/utils/locale-market';
 import { getCountryOptions } from '~/utils/country-options';
 import { buildMailto } from '~/utils/mailto';
@@ -30,6 +35,18 @@ const countryOptions = computed(() =>
 );
 
 const formValues = reactive<Record<string, string>>({});
+// Checkboxes are kept apart from the text map: a group shares one name and
+// holds several values at once, which a flat string map cannot express.
+const checkedValues = reactive<Record<string, boolean>>({});
+
+/**
+ * Identity of one checkbox. A group shares `name` and differs by `value`, so
+ * state is keyed by both — keyed by name alone, ticking one would untick its
+ * siblings.
+ */
+function checkboxKey(field: FormWidgetField): string {
+  return field.value ? `${field.name}:${field.value}` : field.name;
+}
 const fieldErrors = reactive<Record<string, string>>({});
 const touched = reactive<Record<string, boolean>>({});
 
@@ -46,6 +63,10 @@ watchEffect(() => {
 const fieldSchemaMap = computed(() => {
   const map: Record<string, z.ZodTypeAny> = {};
   for (const field of props.data?.fields ?? []) {
+    if (field.type === 'checkbox') {
+      // Ticked state is a boolean, not a string; validated in validateAll.
+      continue;
+    }
     if (field.type === 'email') {
       // Apply email format validation regardless of required so partial fills
       // that contain an invalid address still show an error.
@@ -93,10 +114,31 @@ function handleSelectChange(name: string, val: string) {
 }
 
 function validateAll(): boolean {
+  // Checkboxes in a group share one `name`, and so one error slot. Collected
+  // first and written after the loop: assigning per box, a required option
+  // left unticked would set the error and the next optional box in the same
+  // group would immediately clear it, letting the form submit without it.
+  const groupMissing = new Set<string>();
+  const groupSeen = new Set<string>();
+
   for (const field of props.data?.fields ?? []) {
     touched[field.name] = true;
+    if (field.type === 'checkbox') {
+      groupSeen.add(field.name);
+      // A required checkbox is a consent tick: it has to be ticked, where a
+      // required text field only has to be non-empty.
+      if (field.required && !checkedValues[checkboxKey(field)]) {
+        groupMissing.add(field.name);
+      }
+      continue;
+    }
     validateField(field.name);
   }
+
+  for (const name of groupSeen) {
+    fieldErrors[name] = groupMissing.has(name) ? 'form.field_required' : '';
+  }
+
   return Object.values(fieldErrors).every((v) => !v);
 }
 
@@ -117,15 +159,133 @@ function resolveSubject(): string {
   return props.data?.templateName?.trim() || t('form.default_subject');
 }
 
+/**
+ * One reported line per field, in the order the form declares them.
+ *
+ * Checkboxes sharing a `name` are one group and report on a single line, so a
+ * three-option multi-select reads "Interested in: A, B" rather than repeating
+ * the whole answer under each option's own label. Fields left empty are
+ * omitted: an unfilled optional field would otherwise contribute a bare
+ * "Label:" line, and a long form is mostly optional fields.
+ */
+/**
+ * The heading a checkbox group reports under.
+ *
+ * Read from every box in the group rather than the one that happens to be
+ * ticked first: `groupLabel` sits on the first option by convention, and if a
+ * buyer leaves that one unticked the group would otherwise be reported under
+ * a later option's own label — "Monitoring: Monitoring" instead of
+ * "Interested in: Monitoring".
+ */
+function resolveGroupLabel(
+  fields: FormWidgetField[],
+  field: FormWidgetField,
+): string {
+  for (const candidate of fields) {
+    if (candidate.name !== field.name) continue;
+    if (candidate.groupLabel) return candidate.groupLabel;
+  }
+  return field.label;
+}
+
+/**
+ * What the form renders, in declaration order: every field on its own, except
+ * checkboxes carrying a `value`, which collapse into one entry per `name`.
+ *
+ * A valued box is one option of a multi-select group (see FormWidgetField) —
+ * the group shares a name, so it shares a validation slot and an error line
+ * too. Rendered flat, those boxes produced one wrapper each, all claiming the
+ * same `name` for their key, test id and error id, and the error repeated
+ * under every option. One entry per group gives the fieldset a single subject
+ * and makes `name` unique again. A box with no `value` stands alone and keeps
+ * its own row.
+ */
+type FormRenderEntry =
+  | { kind: 'field'; key: string; field: FormWidgetField }
+  | {
+      kind: 'group';
+      key: string;
+      name: string;
+      legend: string;
+      required: boolean;
+      fields: FormWidgetField[];
+    };
+
+const renderEntries = computed<FormRenderEntry[]>(() => {
+  const fields = props.data?.fields ?? [];
+  const entries: FormRenderEntry[] = [];
+  const groupAt = new Map<string, number>();
+
+  for (const field of fields) {
+    if (field.type !== 'checkbox' || !field.value) {
+      entries.push({ kind: 'field', key: `field:${field.name}`, field });
+      continue;
+    }
+    const at = groupAt.get(field.name);
+    if (at === undefined) {
+      groupAt.set(field.name, entries.length);
+      entries.push({
+        kind: 'group',
+        key: `group:${field.name}`,
+        name: field.name,
+        legend: resolveGroupLabel(fields, field),
+        required: field.required,
+        fields: [field],
+      });
+      continue;
+    }
+    const group = entries[at];
+    if (group?.kind === 'group') {
+      group.fields.push(field);
+      // A group is required if any of its boxes is, which is how validateAll
+      // already reads it.
+      group.required ||= field.required;
+    }
+  }
+
+  return entries;
+});
+
+function buildMailtoFields(
+  fields: FormWidgetField[],
+): { label: string; value: string }[] {
+  const lines: { label: string; value: string }[] = [];
+  const groupIndex = new Map<string, number>();
+
+  for (const field of fields) {
+    if (field.type === 'checkbox') {
+      if (!checkedValues[checkboxKey(field)]) continue;
+      // A box with no `value` is a standalone tick, so its own label is the
+      // question and the answer is simply that it was ticked.
+      const answer = field.value ?? t('form.checkbox_checked');
+      const existing = groupIndex.get(field.name);
+      if (existing !== undefined) {
+        const line = lines[existing];
+        if (line) line.value = `${line.value}, ${answer}`;
+        continue;
+      }
+      groupIndex.set(field.name, lines.length);
+      lines.push({
+        label: field.value ? resolveGroupLabel(fields, field) : field.label,
+        value: answer,
+      });
+      continue;
+    }
+
+    const value = (formValues[field.name] ?? '').trim();
+    if (!value) continue;
+    lines.push({ label: field.label, value });
+  }
+
+  return lines;
+}
+
 function handleSubmit() {
   if (!validateAll()) return;
 
   const fields = props.data?.fields ?? [];
 
-  const mailtoFields = fields.map((f: FormWidgetField) => ({
-    label: f.label,
-    value: formValues[f.name] ?? '',
-  }));
+  const mailtoFields = buildMailtoFields(fields);
 
   const url = buildMailto({
     recipient: props.data?.sendFormToEmail ?? '',
@@ -165,104 +325,204 @@ function selectPlaceholderFor(field: FormWidgetField): string {
     data-testid="form-widget"
     @submit.prevent="handleSubmit"
   >
-    <div
-      v-for="field in data?.fields ?? []"
-      :key="field.name"
-      class="space-y-2"
-      :data-testid="`form-field-${field.name}`"
-    >
-      <Label :for="`form-field-input-${field.name}`">
-        {{ field.label }}
-        <span
-          v-if="field.required"
-          class="text-destructive ms-0.5"
-          aria-hidden="true"
-        >*</span>
-      </Label>
+    <!--
+      A checkbox group is one control, not several: the boxes share a name,
+      answer one question and report one error, so they get one fieldset with
+      the group's heading as its legend. Grouping also restores unique identity
+      to the wrapper — with a row per box, `name` repeated across every member
+      of the group. A box with no `value` stands alone and keeps its own row.
+    -->
+    <template v-for="entry in renderEntries" :key="entry.key">
+      <fieldset
+        v-if="entry.kind === 'group'"
+        class="space-y-2"
+        :data-testid="`form-field-${entry.name}`"
+      >
+        <legend class="mb-2 text-sm font-medium">
+          {{ entry.legend }}
+          <span
+            v-if="entry.required"
+            class="text-destructive ms-0.5"
+            aria-hidden="true"
+            >*</span
+          >
+        </legend>
 
-      <!-- Select field -->
-      <template v-if="field.type === 'select'">
-        <Select
-          :model-value="formValues[field.name] ?? ''"
-          @update:model-value="
-            (val) => handleSelectChange(field.name, String(val ?? ''))
-          "
+        <label
+          v-for="option in entry.fields"
+          :key="checkboxKey(option)"
+          class="flex items-start gap-2 text-sm"
+          :data-testid="`form-checkbox-${checkboxKey(option)}`"
         >
-          <SelectTrigger
-            :id="`form-field-input-${field.name}`"
-            class="w-full"
+          <Checkbox
+            :id="`form-field-checkbox-${checkboxKey(option)}`"
+            v-model="checkedValues[checkboxKey(option)]"
+            class="mt-0.5"
             :aria-invalid="
-              touched[field.name] && !!fieldErrors[field.name] ? 'true' : undefined
-            "
-            :aria-describedby="
-              touched[field.name] && fieldErrors[field.name]
-                ? `form-field-${field.name}-error`
+              touched[entry.name] && !!fieldErrors[entry.name]
+                ? 'true'
                 : undefined
             "
-            :aria-required="field.required ? 'true' : undefined"
-          >
-            <SelectValue :placeholder="selectPlaceholderFor(field)" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              v-for="opt in selectOptionsFor(field)"
-              :key="opt.value"
-              :value="opt.value"
-            >
-              {{ opt.label }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </template>
+            :aria-describedby="
+              touched[entry.name] && fieldErrors[entry.name]
+                ? `form-field-${entry.name}-error`
+                : undefined
+            "
+            :required="entry.required"
+          />
+          <span>{{ option.label }}</span>
+        </label>
 
-      <!-- Textarea field -->
-      <template v-else-if="field.type === 'textarea'">
-        <textarea
-          :id="`form-field-input-${field.name}`"
-          v-model="formValues[field.name]"
-          class="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-[80px] w-full rounded-md border bg-white px-3 py-2 text-sm shadow-xs focus-visible:ring-[3px] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          :aria-invalid="
-            touched[field.name] && !!fieldErrors[field.name] ? 'true' : undefined
-          "
-          :aria-describedby="
-            touched[field.name] && fieldErrors[field.name]
-              ? `form-field-${field.name}-error`
-              : undefined
-          "
-          :aria-required="field.required ? 'true' : undefined"
-          @blur="handleBlur(field.name)"
-        />
-      </template>
+        <p
+          v-if="touched[entry.name] && fieldErrors[entry.name]"
+          :id="`form-field-${entry.name}-error`"
+          class="text-destructive text-xs"
+          role="alert"
+          :data-testid="`form-field-${entry.name}-error`"
+        >
+          {{ t(fieldErrors[entry.name] ?? '') }}
+        </p>
+      </fieldset>
 
-      <!-- Input (text or email) -->
-      <template v-else>
-        <Input
-          :id="`form-field-input-${field.name}`"
-          v-model="formValues[field.name]"
-          :type="field.type === 'email' ? 'email' : 'text'"
-          :aria-invalid="
-            touched[field.name] && !!fieldErrors[field.name] ? 'true' : undefined
-          "
-          :aria-describedby="
-            touched[field.name] && fieldErrors[field.name]
-              ? `form-field-${field.name}-error`
-              : undefined
-          "
-          :aria-required="field.required ? 'true' : undefined"
-          @blur="handleBlur(field.name)"
-        />
-      </template>
-
-      <p
-        v-if="touched[field.name] && fieldErrors[field.name]"
-        :id="`form-field-${field.name}-error`"
-        class="text-destructive text-xs"
-        role="alert"
-        :data-testid="`form-field-${field.name}-error`"
+      <div
+        v-else
+        class="space-y-2"
+        :data-testid="`form-field-${entry.field.name}`"
       >
-        {{ t(fieldErrors[field.name] ?? '') }}
-      </p>
-    </div>
+        <Label
+          v-if="entry.field.type !== 'checkbox'"
+          :for="`form-field-input-${entry.field.name}`"
+        >
+          {{ entry.field.label }}
+          <span
+            v-if="entry.field.required"
+            class="text-destructive ms-0.5"
+            aria-hidden="true"
+            >*</span
+          >
+        </Label>
+
+        <!-- Standalone tick; grouped boxes render in the fieldset above -->
+        <template v-if="entry.field.type === 'checkbox'">
+          <label class="flex items-start gap-2 text-sm">
+            <Checkbox
+              :id="`form-field-checkbox-${checkboxKey(entry.field)}`"
+              v-model="checkedValues[checkboxKey(entry.field)]"
+              class="mt-0.5"
+              :aria-invalid="
+                touched[entry.field.name] && !!fieldErrors[entry.field.name]
+                  ? 'true'
+                  : undefined
+              "
+              :aria-describedby="
+                touched[entry.field.name] && fieldErrors[entry.field.name]
+                  ? `form-field-${entry.field.name}-error`
+                  : undefined
+              "
+              :required="entry.field.required"
+            />
+            <span>
+              {{ entry.field.label }}
+              <span
+                v-if="entry.field.required"
+                class="text-destructive ms-0.5"
+                aria-hidden="true"
+                >*</span
+              >
+            </span>
+          </label>
+        </template>
+
+        <!-- Select field -->
+        <template v-else-if="entry.field.type === 'select'">
+          <Select
+            :model-value="formValues[entry.field.name] ?? ''"
+            @update:model-value="
+              (val) => handleSelectChange(entry.field.name, String(val ?? ''))
+            "
+          >
+            <SelectTrigger
+              :id="`form-field-input-${entry.field.name}`"
+              class="w-full"
+              :aria-invalid="
+                touched[entry.field.name] && !!fieldErrors[entry.field.name]
+                  ? 'true'
+                  : undefined
+              "
+              :aria-describedby="
+                touched[entry.field.name] && fieldErrors[entry.field.name]
+                  ? `form-field-${entry.field.name}-error`
+                  : undefined
+              "
+              :aria-required="entry.field.required ? 'true' : undefined"
+            >
+              <SelectValue :placeholder="selectPlaceholderFor(entry.field)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="opt in selectOptionsFor(entry.field)"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </template>
+
+        <!-- Textarea field -->
+        <template v-else-if="entry.field.type === 'textarea'">
+          <textarea
+            :id="`form-field-input-${entry.field.name}`"
+            v-model="formValues[entry.field.name]"
+            class="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 flex min-h-[80px] w-full rounded-md border bg-white px-3 py-2 text-sm shadow-xs focus-visible:ring-[3px] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            :aria-invalid="
+              touched[entry.field.name] && !!fieldErrors[entry.field.name]
+                ? 'true'
+                : undefined
+            "
+            :aria-describedby="
+              touched[entry.field.name] && fieldErrors[entry.field.name]
+                ? `form-field-${entry.field.name}-error`
+                : undefined
+            "
+            :aria-required="entry.field.required ? 'true' : undefined"
+            @blur="handleBlur(entry.field.name)"
+          />
+        </template>
+
+        <!-- Input (text or email) -->
+        <template v-else>
+          <Input
+            :id="`form-field-input-${entry.field.name}`"
+            v-model="formValues[entry.field.name]"
+            :type="entry.field.type === 'email' ? 'email' : 'text'"
+            :aria-invalid="
+              touched[entry.field.name] && !!fieldErrors[entry.field.name]
+                ? 'true'
+                : undefined
+            "
+            :aria-describedby="
+              touched[entry.field.name] && fieldErrors[entry.field.name]
+                ? `form-field-${entry.field.name}-error`
+                : undefined
+            "
+            :aria-required="entry.field.required ? 'true' : undefined"
+            @blur="handleBlur(entry.field.name)"
+          />
+        </template>
+
+        <p
+          v-if="touched[entry.field.name] && fieldErrors[entry.field.name]"
+          :id="`form-field-${entry.field.name}-error`"
+          class="text-destructive text-xs"
+          role="alert"
+          :data-testid="`form-field-${entry.field.name}-error`"
+        >
+          {{ t(fieldErrors[entry.field.name] ?? '') }}
+        </p>
+      </div>
+    </template>
 
     <div class="border-border flex flex-col items-start gap-3 border-t pt-4">
       <Button type="submit" data-testid="form-submit">
@@ -279,7 +539,8 @@ function selectPlaceholderFor(field: FormWidgetField): string {
             <a
               :href="`mailto:${data.sendFormToEmail}`"
               class="text-primary underline underline-offset-2"
-            >{{ data.sendFormToEmail }}</a>
+              >{{ data.sendFormToEmail }}</a
+            >
           </template>
         </i18n-t>
       </p>

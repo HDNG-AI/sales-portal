@@ -965,6 +965,7 @@
     "field_required": "This field is required.",
     "invalid_email": "Please enter a valid email address.",
     "country_placeholder": "Select country",
-    "select_placeholder": "Select..."
+    "select_placeholder": "Select...",
+    "checkbox_checked": "Yes"
   }
 }
