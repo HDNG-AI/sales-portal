@@ -12,6 +12,16 @@ function setFeatures(features: PublicTenantConfig['features']) {
   tenant.value.features = features;
 }
 
+/**
+ * Analytics only counts as configured when the feature is on AND a provider id
+ * is present — the prompt must not ask about cookies nothing would set.
+ */
+function enableAnalytics() {
+  assert.isDefined(tenant.value);
+  tenant.value.features = { analytics: { enabled: true } };
+  tenant.value.seo = { ...tenant.value.seo, googleAnalyticsId: 'G-TEST123' };
+}
+
 const LINK = '[data-testid="cookie-settings-link"]';
 
 describe('CookieSettingsLink', () => {
@@ -21,7 +31,7 @@ describe('CookieSettingsLink', () => {
   });
 
   it('renders when analytics is enabled', () => {
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     expect(mountComponent(CookieSettingsLink).find(LINK).exists()).toBe(true);
   });
 
@@ -40,7 +50,7 @@ describe('CookieSettingsLink', () => {
   it('reopens the consent prompt when clicked', async () => {
     // The reason this component exists: after a choice is stored the banner
     // hides for good, leaving revoke() with no caller a visitor can reach.
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     assert.isDefined(tenant.value);
     localStorage.setItem(
       `analytics-consent-${tenant.value.tenantId}`,
@@ -57,9 +67,19 @@ describe('CookieSettingsLink', () => {
   it('is a button, not a link to nowhere', () => {
     // It performs an action on this page; an <a href="#"> would be a lie to
     // assistive tech and would scroll the page on activation.
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     const el = mountComponent(CookieSettingsLink).find(LINK);
     expect(el.element.tagName).toBe('BUTTON');
     expect(el.attributes('type')).toBe('button');
+  });
+
+  it('renders nothing when analytics is enabled but no provider is configured', () => {
+    // Nothing is set, so there is nothing to withdraw — a link here would open
+    // a prompt about cookies that never existed.
+    assert.isDefined(tenant.value);
+    tenant.value.features = { analytics: { enabled: true } };
+    tenant.value.seo = { googleAnalyticsId: '', googleTagManagerId: '' };
+
+    expect(mountComponent(CookieSettingsLink).find(LINK).exists()).toBe(false);
   });
 });

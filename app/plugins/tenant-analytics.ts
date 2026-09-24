@@ -14,7 +14,7 @@ export default defineNuxtPlugin({
     // Analytics only makes sense on the client
     if (import.meta.server) return;
 
-    const { tenant, hasFeature, suspense } = useTenant();
+    const { tenant, analyticsConfigured, suspense } = useTenant();
 
     await suspense();
 
@@ -24,13 +24,13 @@ export default defineNuxtPlugin({
     const config = useRuntimeConfig();
     if (!config.public.features.analytics) return;
 
-    // Gate 2: per-tenant feature flag
-    if (!hasFeature('analytics')) return;
+    // Gate 2: per-tenant feature flag AND a configured provider. Shared with
+    // the consent prompt, which must not ask about cookies this would never
+    // set — see analyticsConfigured in composables/useTenant.ts.
+    if (!analyticsConfigured.value) return;
 
     const gaId = tenant.value.seo?.googleAnalyticsId;
     const gtmId = tenant.value.seo?.googleTagManagerId;
-
-    if (!gaId && !gtmId) return;
 
     const { consent } = useAnalyticsConsent();
     const trigger = useScriptTriggerConsent({ consent });

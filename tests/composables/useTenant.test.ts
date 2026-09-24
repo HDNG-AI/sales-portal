@@ -658,6 +658,47 @@ describe('useTenant', () => {
       expect(logoUrl.value).toBe('https://example.com/reactive-logo.png');
     });
   });
+
+  describe('analyticsConfigured', () => {
+    // The component specs mock useTenant and derive this themselves, so this
+    // is the only place the real predicate is exercised — reverting it to the
+    // feature flag alone has to fail here or it fails nowhere.
+    it('is false when the feature is on but no provider id is set', () => {
+      mockData.value = createMockTenantConfig({
+        features: { analytics: { enabled: true } },
+        seo: { googleAnalyticsId: '', googleTagManagerId: '' },
+      });
+
+      expect(useTenant().analyticsConfigured.value).toBe(false);
+    });
+
+    it('is false when a provider id is set but the feature is off', () => {
+      mockData.value = createMockTenantConfig({
+        features: { analytics: { enabled: false } },
+        seo: { googleAnalyticsId: 'G-TEST123' },
+      });
+
+      expect(useTenant().analyticsConfigured.value).toBe(false);
+    });
+
+    it('is true with the feature on and an analytics id', () => {
+      mockData.value = createMockTenantConfig({
+        features: { analytics: { enabled: true } },
+        seo: { googleAnalyticsId: 'G-TEST123' },
+      });
+
+      expect(useTenant().analyticsConfigured.value).toBe(true);
+    });
+
+    it('is true with the feature on and only a tag manager id', () => {
+      mockData.value = createMockTenantConfig({
+        features: { analytics: { enabled: true } },
+        seo: { googleTagManagerId: 'GTM-TEST' },
+      });
+
+      expect(useTenant().analyticsConfigured.value).toBe(true);
+    });
+  });
 });
 
 describe('useTenantTheme', () => {

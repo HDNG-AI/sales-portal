@@ -32,6 +32,19 @@ const analyticsKillSwitch = ref(true);
 const mockUseTenant = vi.fn(() => ({
   tenant: tenantRef,
   hasFeature: mockHasFeature,
+  // Derived exactly as the real composable does, rather than pinned to a
+  // constant: these tests turn the ids on and off, and a hardcoded predicate
+  // would stop the plugin's gate from being exercised at all.
+  analyticsConfigured: computed(
+    () =>
+      mockHasFeature('analytics') &&
+      !!(
+        (tenantRef.value?.seo as Record<string, unknown> | undefined)
+          ?.googleAnalyticsId ||
+        (tenantRef.value?.seo as Record<string, unknown> | undefined)
+          ?.googleTagManagerId
+      ),
+  ),
   tenantId: computed(() => 'example'),
   suspense: () => Promise.resolve(),
 }));
