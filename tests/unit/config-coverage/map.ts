@@ -98,8 +98,8 @@
  *   - the admin's schema carries two colour keys, `buttonText` and
  *     `buttonPurchaseText`, that `ThemeColorsSchema` does not name. `z.object()`
  *     strips unknown keys, so they never reach `tenant-css.ts` and they are
- *     correctly absent from the 40 below. The forty keys here are what the app
- *     can receive, not what a merchant can set.
+ *     correctly absent from the 42 below. The forty-two keys here are what the
+ *     app can receive, not what a merchant can set.
  *   - retired access rules never reach the app:
  *     `server/utils/tenant.ts:normalizeFeatureAccess` rewrites a feature
  *     carrying `{group}`, `{role}`, `{permission}` or `{accountType}` to
@@ -1200,7 +1200,8 @@ export const CONFIG_COVERAGE_MAP = {
       },
       {
         spec: SERVER_TENANT,
-        title: 'leaves timezone unset on a config stored before the field existed',
+        title:
+          'leaves timezone unset on a config stored before the field existed',
         kind: 'carrier',
       },
       {
@@ -1239,7 +1240,8 @@ export const CONFIG_COVERAGE_MAP = {
       },
       {
         spec: PRODUCT_TABS,
-        title: 'renders a VideoURL parameter as an embedded video, not a spec row',
+        title:
+          'renders a VideoURL parameter as an embedded video, not a spec row',
         kind: 'consumer',
         drives: 'field',
       },
@@ -1406,7 +1408,8 @@ export const CONFIG_COVERAGE_MAP = {
           },
           {
             spec: THEME_UTIL,
-            title: 'preserves tenant-provided semantic success and warning colors',
+            title:
+              'preserves tenant-provided semantic success and warning colors',
             kind: 'carrier',
           },
           {
@@ -1831,6 +1834,39 @@ export const CONFIG_COVERAGE_MAP = {
 
   // --- Layout --------------------------------------------------------------
   layout: {
+    storefrontStyle: {
+      classic: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'keeps the classic layout and omits the price notice when storefrontStyle is classic',
+          kind: 'consumer',
+          drives: 'field',
+        },
+      },
+      editorial: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'enables the editorial layout and mounts the price notice when storefrontStyle is editorial',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note: 'Asserts the layout opt-in and price notice mount; responsive CSS and the branded footer require separate visual review.',
+      },
+      absent: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'keeps the classic layout and omits the price notice when storefrontStyle is absent',
+          kind: 'consumer',
+          drives: 'field',
+        },
+      },
+    },
     headerNavVariant: {
       grey: {
         status: 'has-test',

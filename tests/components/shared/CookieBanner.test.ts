@@ -32,6 +32,16 @@ vi.mock('../../../app/composables/useCmsPageLink', () => ({
   useCmsPageLink: () => ({ to: privacyToRef, isResolved: privacyResolvedRef }),
 }));
 
+/**
+ * Analytics only counts as configured when the feature is on AND a provider id
+ * is present — the prompt must not ask about cookies nothing would set.
+ */
+function enableAnalytics() {
+  assert.isDefined(tenant.value);
+  tenant.value.features = { analytics: { enabled: true } };
+  tenant.value.seo = { ...tenant.value.seo, googleAnalyticsId: 'G-TEST123' };
+}
+
 // Teleport renders to document.body, which the wrapper cannot see; stubbing it
 // keeps the dialog inline. Precedent:
 // tests/components/layout/LayoutHeaderMobileSearch.test.ts:17.
@@ -55,7 +65,7 @@ describe('CookieBanner', () => {
   });
 
   it('shows the cookie banner when analytics is enabled', () => {
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     const banner = findBanner();
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('cookies.banner_text');
@@ -72,7 +82,7 @@ describe('CookieBanner', () => {
   });
 
   it('hides the cookie banner once a choice is stored', () => {
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     assert.isDefined(tenant.value);
     localStorage.setItem(
       `analytics-consent-${tenant.value.tenantId}`,
@@ -84,7 +94,7 @@ describe('CookieBanner', () => {
   it('shows the banner again after reopen(), with the stored choice intact', async () => {
     // The whole point of the footer entry point: `revoke()` is otherwise
     // unreachable once a choice is stored, so consent cannot be withdrawn.
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     assert.isDefined(tenant.value);
     localStorage.setItem(
       `analytics-consent-${tenant.value.tenantId}`,
@@ -106,7 +116,7 @@ describe('CookieBanner', () => {
 
   it('links the banner to the CMS privacy policy when one is tagged', () => {
     // Accept/Decline without saying what is collected is not informed consent.
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     privacyToRef.value = '/se/sv/integritetspolicy';
     privacyResolvedRef.value = true;
 
@@ -123,7 +133,7 @@ describe('CookieBanner', () => {
   it('still shows the banner when no privacy page is tagged', () => {
     // A tenant that has not tagged one must still get a consent prompt; the
     // link is the part that goes missing, not the banner.
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
     privacyResolvedRef.value = false;
 
     const wrapper = mountComponent(CookieBanner, { global: { stubs } });
@@ -138,7 +148,7 @@ describe('CookieBanner', () => {
     // A primary Accept beside a muted Decline steers the answer, which goes to
     // whether the consent is freely given at all (GDPR Recital 43) — regulators
     // have fined on exactly this asymmetry.
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
 
     const buttons = mountComponent(CookieBanner, { global: { stubs } })
       .find(BANNER)
@@ -153,7 +163,7 @@ describe('CookieBanner', () => {
     // GDPR Art. 7(3): the right to withdraw must be communicated *prior to*
     // consent, not merely exist afterwards. The footer control satisfies the
     // "as easy as" half; this sentence is the other half.
-    setFeatures({ analytics: { enabled: true } });
+    enableAnalytics();
 
     const banner = mountComponent(CookieBanner, { global: { stubs } }).find(
       BANNER,
@@ -163,5 +173,24 @@ describe('CookieBanner', () => {
       true,
     );
     expect(banner.text()).toContain('cookies.withdraw_note');
+  });
+
+  it('stays hidden when analytics is enabled but no provider is configured', () => {
+    // The bug this gate fixes: with the feature on and no id, the analytics
+    // plugin returns early and sets nothing, so a prompt here would ask the
+    // visitor to consent to cookies that never arrive.
+    assert.isDefined(tenant.value);
+    tenant.value.features = { analytics: { enabled: true } };
+    tenant.value.seo = { googleAnalyticsId: '', googleTagManagerId: '' };
+
+    expect(findBanner().exists()).toBe(false);
+  });
+
+  it('shows when only a tag manager id is configured', () => {
+    assert.isDefined(tenant.value);
+    tenant.value.features = { analytics: { enabled: true } };
+    tenant.value.seo = { googleTagManagerId: 'GTM-TEST' };
+
+    expect(findBanner().exists()).toBe(true);
   });
 });

@@ -1,10 +1,14 @@
 <script setup lang="ts">
 // Cart hydration runs in `app/plugins/cart-init.ts` (universal plugin).
 // See docs/patterns/cart-hydration.md for the rationale.
+const { tenant } = useTenant();
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col">
+  <div
+    class="flex min-h-screen flex-col"
+    :data-storefront-style="tenant?.layout?.storefrontStyle ?? 'classic'"
+  >
     <PreviewBanner />
     <ImpersonationBanner />
     <a
@@ -17,6 +21,9 @@
       <LayoutHeader />
     </ErrorBoundary>
     <main id="main-content" class="flex-1">
+      <StorefrontPriceNotice
+        v-if="tenant?.layout?.storefrontStyle === 'editorial'"
+      />
       <ErrorBoundary section="content">
         <slot />
       </ErrorBoundary>

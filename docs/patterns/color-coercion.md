@@ -15,7 +15,7 @@ See [ADR-016](../adr/016-tenant-color-coercion.md) for the why.
 | 3     | `server/utils/tenant.ts`         | `FATAL_PATHS` allowlist: colors are never fatal                    |
 
 Every color leaf in `server/schemas/store-settings.ts` is declared as
-`CoercedColorSchema.nullable().optional()`. The pipeline is uniform across all 40 keys.
+`CoercedColorSchema.nullable().optional()`. The pipeline is uniform across all 42 keys.
 
 ## Supported input formats
 

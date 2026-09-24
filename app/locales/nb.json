@@ -971,12 +971,13 @@
     "exit": "Avslutt"
   },
   "form": {
-    "submit": "Send",
+    "checkbox_checked": "Ja",
+    "country_placeholder": "Velg land",
     "default_subject": "Skjemainnsending fra nettstedet",
     "fallback_email": "Hvis ingenting åpnes, send oss e-post på {recipient}",
     "field_required": "Dette feltet er obligatorisk.",
     "invalid_email": "Oppgi en gyldig e-postadresse.",
-    "country_placeholder": "Velg land",
-    "checkbox_checked": "Ja"
+    "select_placeholder": "Velg...",
+    "submit": "Send"
   }
 }

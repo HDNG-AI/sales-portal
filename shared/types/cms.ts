@@ -139,6 +139,13 @@ export interface FormWidgetField {
    * reads as though that option were the question.
    */
   groupLabel?: string;
+  /**
+   * Placeholder for a `select` before anything is chosen. Defaults to a
+   * neutral "Select…" when the field brings its own `options`, and to the
+   * country prompt only when it falls back to the country list — the same
+   * branch `options` itself takes.
+   */
+  placeholder?: string;
 }
 
 export interface FormWidgetData {

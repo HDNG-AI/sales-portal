@@ -3,7 +3,7 @@ import { Button } from '~/components/ui/button';
 import { CMS_TAGS } from '#shared/constants/cms';
 
 const { isPrompting, accept, revoke } = useAnalyticsConsent();
-const { hasFeature } = useTenant();
+const { analyticsConfigured } = useTenant();
 
 // The prompt has to say what is collected and why, and two buttons do not.
 // Resolved by tag rather than a hardcoded slug so each locale's own page wins
@@ -13,7 +13,10 @@ const { to: privacyTo, isResolved: privacyResolved } = useCmsPageLink(
   CMS_TAGS.PRIVACY_PAGE,
 );
 
-const visible = computed(() => isPrompting.value && hasFeature('analytics'));
+// Gated on analyticsConfigured, not the feature flag alone: with the flag on
+// and no provider id, tenant-analytics.ts returns early and sets nothing, so
+// the flag alone asks the visitor to consent to cookies that never arrive.
+const visible = computed(() => isPrompting.value && analyticsConfigured.value);
 </script>
 
 <template>
