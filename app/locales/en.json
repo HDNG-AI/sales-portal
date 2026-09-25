@@ -454,9 +454,11 @@
   },
   "cookies": {
     "accept": "Accept cookies",
-    "banner_text": "We use cookies to analyze site usage and improve your experience.",
+    "banner_text": "We'd like to set analytics cookies to see how this site is used — which pages people visit and where they get stuck — so we can fix what doesn't work. They're not needed to shop: signing in, your cart and your language settings work either way.",
     "decline": "Decline",
-    "settings": "Cookie settings"
+    "privacy_policy": "Read our privacy policy",
+    "settings": "Cookie settings",
+    "withdraw_note": "You can change your mind at any time — see Cookie settings at the bottom of any page."
   },
   "errors": {
     "section_failed": "This section could not be loaded.",

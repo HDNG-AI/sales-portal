@@ -454,9 +454,11 @@
   },
   "cookies": {
     "accept": "Cookies akzeptieren",
-    "banner_text": "Wir verwenden Cookies, um die Nutzung der Website zu analysieren und Ihr Erlebnis zu verbessern.",
+    "banner_text": "Wir möchten Analyse-Cookies setzen, um zu sehen, wie diese Website genutzt wird — welche Seiten aufgerufen werden und wo es hakt — damit wir beheben können, was nicht funktioniert. Zum Einkaufen sind sie nicht nötig: Anmeldung, Warenkorb und Spracheinstellungen funktionieren auch ohne.",
     "decline": "Ablehnen",
-    "settings": "Cookie-Einstellungen"
+    "privacy_policy": "Datenschutzerklärung lesen",
+    "settings": "Cookie-Einstellungen",
+    "withdraw_note": "Sie können Ihre Entscheidung jederzeit ändern — siehe Cookie-Einstellungen am Seitenende."
   },
   "errors": {
     "section_failed": "Dieser Abschnitt konnte nicht geladen werden.",

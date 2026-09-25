@@ -739,4 +739,3 @@ describe('ProductTabs parameter labels', () => {
     }
   });
 });
-

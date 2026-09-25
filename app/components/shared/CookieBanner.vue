@@ -22,14 +22,29 @@ const visible = computed(() => isPrompting.value && analyticsConfigured.value);
         <div
           class="mx-auto flex max-w-screen-lg flex-col items-center gap-4 px-6 py-4 sm:flex-row sm:justify-between"
         >
-          <p class="text-sm">
-            {{ $t('cookies.banner_text') }}
-          </p>
+          <div class="flex flex-col gap-1">
+            <p class="text-sm">
+              {{ $t('cookies.banner_text') }}
+              <CookieBannerPrivacyLink />
+            </p>
+            <!-- GDPR Art. 7(3): the right to withdraw has to be communicated
+               BEFORE consent is given, not merely be available afterwards. It
+               names the footer control so the sentence is actionable. -->
+            <p
+              class="text-muted-foreground text-xs"
+              data-testid="cookie-withdraw-note"
+            >
+              {{ $t('cookies.withdraw_note') }}
+            </p>
+          </div>
           <div class="flex shrink-0 gap-2">
-            <Button @click="accept">
+            <!-- Same variant on purpose. A primary Accept beside a muted
+                 Decline nudges toward one answer, which goes to whether
+                 consent is freely given at all (GDPR Recital 43). -->
+            <Button variant="outline" @click="accept">
               {{ $t('cookies.accept') }}
             </Button>
-            <Button variant="secondary" @click="revoke">
+            <Button variant="outline" @click="revoke">
               {{ $t('cookies.decline') }}
             </Button>
           </div>

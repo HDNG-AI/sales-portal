@@ -164,9 +164,9 @@ describe('FormWidget', () => {
       ],
     });
 
-    expect(wrapper.find('[data-testid="form-field-arendetyp"]').text()).toContain(
-      'Välj ärendetyp',
-    );
+    expect(
+      wrapper.find('[data-testid="form-field-arendetyp"]').text(),
+    ).toContain('Välj ärendetyp');
   });
 
   // B3: select branch is exercised — deleting the v-if="field.type==='select'" block would fail this.

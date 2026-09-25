@@ -770,7 +770,10 @@ describe('write ordering', () => {
     });
 
     const mappingWrites = kv.setItem.mock.calls
-      .map((call, i) => ({ key: call[0] as string, order: kv.setItem.mock.invocationCallOrder[i]! }))
+      .map((call, i) => ({
+        key: call[0] as string,
+        order: kv.setItem.mock.invocationCallOrder[i]!,
+      }))
       .filter(({ key }) => key.startsWith('tenant:id:'));
     const lastMappingWrite = Math.max(...mappingWrites.map((w) => w.order));
     const firstInvalidation = Math.min(
