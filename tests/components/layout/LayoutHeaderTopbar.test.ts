@@ -39,18 +39,27 @@ vi.mock('../../../app/composables/useTenant', () => ({
 // must not pay for the request.
 // Hoisted: vi.mock is lifted above ordinary consts, so the factory below can
 // only close over values created this way.
-const { companyNameRef, executeSpy, useFetchMock } = vi.hoisted(() => {
-  const r = { value: 'Odelco AB' as string | null };
-  const spy = vi.fn();
-  return {
-    companyNameRef: r,
-    executeSpy: spy,
-    useFetchMock: () => ({
-      data: { value: { company: { name: r.value } } },
-      execute: spy,
-    }),
-  };
-});
+const { companyNameRef, companyData, executeSpy, useFetchMock } = vi.hoisted(
+  () => {
+    const name = { value: 'Odelco AB' as string | null };
+    // Starts empty and fills only when execute() runs, which is what
+    // `immediate: false` means. A mock that pre-populated `data` would render
+    // the chip whether or not the component ever asked for it, so removing
+    // the fetch would go unnoticed.
+    const data = {
+      value: null as { company: { name: string | null } } | null,
+    };
+    const spy = vi.fn(() => {
+      data.value = { company: { name: name.value } };
+    });
+    return {
+      companyNameRef: name,
+      companyData: data,
+      executeSpy: spy,
+      useFetchMock: () => ({ data, execute: spy }),
+    };
+  },
+);
 
 // Mocked at the module Nuxt auto-imports resolve to, not only as a global:
 // the component's own `useFetch` call goes through the module.
@@ -88,6 +97,7 @@ describe('LayoutHeaderTopbar', () => {
     applyResolvedRef.value = true;
     showCompanyNameRef.value = undefined;
     companyNameRef.value = 'Odelco AB';
+    companyData.value = null;
     executeSpy.mockClear();
   });
 
@@ -100,6 +110,9 @@ describe('LayoutHeaderTopbar', () => {
 
       const wrapper = shallowMountComponent(LayoutHeaderTopbar);
 
+      // The request has to actually be made: the name is not there to render
+      // until the deferred fetch runs.
+      expect(executeSpy).toHaveBeenCalledTimes(1);
       expect(wrapper.find(COMPANY).exists()).toBe(true);
       expect(wrapper.find(COMPANY).text()).toContain('Odelco AB');
     });
