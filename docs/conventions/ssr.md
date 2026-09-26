@@ -215,6 +215,12 @@ Only use `<ClientOnly>` for content that genuinely cannot render on the server:
 - Components that access `window`, `document`, or `localStorage`
 - Third-party widgets that require a DOM
 - Content that intentionally differs between SSR and client (e.g., user-specific personalization that isn't available on SSR)
+- Content whose existence depends on a fetch that is _deferred_ — `useFetch` with
+  `immediate: false`, or any request started from a watch or an event. Nuxt only awaits
+  `useFetch` during SSR when it runs at setup, so a deferred one leaves the server rendering
+  the empty branch and the client rendering the full one: a hydration mismatch. Either await
+  it during SSR or keep the element off the server. Component tests will not catch this —
+  they render once, and the mismatch lives in the gap between two renders.
 
 ### Guard browser APIs
 
