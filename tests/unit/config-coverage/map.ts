@@ -163,6 +163,7 @@ const BRAND_LOGO_FALLBACK = 'tests/components/BrandLogoFallback.test.ts';
 const POWERED_BY = 'tests/components/PoweredBy.test.ts';
 const HEADER_TOPBAR = 'tests/components/layout/LayoutHeaderTopbar.test.ts';
 const VAT_DISPLAY = 'tests/unit/composables/useVatDisplay.test.ts';
+const VAT_SWITCHER = 'tests/components/shared/VatDisplaySwitcher.test.ts';
 const PORTAL_SHELL = 'tests/components/portal/PortalShell.test.ts';
 const PRICE_DISPLAY = 'tests/components/commerce/PriceDisplay.test.ts';
 const STOCK_BADGE = 'tests/components/commerce/StockBadge.test.ts';
@@ -1875,15 +1876,18 @@ export const CONFIG_COVERAGE_MAP = {
     vatDisplayLocked: {
       status: 'has-test',
       test: {
-        spec: VAT_DISPLAY,
-        title: 'writes no cookie while locked',
+        spec: VAT_SWITCHER,
+        title: 'renders nothing when the tenant has locked the VAT display',
         kind: 'consumer',
         drives: 'field',
       },
       note:
         'Independent of vatDisplay: a tenant can default to ex-VAT and still ' +
-        'allow switching. "reports isLocked so the switcher can hide itself" ' +
-        'covers the UI half.',
+        'allow switching. Referenced against the switcher because the control ' +
+        'disappearing is the visible half; the price half is covered by ' +
+        '"forces the tenant value when locked, ignoring a stored choice" and ' +
+        '"writes no cookie while locked" in ' +
+        'tests/unit/composables/useVatDisplay.test.ts.',
     },
     showCompanyName: {
       status: 'has-test',
