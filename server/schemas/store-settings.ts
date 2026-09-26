@@ -156,6 +156,8 @@ export const LayoutConfigSchema = z
     headerNavVariant: z.enum(['grey', 'white']).nullable().optional(),
     storefrontStyle: z.enum(['classic', 'editorial']).nullable().optional(),
     showCompanyName: z.boolean().nullable().optional(),
+    vatDisplay: z.enum(['ex', 'inc']).nullable().optional(),
+    vatDisplayLocked: z.boolean().nullable().optional(),
   })
   .nullable()
   .optional();

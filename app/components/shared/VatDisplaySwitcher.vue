@@ -9,13 +9,15 @@ const props = withDefaults(
   { variant: 'icon' },
 );
 
-const { showIncVat, setShowIncVat } = useVatDisplay();
+const { showIncVat, setShowIncVat, isLocked } = useVatDisplay();
 const { t } = useI18n();
 const { showPrice } = usePriceVisibility();
 </script>
 
 <template>
-  <template v-if="showPrice">
+  <!-- Nothing to offer when the tenant has fixed the display: a control that
+       cannot change anything is worse than no control. -->
+  <template v-if="showPrice && !isLocked">
     <!-- Inline: flat button row -->
     <div v-if="props.variant === 'inline'" class="flex gap-1">
       <Button
