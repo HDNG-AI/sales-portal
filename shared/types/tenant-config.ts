@@ -100,6 +100,12 @@ export interface TenantConfig {
   layout?: {
     headerNavVariant?: 'grey' | 'white' | null;
     storefrontStyle?: 'classic' | 'editorial' | null;
+    /**
+     * Show the signed-in buyer's company in the topbar. Off unless a tenant
+     * asks for it: the name is only meaningful where buyers order on behalf
+     * of an organisation, and it costs a request per page view to fetch.
+     */
+    showCompanyName?: boolean | null;
   } | null;
 
   // Features — keyed by feature name

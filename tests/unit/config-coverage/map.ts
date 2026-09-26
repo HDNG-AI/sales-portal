@@ -1834,6 +1834,20 @@ export const CONFIG_COVERAGE_MAP = {
 
   // --- Layout --------------------------------------------------------------
   layout: {
+    showCompanyName: {
+      status: 'has-test',
+      test: {
+        spec: HEADER_TOPBAR,
+        title: 'shows the company when the tenant asked for it',
+        kind: 'consumer',
+        drives: 'field',
+      },
+      note:
+        'Off for every tenant that has not set it, which is the state the ' +
+        'other two cases cover: "hides it when the tenant set the flag ' +
+        'false" and "hides it when the tenant never set the key". Removing ' +
+        'the flag check from the computed fails both.',
+    },
     storefrontStyle: {
       classic: {
         status: 'has-test',
