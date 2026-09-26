@@ -23,6 +23,13 @@ const props = withDefaults(
   {
     showDiscount: true,
     fromPrice: false,
+    // Vue casts an absent Boolean prop to `false`, so without this an omitted
+    // `showVat` arrived as `false` and was forwarded as an explicit choice.
+    // PriceDisplay honours an explicit `false` (`props.showVat ?? preference`),
+    // so every price rendered through this slot — the PDP and every product
+    // card — was pinned to ex-VAT and the topbar switcher did nothing.
+    // PriceDisplay carries the same `undefined` for the same reason.
+    showVat: undefined,
   },
 );
 
