@@ -80,6 +80,67 @@ describe('useVatDisplay', () => {
     useVatDisplay = mod.useVatDisplay;
   });
 
+  // The whole input space, not a sample of it. showIncVat is decided by three
+  // inputs — locked, the tenant's default, and the buyer's cookie — so there
+  // are 2 x 2 x 3 = 12 states. Branch coverage reached 100% on six of them,
+  // which is exactly why it is the wrong measure here: every branch had been
+  // taken, but most pairings had not.
+  describe('every combination of lock, tenant default and cookie', () => {
+    const cases: Array<{
+      locked: boolean;
+      tenantDefault: 'ex' | 'inc';
+      cookie: 'inc' | 'ex' | undefined;
+      expected: boolean;
+    }> = [
+      // Locked: the tenant's default decides, whatever the buyer stored.
+      { locked: true, tenantDefault: 'ex', cookie: undefined, expected: false },
+      { locked: true, tenantDefault: 'ex', cookie: 'ex', expected: false },
+      { locked: true, tenantDefault: 'ex', cookie: 'inc', expected: false },
+      { locked: true, tenantDefault: 'inc', cookie: undefined, expected: true },
+      { locked: true, tenantDefault: 'inc', cookie: 'ex', expected: true },
+      { locked: true, tenantDefault: 'inc', cookie: 'inc', expected: true },
+      // Unlocked: a stored choice wins; without one the tenant's default does.
+      {
+        locked: false,
+        tenantDefault: 'ex',
+        cookie: undefined,
+        expected: false,
+      },
+      { locked: false, tenantDefault: 'ex', cookie: 'ex', expected: false },
+      { locked: false, tenantDefault: 'ex', cookie: 'inc', expected: true },
+      {
+        locked: false,
+        tenantDefault: 'inc',
+        cookie: undefined,
+        expected: true,
+      },
+      { locked: false, tenantDefault: 'inc', cookie: 'ex', expected: false },
+      { locked: false, tenantDefault: 'inc', cookie: 'inc', expected: true },
+    ];
+
+    it.each(cases)(
+      'locked=$locked default=$tenantDefault cookie=$cookie -> incVat=$expected',
+      ({ locked, tenantDefault, cookie, expected }) => {
+        mockLayout.value = {
+          vatDisplay: tenantDefault,
+          vatDisplayLocked: locked,
+        };
+        mockCookieValue.value = cookie;
+
+        expect(useVatDisplay().showIncVat.value).toBe(expected);
+      },
+    );
+
+    it('covers the whole space', () => {
+      // Guards the table itself: a forgotten row is a silent gap, and the
+      // arithmetic is the only thing that notices.
+      expect(cases).toHaveLength(2 * 2 * 3);
+      expect(new Set(cases.map((c) => JSON.stringify(c))).size).toBe(
+        cases.length,
+      );
+    });
+  });
+
   describe('tenant default and lock', () => {
     it('shows inc-VAT before any choice when the tenant defaults to inc', () => {
       mockLayout.value = { vatDisplay: 'inc' };

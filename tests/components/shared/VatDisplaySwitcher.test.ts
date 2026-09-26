@@ -69,4 +69,37 @@ describe('VatDisplaySwitcher', () => {
       expect(render(variant).text()).toBe('');
     },
   );
+
+  // Both gates, all four pairings. The v-if is `showPrice && !isLocked`, so
+  // three of the four hide — and the both-false corner is the one a
+  // hand-picked set of cases forgets.
+  describe('every combination of the two gates', () => {
+    const cases: Array<{
+      showPrice: boolean;
+      isLocked: boolean;
+      renders: boolean;
+    }> = [
+      { showPrice: true, isLocked: false, renders: true },
+      { showPrice: true, isLocked: true, renders: false },
+      { showPrice: false, isLocked: false, renders: false },
+      { showPrice: false, isLocked: true, renders: false },
+    ];
+
+    it.each(cases)(
+      'showPrice=$showPrice isLocked=$isLocked -> renders=$renders',
+      ({ showPrice, isLocked, renders }) => {
+        state.showPrice = showPrice;
+        state.isLocked = isLocked;
+
+        expect(render().text() !== '').toBe(renders);
+      },
+    );
+
+    it('covers the whole space', () => {
+      expect(cases).toHaveLength(2 * 2);
+      expect(
+        new Set(cases.map((c) => `${c.showPrice}${c.isLocked}`)).size,
+      ).toBe(cases.length);
+    });
+  });
 });
