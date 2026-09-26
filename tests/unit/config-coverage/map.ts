@@ -162,6 +162,8 @@ const AUTH_SHEET = 'tests/components/auth/AuthSheet.test.ts';
 const BRAND_LOGO_FALLBACK = 'tests/components/BrandLogoFallback.test.ts';
 const POWERED_BY = 'tests/components/PoweredBy.test.ts';
 const HEADER_TOPBAR = 'tests/components/layout/LayoutHeaderTopbar.test.ts';
+const VAT_DISPLAY = 'tests/unit/composables/useVatDisplay.test.ts';
+const VAT_SWITCHER = 'tests/components/shared/VatDisplaySwitcher.test.ts';
 const PORTAL_SHELL = 'tests/components/portal/PortalShell.test.ts';
 const PRICE_DISPLAY = 'tests/components/commerce/PriceDisplay.test.ts';
 const STOCK_BADGE = 'tests/components/commerce/StockBadge.test.ts';
@@ -1834,6 +1836,59 @@ export const CONFIG_COVERAGE_MAP = {
 
   // --- Layout --------------------------------------------------------------
   layout: {
+    vatDisplay: {
+      ex: {
+        status: 'has-test',
+        test: {
+          spec: VAT_DISPLAY,
+          title:
+            'forces the tenant value when locked, ignoring a stored choice',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note: 'Odelco: every buyer sees ex-VAT and cannot change it.',
+      },
+      inc: {
+        status: 'has-test',
+        test: {
+          spec: VAT_DISPLAY,
+          title:
+            'shows inc-VAT before any choice when the tenant defaults to inc',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note:
+          'Only reachable because the cookie carries no default — with one, an ' +
+          'unset cookie looked like a deliberate ex-VAT choice and outranked ' +
+          'the tenant.',
+      },
+      absent: {
+        status: 'has-test',
+        test: {
+          spec: VAT_DISPLAY,
+          title: 'defaults to ex-VAT (showIncVat false) when no cookie is set',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note: 'The state every tenant predating this key is in.',
+      },
+    },
+    vatDisplayLocked: {
+      status: 'has-test',
+      test: {
+        spec: VAT_SWITCHER,
+        title: 'renders nothing when the tenant has locked the VAT display',
+        kind: 'consumer',
+        drives: 'field',
+      },
+      note:
+        'Independent of vatDisplay: a tenant can default to ex-VAT and still ' +
+        'allow switching. Referenced against the switcher because the control ' +
+        'disappearing is the visible half; the price half is covered by ' +
+        '"forces the tenant value when locked, ignoring a stored choice" and ' +
+        '"writes no cookie while locked" in ' +
+        'tests/unit/composables/useVatDisplay.test.ts.',
+    },
     showCompanyName: {
       status: 'has-test',
       test: {

@@ -106,6 +106,17 @@ export interface TenantConfig {
      * of an organisation, and it costs a request per page view to fetch.
      */
     showCompanyName?: boolean | null;
+    /**
+     * Prices shown inclusive or exclusive of VAT before the buyer chooses.
+     * Absent means ex-VAT, the right floor for a B2B storefront.
+     */
+    vatDisplay?: 'ex' | 'inc' | null;
+    /**
+     * Take the choice away: `vatDisplay` then applies to every buyer and the
+     * switcher is hidden. Separate from `vatDisplay` because the two are
+     * independent — a tenant can default to ex-VAT and still allow switching.
+     */
+    vatDisplayLocked?: boolean | null;
   } | null;
 
   // Features — keyed by feature name
