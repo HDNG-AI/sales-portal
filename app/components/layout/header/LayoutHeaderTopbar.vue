@@ -79,14 +79,20 @@ const companyName = computed(() => companyData.value?.company?.name ?? null);
       <!-- Right: authenticated account utilities only. Anonymous login and
            account application are promoted to the main header. -->
       <div v-if="authStore.isAuthenticated" class="flex items-center gap-4">
-        <span
-          v-if="wantsCompanyName && companyName"
-          class="hidden items-center gap-1.5 py-2 md:flex"
-          data-testid="topbar-company-name"
-        >
-          <Building2 class="size-4 shrink-0" />
-          <span class="max-w-[22ch] truncate">{{ companyName }}</span>
-        </span>
+        <!-- Client-only because the company is fetched after setup: SSR renders
+             the comment placeholder and the client renders the chip, which is
+             a hydration mismatch if Vue is asked to reconcile the two. The
+             name is decorative, so arriving a beat late costs nothing. -->
+        <ClientOnly>
+          <span
+            v-if="wantsCompanyName && companyName"
+            class="hidden items-center gap-1.5 py-2 md:flex"
+            data-testid="topbar-company-name"
+          >
+            <Building2 class="size-4 shrink-0" />
+            <span class="max-w-[22ch] truncate">{{ companyName }}</span>
+          </span>
+        </ClientOnly>
         <NuxtLink
           :to="localePath('/portal')"
           :aria-label="$t('layout.customer_portal')"
