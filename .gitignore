@@ -63,3 +63,7 @@ playwright/.auth/
 
 # Local copy of the admin-write endpoint's secret — never commit
 admin-secret.txt
+
+# Python operation checks
+__pycache__/
+*.py[cod]

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check qualified storefront staging revisions
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+RandomizedDelaySec=15
+Unit=sales-portal-staging.service
+
+[Install]
+WantedBy=timers.target
