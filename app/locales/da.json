@@ -313,6 +313,70 @@
     "height": "Højde",
     "weight": "Vægt"
   },
+  "configurator": {
+    "required": "Påkrævet",
+    "read_only": "Angives af konfigurationen",
+    "unavailable": "Ikke tilgængeligt med dine nuværende valg",
+    "bounds": "{min}–{max} {unit}",
+    "optional": "Valgfrit",
+    "measurements": "Mål & variabler",
+    "choose_many": "Vælg ingen eller flere",
+    "quantity": "Antal",
+    "show_all": "Vis alle {count} valg",
+    "choose_in_group": "Vælg {name}",
+    "search": "Søg…",
+    "no_matches": "Ingen resultater.",
+    "bounds_narrowed": "grænse justeret af tidligere valg",
+    "summary": {
+      "none": "intet valgt",
+      "many": "{count} valgt"
+    },
+    "yes": "Ja",
+    "no": "Nej",
+    "commit": "Færdiggør konfigurationen",
+    "starting": "Starter konfigurationen…",
+    "failed": "Noget gik galt. Genindlæs siden, og prøv igen.",
+    "configure_product": "Konfigurer produkt",
+    "product_configuration": "Produktkonfiguration",
+    "reset": "Nulstil",
+    "sections": "Sektioner",
+    "remaining": "{count} tilbage",
+    "previous": "Forrige",
+    "next": "Næste",
+    "section_position": "Sektion {current} af {total}",
+    "page_note": "Dette er et konfiguratorprodukt. Byg din variant under {tab} nedenfor — pris og gyldighed beregnes løbende.",
+    "severity": {
+      "error": "Fejl",
+      "warning": "Advarsel"
+    },
+    "committed": {
+      "heading": "Konfigurationen er færdig",
+      "unit_price": "Pris pr. enhed"
+    },
+    "panel": {
+      "valid": "Konfigurationen er komplet og kan bestilles.",
+      "invalid": "Mangler, før du kan fortsætte: {items}.",
+      "invalid_unspecified": "Konfigurationen er ikke komplet.",
+      "recomputing": "Beregner igen…",
+      "time_left": "{time} tilbage",
+      "renew": "Forlæng session",
+      "renew_failed": "Sessionen kunne ikke forlænges.",
+      "expired": "Konfigurationssessionen er udløbet.",
+      "start_over": "Start forfra",
+      "title": "Specifikation",
+      "prices_ex_vat": "priser ekskl. moms",
+      "customer_type": {
+        "person": "Privatkunde",
+        "organization": "Erhvervskunde"
+      },
+      "net_price": "Nettopris",
+      "quantity_suffix": "{count} stk.",
+      "indicative": "Vejledende pris. Prisen bekræftes i tilbuddet.",
+      "copy": "Kopiér specifikation",
+      "copied": "Kopieret",
+      "copy_quantity": "Antal: {count} stk."
+    }
+  },
   "account": {
     "my_account": "Min konto",
     "profile": "Profil",
@@ -389,9 +453,12 @@
     "active_campaigns": "Aktive kampagner"
   },
   "cookies": {
-    "banner_text": "Vi bruger cookies til at analysere brugen af webstedet og forbedre din oplevelse.",
     "accept": "Accepter cookies",
-    "decline": "Afvis"
+    "banner_text": "Vi vil gerne bruge analysecookies for at se, hvordan siden bruges — hvilke sider folk besøger, og hvor de går i stå — så vi kan rette det, der ikke virker. De er ikke nødvendige for at handle: login, kurv og sprogvalg fungerer alligevel.",
+    "decline": "Afvis",
+    "privacy_policy": "Læs vores privatlivspolitik",
+    "settings": "Cookieindstillinger",
+    "withdraw_note": "Du kan altid ombestemme dig — se Cookieindstillinger nederst på siden."
   },
   "errors": {
     "section_failed": "Dette afsnit kunne ikke indlæses.",
@@ -904,12 +971,14 @@
     "exit": "Afslut"
   },
   "form": {
-    "submit": "Send",
+    "checkbox_checked": "Ja",
+    "country_placeholder": "Vælg land",
     "default_subject": "Formularindsendelse fra webstedet",
     "fallback_email": "Hvis der ikke åbnes noget, så send os en e-mail på {recipient}",
     "field_required": "Dette felt er obligatorisk.",
     "invalid_email": "Angiv en gyldig e-mailadresse.",
-    "country_placeholder": "Vælg land",
+    "select_placeholder": "Vælg...",
+    "submit": "Send",
     "submit_success": "Tak — din besked er sendt.",
     "submit_failed": "Noget gik galt. Prøv igen, eller kontakt os telefonisk."
   }

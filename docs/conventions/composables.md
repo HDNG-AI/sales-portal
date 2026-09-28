@@ -4,7 +4,7 @@
 
 **Create composables for:**
 
-- Domain-specific logic (`useTenant`, `useRouteResolution`)
+- Domain-specific logic (`useTenant`, `useLocaleMarket`)
 - Reusable business logic used in 3+ places
 - Complex state that needs to be shared
 

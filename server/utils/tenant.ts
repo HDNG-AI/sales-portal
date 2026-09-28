@@ -1,11 +1,12 @@
 import type { H3Event } from 'h3';
-import type { TenantConfig } from '#shared/types/tenant-config';
+import type { FeatureAccess, TenantConfig } from '#shared/types/tenant-config';
 import { CMS_SLOTS } from '#shared/types/cms-slots';
 import { CMS_MENUS } from '#shared/constants/cms';
 import { PRODUCT_MEDIA_PARAMETER_DEFAULTS } from '#shared/constants/product-media';
 import type {
   StoreSettings,
   GeinsSettings,
+  FeatureAccessInput,
   FeatureConfig,
 } from '../schemas/store-settings';
 import { StoreSettingsSchema } from '../schemas/store-settings';
@@ -339,11 +340,17 @@ export interface TenantCacheStorage {
  */
 export async function invalidateTenantCaches(
   tenantId: string,
-  hostname: string,
+  hostname: string | Iterable<string>,
   cacheStorage: TenantCacheStorage,
 ): Promise<void> {
   clearSdkCache(tenantId);
-  clearNegativeCache(hostname);
+  // Every hostname the tenant claims, not just the one the caller named.
+  // resolveTenant consults the negative cache before KV, so an alias probed
+  // while the tenant was still unknown keeps answering 404 for the rest of
+  // its TTL with the refreshed config already in storage.
+  for (const h of typeof hostname === 'string' ? [hostname] : hostname) {
+    clearNegativeCache(h);
+  }
 
   const escapedConfigKey = tenantConfigKey(tenantId).replace(/\W/g, '');
   const nitroCacheKey = `nitro/handlers:_:${escapedConfigKey}.json`;
@@ -353,6 +360,25 @@ export async function invalidateTenantCaches(
 // ---------------------------------------------------------------------------
 // Hostname utilities
 // ---------------------------------------------------------------------------
+
+/**
+ * Every hostname whose negative-cache entry a write to this tenant has to
+ * clear: the ones the config claims, plus the one the caller named.
+ *
+ * The named hostname matters on its own because it is not always in the
+ * config. An alias just removed from the tenant, or a hostname being deleted,
+ * is precisely the one holding a stale entry — reading the set from the
+ * config alone silently stops clearing it. Aliases matter because
+ * resolveTenant consults the negative cache before KV, so an alias probed
+ * while the tenant was still unknown keeps answering 404 for the rest of its
+ * TTL with the fresh config already in storage.
+ */
+export function hostnamesToInvalidate(
+  named: string,
+  config?: TenantConfig | null,
+): Set<string> {
+  return new Set([named, ...(config ? collectAllHostnames(config) : [])]);
+}
 
 /**
  * Collects all hostnames associated with a tenant config.
@@ -431,6 +457,62 @@ export function transformGeinsSettings(
 // ---------------------------------------------------------------------------
 
 /**
+ * The rules the app can evaluate, as a lookup. `satisfies` is what keeps it from
+ * drifting from the union: a member added to `FeatureAccess` is a compile error
+ * here until it is listed.
+ */
+const EVALUABLE_ACCESS = {
+  all: true,
+  authenticated: true,
+} satisfies Record<FeatureAccess, true>;
+
+/**
+ * Fail-closed, deliberately: any rule added to `FeatureAccessSchema` later is
+ * retired by default — even with an evaluator written for it — until it is
+ * listed in `EVALUABLE_ACCESS` too. That covers string literals as well as
+ * object rules.
+ */
+function isEvaluableAccess(
+  access: FeatureAccessInput | undefined,
+): access is FeatureAccess | undefined {
+  return (
+    access === undefined ||
+    (typeof access === 'string' && access in EVALUABLE_ACCESS)
+  );
+}
+
+/**
+ * Rewrite a feature whose access rule the app cannot evaluate to
+ * `{ enabled: false }`, logging why. It happens here rather than in the schema
+ * because rejecting the rule would put the Zod issue on
+ * `features.<name>.access`; `parseStoreSettingsResilient` strips that leaf, and
+ * a feature with no `access` is open to everyone. See ADR-007.
+ */
+function normalizeFeatureAccess(
+  features: Record<string, FeatureConfig>,
+  hostname: string,
+): TenantConfig['features'] {
+  const normalized: TenantConfig['features'] = {};
+  for (const [name, { enabled, access }] of Object.entries(features)) {
+    if (isEvaluableAccess(access)) {
+      normalized[name] =
+        access === undefined ? { enabled } : { enabled, access };
+      continue;
+    }
+    // Zod strips unknown keys, so a parsed object carries exactly the one key of
+    // the union member that matched. A string rule is its own name — passing one
+    // to Object.keys() would name its character indices.
+    const retired =
+      typeof access === 'string' ? access : Object.keys(access).join(', ');
+    logger.warn(
+      `[tenant] Feature "${name}" for ${hostname} uses the retired access rule "${retired}"; disabling the feature`,
+    );
+    normalized[name] = { enabled: false };
+  }
+  return normalized;
+}
+
+/**
  * Builds a TenantConfig from validated StoreSettings.
  * Derives colors, merges override features, generates CSS + hash.
  */
@@ -447,15 +529,26 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
   // stockStatus carry the {enabled, access} shape; the other 11 portal
   // features default to {enabled: true}). overrides.features takes final
   // precedence below.
-  const features: Record<string, FeatureConfig> = {
+  const rawFeatures: Record<string, FeatureConfig> = {
     ...STOREFRONT_SETTINGS_DEFAULTS.features,
     ...merged.features,
   };
   if (merged.overrides?.features) {
     for (const [key, value] of Object.entries(merged.overrides.features)) {
-      features[key] = value;
+      rawFeatures[key] = value;
     }
   }
+  const features = normalizeFeatureAccess(rawFeatures, merged.hostname);
+
+  // Server-only, but typed with the same narrowed FeatureAccess.
+  const overrides: TenantConfig['overrides'] = merged.overrides
+    ? {
+        ...merged.overrides,
+        features: merged.overrides.features
+          ? normalizeFeatureAccess(merged.overrides.features, merged.hostname)
+          : merged.overrides.features,
+      }
+    : merged.overrides;
 
   const themeName = merged.theme.name ?? merged.tenantId;
 
@@ -520,16 +613,15 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     geinsSettings: merged.geinsSettings,
     mode: merged.mode,
     checkoutMode: merged.checkoutMode,
-    // Defensive fallback, not just the schema default — this function also
-    // runs on hand-built configs that never go through
-    // StoreSettingsSchema.parse().
-    timezone: merged.timezone ?? 'UTC',
+    // Preserve an explicitly configured timezone; leave it unset otherwise.
+    timezone: merged.timezone,
     theme,
     branding,
+    layout: merged.layout,
     features,
     seo: merged.seo,
     contact: merged.contact,
-    overrides: merged.overrides,
+    overrides,
     cms,
     productMediaParameters,
     css,
@@ -787,6 +879,11 @@ export function parseStoreSettingsResilient(
     contact: null,
     overrides: null,
     cms: undefined,
+    // Presentation config: a malformed value must degrade to unset, not fail
+    // the parse. Without an entry the issue path is a single segment, which
+    // skips the leaf-strip branch and returns null — and a null resolution is
+    // negative-cached, so one bad date field takes a storefront down.
+    timezone: undefined,
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -810,7 +907,7 @@ export function parseStoreSettingsResilient(
   ]);
 
   const MAX_SUBSTITUTIONS = 12;
-  // ThemeColorsSchema declares ~40 color keys (6 core + 26 optional + 8
+  // ThemeColorsSchema declares 42 color keys (6 core + 28 optional + 8
   // surface). 64 gives comfortable headroom for "every declared color value
   // is garbage" plus a few unknown keys, so the hard guarantee that no
   // combination of color inputs blanks a tenant holds at full strength.
@@ -1102,20 +1199,6 @@ export async function resolvePreviewTenant(
 // ---------------------------------------------------------------------------
 
 /**
- * Backfills `timezone` on a config read straight from KV. A raw read isn't
- * re-validated against the schema, so a record stored before this field
- * existed comes back without it — used by every call site that returns a
- * stored config directly rather than through buildTenantConfig(). See
- * docs/adr/023-tenant-operating-timezone.md.
- */
-export function withTenantConfigDefaults(config: TenantConfig): TenantConfig {
-  return {
-    ...config,
-    timezone: config.timezone ?? 'UTC',
-  };
-}
-
-/**
  * Retrieves a tenant config directly by tenantId (no hostname lookup).
  * Returns null for missing or inactive configs without side-effects —
  * invalidation is handled exclusively by the webhook handler.
@@ -1126,7 +1209,7 @@ export async function getTenantById(
   const storage = useStorage('kv');
   const config = await storage.getItem<TenantConfig>(tenantConfigKey(tenantId));
   if (!config || !config.isActive) return null;
-  return withTenantConfigDefaults(config);
+  return config;
 }
 
 /** A lookup's config (null when none) and how it ended. */

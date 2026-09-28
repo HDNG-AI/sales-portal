@@ -97,7 +97,7 @@ export default defineEventHandler(async (event) => {
 Two levels of feature checks:
 
 - **`hasFeature(name)`** — simple "is it enabled?" check (`.enabled` only). Use in templates for UI visibility.
-- **`canAccess(name)`** — full access evaluation (`.enabled` + `.access` rules: auth, role, group, etc.). Use when access control matters.
+- **`canAccess(name)`** — full access evaluation (`.enabled` + `.access` rules: auth). Use when access control matters.
 
 ### Client-side — template gating
 
@@ -132,10 +132,7 @@ definePageMeta({
 ```typescript
 export default defineEventHandler(async (event) => {
   const tokens = await optionalAuth(event);
-  await assertFeatureAccess(event, 'quotes', {
-    authenticated: !!tokens,
-    customerType: tokens?.user?.customerType,
-  });
+  await assertFeatureAccess(event, 'quotes', { authenticated: !!tokens });
 
   // Feature is accessible — proceed
 });
@@ -143,14 +140,13 @@ export default defineEventHandler(async (event) => {
 
 ### Access rule types
 
-| Rule                     | Behavior                                   |
-| ------------------------ | ------------------------------------------ |
-| `'all'`                  | Everyone                                   |
-| `'authenticated'`        | Logged-in users only                       |
-| `{ role: 'wholesale' }`  | Matches `user.customerType` from Geins     |
-| `{ group: 'staff' }`     | Not yet available in Geins API (safe deny) |
-| `{ accountType: 'ent' }` | Not yet available in Geins API (safe deny) |
-| _(no access field)_      | Defaults to `'all'`                        |
+| Rule                | Behavior             |
+| ------------------- | -------------------- |
+| `'all'`             | Everyone             |
+| `'authenticated'`   | Logged-in users only |
+| _(no access field)_ | Defaults to `'all'`  |
+
+A config carrying `{ group }`, `{ accountType }`, `{ permission }` or `{ role }` still parses, but the feature is normalised to `{ enabled: false }` with a warn log — the app cannot evaluate those rules.
 
 ### Price and stock visibility
 
@@ -358,31 +354,6 @@ watch(error, (err) => {
 
 ## Navigation Performance
 
-### Route Prefetching on Hover
-
-Use `prefetchRouteResolution()` on link hover to eliminate navigation delay for dynamic `[...slug]` pages:
-
-```vue
-<script setup>
-import { prefetchRouteResolution } from '~/composables/useRouteResolution';
-
-const props = defineProps<{ href: string }>();
-</script>
-
-<template>
-  <NuxtLink :to="href" @mouseenter="prefetchRouteResolution(href)">
-    <slot />
-  </NuxtLink>
-</template>
-```
-
-The prefetch function:
-
-- Checks the client-side `_routeCache` Map first (skips if already cached)
-- Calls `/api/resolve-route` and stores the result
-- Silently ignores errors (best-effort)
-- When the user navigates, `useRouteResolution()` finds the cached data and skips the API call
-
 ### Promise Deduplication
 
 The auth store's `fetchUser()` deduplicates concurrent calls by holding the in-flight promise, so
@@ -521,10 +492,10 @@ The signature: `wrapServiceCall<T>(fn, service, knownError?, errorCode?)` — de
 Per-tenant lazy singleton in `server/services/_sdk.ts`. Same tenant reuses the same SDK instance:
 
 ```typescript
-import { getSDK } from '../services/_sdk';
+import { getTenantSDK } from '../services/_sdk';
 
 export default defineEventHandler(async (event) => {
-  const sdk = getSDK(event); // Returns cached TenantSDK for this tenant
+  const sdk = await getTenantSDK(event); // Cached TenantSDK for this tenant
   const products = await sdk.core.products.list();
   return products;
 });

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   StoreSettingsSchema,
   BrandingConfigSchema,
+  ContactConfigSchema,
   SeoConfigSchema,
 } from '../../server/schemas/store-settings';
 import {
@@ -18,12 +19,12 @@ import { buildGoogleFontsUrl } from '#shared/utils/fonts';
 import type { ThemeColors } from '../../server/schemas/store-settings';
 
 // Full tenant mock configs inlined so tests are self-contained
-const TENANT_A_MOCK = {
-  tenantId: 'tenant-a',
-  hostname: 'tenant-a.litium.portal',
-  aliases: ['tenant-a.localhost'],
+const ALPHA_MOCK = {
+  tenantId: 'alpha',
+  hostname: 'alpha.example',
+  aliases: ['alpha.localhost'],
   geinsSettings: {
-    apiKey: 'C10CF115-04D8-486F-9B16-593045AC3C32',
+    apiKey: 'key',
     accountName: 'monitor',
     channel: '1',
     tld: 'se',
@@ -79,7 +80,7 @@ const TENANT_A_MOCK = {
     },
   },
   branding: {
-    name: 'Tenant A Store',
+    name: 'Alpha Store',
     watermark: 'minimal',
     logoUrl: 'https://placehold.co/200x60/0d9488/white?text=Tenant+A',
     logoDarkUrl: null,
@@ -101,9 +102,9 @@ const TENANT_A_MOCK = {
     mfa: { enabled: false },
   },
   seo: {
-    defaultTitle: 'Tenant A Store',
-    titleTemplate: '%s | Tenant A Store',
-    defaultDescription: 'B2B sales portal for Tenant A',
+    defaultTitle: 'Alpha Store',
+    titleTemplate: '%s | Alpha Store',
+    defaultDescription: 'B2B sales portal for Alpha',
     defaultKeywords: null,
     robots: 'noindex, nofollow',
     googleAnalyticsId: null,
@@ -111,7 +112,7 @@ const TENANT_A_MOCK = {
     verification: null,
   },
   contact: {
-    email: 'support@tenant-a.example.com',
+    email: 'support@alpha.example',
     phone: '+46 8 123 456',
     address: {
       street: 'Storgatan 1',
@@ -127,12 +128,12 @@ const TENANT_A_MOCK = {
   updatedAt: '2026-02-10T12:00:00.000Z',
 };
 
-const TENANT_B_MOCK = {
-  tenantId: 'tenant-b',
-  hostname: 'tenant-b.litium.portal',
-  aliases: ['tenant-b.localhost'],
+const BETA_MOCK = {
+  tenantId: 'beta',
+  hostname: 'beta.example',
+  aliases: ['beta.localhost'],
   geinsSettings: {
-    apiKey: 'C10CF115-04D8-486F-9B16-593045AC3C32',
+    apiKey: 'key',
     accountName: 'monitor',
     channel: '1',
     tld: 'se',
@@ -251,23 +252,23 @@ const TENANT_B_MOCK = {
 
 describe('StoreSettingsSchema', () => {
   describe('valid input', () => {
-    it('should validate tenant-a mock', () => {
-      const result = StoreSettingsSchema.safeParse(TENANT_A_MOCK);
+    it('should validate alpha mock', () => {
+      const result = StoreSettingsSchema.safeParse(ALPHA_MOCK);
       expect(result.success).toBe(true);
     });
 
-    it('should validate tenant-b mock', () => {
-      const result = StoreSettingsSchema.safeParse(TENANT_B_MOCK);
+    it('should validate beta mock', () => {
+      const result = StoreSettingsSchema.safeParse(BETA_MOCK);
       expect(result.success).toBe(true);
     });
 
     it('should accept a theme without `name` (merchant API dropped the field)', () => {
       const withoutThemeName = {
-        tenantId: 'boattools',
-        hostname: 'boattools.litium.store',
+        tenantId: 'gamma',
+        hostname: 'gamma.litium.store',
         geinsSettings: {
           apiKey: 'key',
-          accountName: 'boattools',
+          accountName: 'gamma',
           channel: '1',
           tld: 'se',
           locale: 'sv-SE',
@@ -288,7 +289,7 @@ describe('StoreSettingsSchema', () => {
           },
           radius: '0.625rem',
         },
-        branding: { name: 'BoatTools', watermark: 'minimal' },
+        branding: { name: 'Gamma', watermark: 'minimal' },
         features: {},
         isActive: true,
         createdAt: '2026-01-01T00:00:00.000Z',
@@ -335,7 +336,7 @@ describe('StoreSettingsSchema', () => {
       if (result.success) expect(result.data.mode).toBe('catalog');
     });
 
-    it('defaults timezone to UTC when the merchant API response omits it', () => {
+    it('leaves timezone unset when the merchant API response omits it', () => {
       const config = {
         tenantId: 'tz-default',
         hostname: 'tz-default.example.com',
@@ -370,7 +371,8 @@ describe('StoreSettingsSchema', () => {
       };
       const result = StoreSettingsSchema.safeParse(config);
       expect(result.success).toBe(true);
-      if (result.success) expect(result.data.timezone).toBe('UTC');
+      // No substitution: unset is distinguishable from a chosen 'UTC'.
+      if (result.success) expect(result.data.timezone).toBeUndefined();
     });
 
     it('preserves an explicit timezone rather than overriding it with UTC', () => {
@@ -409,6 +411,25 @@ describe('StoreSettingsSchema', () => {
       const result = StoreSettingsSchema.safeParse(config);
       expect(result.success).toBe(true);
       if (result.success) expect(result.data.timezone).toBe('Europe/Stockholm');
+    });
+
+    it.each(['+01:00', '-0500', '+00:00'])(
+      'rejects the offset %s, which Intl accepts but which cannot express DST',
+      (offset) => {
+        const result = StoreSettingsSchema.safeParse(
+          createMinimalConfig({ timezone: offset }),
+        );
+
+        expect(result.success).toBe(false);
+      },
+    );
+
+    it('accepts UTC, which Intl.supportedValuesOf omits', () => {
+      const result = StoreSettingsSchema.safeParse(
+        createMinimalConfig({ timezone: 'UTC' }),
+      );
+
+      expect(result.success).toBe(true);
     });
 
     it('rejects a raw UTC offset instead of an IANA timezone identifier', () => {
@@ -727,6 +748,11 @@ describe('StoreSettingsSchema', () => {
       expect(result.success).toBe(true);
     });
 
+    // Backwards compatibility: { group }, { accountType }, { permission } and
+    // { role } are retired from FeatureAccess but must still parse, or
+    // parseStoreSettingsResilient would strip the access leaf and open the
+    // feature to everyone. They are normalised to { enabled: false } in
+    // buildTenantConfig instead.
     it('should accept features with object access', () => {
       const config = createMinimalConfig({
         features: {
@@ -857,7 +883,7 @@ describe('SeoConfigSchema verification', () => {
 });
 
 describe('StoreSettingsSchema seo with real merchant API shape', () => {
-  // Mirrors the live merchant API payload observed for tinatest.litium.store:
+  // Mirrors the live merchant API payload observed for another tenant:
   // keywords sent as a comma string, blank description, empty title template.
   function withSeo(seo: unknown) {
     return {
@@ -929,10 +955,10 @@ describe('StoreSettingsSchema seo with real merchant API shape', () => {
     }
   });
 
-  it('parses the full tenant-a shape: flat verification token + analytics IDs', () => {
+  it('parses the full alpha shape: flat verification token + analytics IDs', () => {
     const result = StoreSettingsSchema.safeParse(
       withSeo({
-        defaultTitle: 'Tenant A Store',
+        defaultTitle: 'Alpha Store',
         defaultKeywords: 'test,test2,test3',
         googleAnalyticsId: 'G-TEST12345',
         googleTagManagerId: 'GTM-TEST99',
@@ -1056,6 +1082,50 @@ describe('BrandingConfigSchema URL validation', () => {
       });
     }
   });
+
+  // The five social URLs are parsed by the same `SafeUrlSchema` as the branding
+  // ones, so the same boundary holds for them — but nothing asserted it, and
+  // the coverage map records `contact.social.*.empty` as a state production
+  // cannot produce. That claim needs this, not a sentence.
+  describe('all five social URL fields reject unsafe values', () => {
+    const socialFields = [
+      'facebook',
+      'instagram',
+      'twitter',
+      'linkedin',
+      'youtube',
+    ] as const;
+
+    for (const field of socialFields) {
+      it(`social.${field}: rejects javascript: URL`, () => {
+        const result = ContactConfigSchema.safeParse({
+          social: { [field]: 'javascript:alert(1)' },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it(`social.${field}: rejects empty string`, () => {
+        const result = ContactConfigSchema.safeParse({
+          social: { [field]: '' },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it(`social.${field}: accepts https URL`, () => {
+        const result = ContactConfigSchema.safeParse({
+          social: { [field]: 'https://example.com/alpha' },
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it(`social.${field}: accepts null`, () => {
+        const result = ContactConfigSchema.safeParse({
+          social: { [field]: null },
+        });
+        expect(result.success).toBe(true);
+      });
+    }
+  });
 });
 
 describe('deriveThemeColors', () => {
@@ -1068,15 +1138,15 @@ describe('deriveThemeColors', () => {
     foreground: 'oklch(0.145 0 0)',
   };
 
-  it('should derive all 26 optional colors from 6 core', () => {
+  it('should derive all optional and semantic colors from 6 core', () => {
     const result = deriveThemeColors(coreColors);
 
-    // 32 standard color keys + 8 surface keys (topBarBackground,
+    // 34 standard/semantic color keys + 8 surface keys (topBarBackground,
     // footerBackground, navBarBackground, siteBackground,
     // buttonBackground, buttonPurchaseBackground, topBarText,
     // footerText) that pass through unchanged.
     const keys = Object.keys(result);
-    expect(keys).toHaveLength(40);
+    expect(keys).toHaveLength(42);
     const surfaceKeys = new Set([
       'topBarBackground',
       'footerBackground',
@@ -1089,7 +1159,7 @@ describe('deriveThemeColors', () => {
     ]);
     for (const key of keys) {
       // Surface colors collapse to '' when the tenant did not set them.
-      // The standard 32 must always resolve to a non-empty string.
+      // Standard/semantic tokens must always resolve to a non-empty string.
       const value = result[key as keyof typeof result];
       expect(typeof value).toBe('string');
       if (!surfaceKeys.has(key)) {
@@ -1193,9 +1263,9 @@ describe('parseOklch / formatOklch', () => {
 describe('transformGeinsSettings', () => {
   it('should transform platform shape to clean internal shape', () => {
     const platformShape = {
-      defaultHostName: 'tenant-b.sales-portal.geins.dev',
-      additionalHostNames: ['tenant-b.litium.portal'],
-      apiKey: 'C10CF115-04D8-486F-9B16-593045AC3C32',
+      defaultHostName: 'beta.sales-portal.geins.dev',
+      additionalHostNames: ['beta.example'],
+      apiKey: 'key',
       accountName: 'monitor',
       channelId: '2|se',
       defaultLocale: 'sv-SE',
@@ -1207,7 +1277,7 @@ describe('transformGeinsSettings', () => {
     const result = transformGeinsSettings(platformShape);
 
     expect(result).toEqual({
-      apiKey: 'C10CF115-04D8-486F-9B16-593045AC3C32',
+      apiKey: 'key',
       accountName: 'monitor',
       channel: '2',
       tld: 'se',

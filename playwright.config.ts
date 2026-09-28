@@ -16,15 +16,21 @@ import {
  * - pnpm test:e2e:ui      - Open Playwright UI
  * - pnpm test:e2e:debug   - Debug tests
  *
- * The target comes from the environment (tests/e2e/target.ts):
- *   PLAYWRIGHT_BASE_URL     origin under test (default tenant-a.litium.portal:3000)
- *   E2E_EXPECTED_TENANT_ID  tenant that origin must resolve to (default tenant-a)
+ * The target comes from the environment (tests/e2e/target.ts). One committed
+ * default in every mode: `<tenant>.litium.test`, which the wildcard resolver
+ * sends to 127.0.0.1 and the server looks up under `.litium.store`.
+ *   PLAYWRIGHT_BASE_URL     origin under test (default: the team tenant)
+ *   E2E_EXPECTED_TENANT_ID  tenant that origin must resolve to
  *   E2E_USERNAME/PASSWORD   test account; auth specs are out of scope without one
  *   E2E_PROD=1              build and test the production build (CI always does)
  *   E2E_EXTERNAL_SERVER=1   the target is already running; start nothing
+ *   E2E_REMOTE=1            the target is a deployed environment on purpose
+ *   E2E_ALLOW_ORDERS_FOR    tenant name the `orders` project may place a real
+ *                           order on; see that project below
  *
- * Prerequisites (local development): the target hostname in /etc/hosts →
- * 127.0.0.1, so the multi-tenant server plugin resolves the tenant.
+ * Prerequisites (local development): `pnpm local:setup`, for the wildcard
+ * resolver. Preflight L0 checks that the target resolves to this machine, so a
+ * run cannot quietly test a deployed environment instead.
  *
  * The production build is served over https with a self-signed cert from
  * `infra/scripts/local-cert.sh` (`pnpm local:setup` runs it). It sets
@@ -37,6 +43,10 @@ import {
  * session. Each lists every layer below it as a dependency, so when one
  * fails the scope reporter counts everything above it as blocked by that
  * layer. See docs/testing.md.
+ *
+ * The `orders` project is separate from all of this: it places a real order on
+ * the tenant under test, so it runs only from e2e-order-placement.yml, by hand,
+ * and the three browser projects ignore its folder. See docs/testing.md.
  *
  * @see https://playwright.dev/docs/test-configuration
  */
@@ -101,6 +111,14 @@ const preflightProjects: Project[] = PREFLIGHT_LAYERS.map((layer, index) => ({
 
 const PREFLIGHT_FILES = /preflight\//;
 
+// The order-placement spec, which mutates the real backend. Its own project in
+// its own folder is the structural half of the mutation gate: the three browser
+// projects ignore the folder, and both workflows select projects by name, so no
+// ordinary run can collect it whatever the environment says. Anchored on
+// `e2e/orders/` rather than a bare `orders/` because Playwright matches these
+// against the absolute file path.
+const ORDERS_FILES = /e2e\/orders\//;
+
 export default defineConfig({
   // Test directory
   testDir: './tests/e2e',
@@ -111,8 +129,12 @@ export default defineConfig({
   // Fail build on CI if tests are incomplete
   forbidOnly: !!process.env.CI,
 
-  // Retry failed tests in CI
-  retries: process.env.CI ? 2 : 0,
+  // No retries anywhere. A test that failed twice and passed on the third
+  // attempt used to be reported green, which made "green in CI" a weaker
+  // claim than "green locally". Retrying preflight was worse still: a
+  // misconfigured tenant does not become correct on the second attempt, and
+  // retrying a rate-limited sign-in makes the rate limit worse.
+  retries: 0,
 
   // Run tests in parallel — CI runners have 2 vCPUs
   workers: process.env.CI ? 2 : undefined,
@@ -151,14 +173,17 @@ export default defineConfig({
     // The production build is served with a self-signed cert (see above).
     ignoreHTTPSErrors: PRODUCTION_BUILD,
 
-    // Collect trace on failure
-    trace: 'on-first-retry',
+    // Retries are zero, so `on-first-retry` would never record anything —
+    // a red run would leave only the text log and a screenshot.
+    trace: 'retain-on-failure',
 
     // Screenshot on failure
     screenshot: 'only-on-failure',
 
-    // Video on failure
-    video: 'on-first-retry',
+    // Off rather than `retain-on-failure`: the trace already carries the
+    // screenshots, the DOM and the network for a failed test, and video is
+    // the expensive half of that.
+    video: 'off',
 
     // Extra HTTP headers
     extraHTTPHeaders: {
@@ -171,13 +196,13 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: PREFLIGHT_FILES,
+      testIgnore: [PREFLIGHT_FILES, ORDERS_FILES],
       dependencies: PREFLIGHT_PROJECT_NAMES,
     },
     {
       name: 'Mobile Chrome',
       use: { ...devices['Pixel 5'] },
-      testIgnore: PREFLIGHT_FILES,
+      testIgnore: [PREFLIGHT_FILES, ORDERS_FILES],
       dependencies: PREFLIGHT_PROJECT_NAMES,
     },
     // WebKit is Safari's engine. Some CSP/nonce defects (e.g. a duplicate
@@ -188,8 +213,28 @@ export default defineConfig({
     {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
-      testIgnore: PREFLIGHT_FILES,
+      testIgnore: [PREFLIGHT_FILES, ORDERS_FILES],
       dependencies: PREFLIGHT_PROJECT_NAMES,
+    },
+    // Places a real order on the tenant under test. Never run by ci.yml or
+    // e2e-full.yml — only by e2e-order-placement.yml, by hand, and only when
+    // E2E_ALLOW_ORDERS_FOR names the tenant the origin resolves to.
+    {
+      name: 'orders',
+      testMatch: /e2e\/orders\/.*\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: PREFLIGHT_PROJECT_NAMES,
+      // Restated rather than inherited from the global zero: here a retry is a
+      // second real order, so a later change to the global must not take this
+      // project with it without someone reading this line.
+      retries: 0,
+      // The spec gives the platform 120s to make the order readable, and the
+      // rest of the journey — discovering a product, the cart, checkout, the
+      // confirmation, the list and the order detail — costs another 40 to 60s.
+      // At 180000 Playwright would kill the test before the budget could be
+      // exceeded, reporting its own timeout instead of the measured wait, which
+      // is the one number the run exists to produce. Moves when the budget moves.
+      timeout: 300000,
     },
   ],
 
@@ -212,7 +257,10 @@ export default defineConfig({
         // E2E=1 disables the dev overlays (see nuxt.config.ts). Only applies when
         // Playwright starts the server — otherwise use `E2E=1 pnpm dev`.
         // The TLS pair makes `pnpm preview` serve https (see tlsEnv above).
-        env: { E2E: '1', ...tlsEnv() },
+        // The configurator fixture: the suite runs against the same backend
+        // the dev environment does, whether the server is a dev boot or a
+        // production build (E2E_PROD).
+        env: { E2E: '1', NUXT_CONFIGURATOR_BACKEND: 'fixture', ...tlsEnv() },
         reuseExistingServer: !process.env.CI,
         // A local production build (E2E_PROD) needs much longer than a dev boot.
         timeout: process.env.E2E_PROD ? 360000 : 120000,

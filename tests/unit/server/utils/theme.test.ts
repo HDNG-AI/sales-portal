@@ -38,8 +38,24 @@ describe('deriveThemeColors surface forwarding', () => {
     expect(result.buttonPurchaseBackground).toBe('');
   });
 
-  it('returns 40 keys total (32 standard + 8 surfaces)', () => {
+  it('provides semantic success and warning defaults', () => {
     const result = deriveThemeColors({ ...coreColors });
-    expect(Object.keys(result)).toHaveLength(40);
+    expect(result.success).toBe('oklch(0.527 0.154 150.069)');
+    expect(result.warning).toBe('oklch(0.555 0.163 48.998)');
+  });
+
+  it('preserves tenant-provided semantic success and warning colors', () => {
+    const result = deriveThemeColors({
+      ...coreColors,
+      success: '#1E7B45',
+      warning: '#B87400',
+    });
+    expect(result.success).toBe('#1E7B45');
+    expect(result.warning).toBe('#B87400');
+  });
+
+  it('returns 42 keys total (34 standard/semantic + 8 surfaces)', () => {
+    const result = deriveThemeColors({ ...coreColors });
+    expect(Object.keys(result)).toHaveLength(42);
   });
 });

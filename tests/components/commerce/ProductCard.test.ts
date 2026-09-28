@@ -1,6 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  assert,
+} from 'vitest';
 import { mountComponent } from '../../utils/component';
 import ProductCard from '../../../app/components/shared/ProductCard.vue';
+import type { PublicTenantConfig } from '#shared/types/tenant-config';
 import { useTenant } from '../../../app/composables/useTenant';
 import { mockIsCatalogMode } from '../../setup-components';
 
@@ -11,6 +20,14 @@ import { ref } from 'vue';
 // useTenant is mocked globally in setup-components.ts.
 // Access the tenant ref to mutate features in individual tests.
 const { tenant } = useTenant();
+
+// `useTenant()` types `tenant` as nullable because the real composable fills it
+// from useFetch. The setup-components mock always provides one, so assert it
+// here once instead of reaching for `!` at each site.
+function setFeatures(features: PublicTenantConfig['features']) {
+  assert.isDefined(tenant.value);
+  tenant.value.features = features;
+}
 
 const mockCanAccess = vi.fn(() => true);
 
@@ -70,6 +87,30 @@ const stubs = {
     template: '<span class="price-display" />',
     props: ['price'],
   },
+  PriceSlot: {
+    template:
+      '<span class="price-slot" :data-mode="mode"><span v-if="mode === \'list\' || mode === \'contract\'" class="price-display" /><span v-else-if="mode === \'hidden\'" class="price-login" /></span>',
+    props: [
+      'mode',
+      'price',
+      'returnTo',
+      'lowestPrice',
+      'discountType',
+      'campaignNames',
+    ],
+  },
+  SharedPriceSlot: {
+    template:
+      '<span class="price-slot" :data-mode="mode"><span v-if="mode === \'list\' || mode === \'contract\'" class="price-display" /><span v-else-if="mode === \'hidden\'" class="price-login" /></span>',
+    props: [
+      'mode',
+      'price',
+      'returnTo',
+      'lowestPrice',
+      'discountType',
+      'campaignNames',
+    ],
+  },
   StockBadge: {
     template: '<span class="stock-badge" />',
     props: ['stock', 'size'],
@@ -128,6 +169,9 @@ describe('ProductCard', () => {
     mockAddItem.mockReset();
     mockToggle.mockReset();
     mockIsFavorite.mockReset().mockReturnValue(false);
+    mockCanAccess.mockReset().mockReturnValue(true);
+    mockIsAuthenticated.value = true;
+    setFeatures({});
   });
 
   it('renders product name', () => {
@@ -238,12 +282,35 @@ describe('ProductCard', () => {
   });
 
   it('renders wishlist button when feature is enabled', () => {
-    tenant.value.features = { wishlist: { enabled: true } };
+    setFeatures({ wishlist: { enabled: true } });
     const wrapper = mountComponent(ProductCard, {
       props: { product: makeProduct() },
       global: { stubs },
     });
     expect(wrapper.find('[data-testid="wishlist-button"]').exists()).toBe(true);
+  });
+
+  it('keeps wishlist available while anonymous so the local list survives login', () => {
+    setFeatures({ wishlist: { enabled: true } });
+    mockIsAuthenticated.value = false;
+    const wrapper = mountComponent(ProductCard, {
+      props: { product: makeProduct() },
+      global: { stubs },
+    });
+    expect(wrapper.find('[data-testid="wishlist-button"]').exists()).toBe(true);
+  });
+
+  it('renders the hidden-price login slot when price access requires authentication', () => {
+    setFeatures({
+      priceVisibility: { enabled: true, access: 'authenticated' },
+    });
+    mockCanAccess.mockReturnValue(false);
+    const wrapper = mountComponent(ProductCard, {
+      props: { product: makeProduct() },
+      global: { stubs },
+    });
+    expect(wrapper.find('.price-login').exists()).toBe(true);
+    expect(wrapper.find('.price-display').exists()).toBe(false);
   });
 
   it('applies grid variant by default', () => {
@@ -300,6 +367,7 @@ describe('ProductCard', () => {
       });
       const badges = wrapper.findAll('[data-testid="campaign-badge"]');
       expect(badges.length).toBe(1);
+      assert.isDefined(badges[0]);
       expect(badges[0].text()).toBe('Summer Sale');
     });
 
@@ -352,17 +420,18 @@ describe('ProductCard', () => {
       });
       const badges = wrapper.findAll('[data-testid="campaign-badge"]');
       expect(badges.length).toBe(1);
+      assert.isDefined(badges[0]);
       expect(badges[0].text()).toBe('List Sale');
     });
   });
 
   describe('wishlist', () => {
     afterEach(() => {
-      tenant.value.features = {};
+      setFeatures({});
     });
 
     it('hides wishlist button when feature is disabled', () => {
-      tenant.value.features = {};
+      setFeatures({});
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct() },
         global: { stubs },
@@ -372,21 +441,21 @@ describe('ProductCard', () => {
       );
     });
 
-    it('hides wishlist button for unauthenticated users even when feature is enabled', () => {
-      tenant.value.features = { wishlist: { enabled: true } };
+    it('keeps wishlist button available for unauthenticated users', () => {
+      setFeatures({ wishlist: { enabled: true } });
       mockIsAuthenticated.value = false;
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct() },
         global: { stubs },
       });
       expect(wrapper.find('[data-testid="wishlist-button"]').exists()).toBe(
-        false,
+        true,
       );
       mockIsAuthenticated.value = true;
     });
 
     it('shows wishlist button when feature is enabled', () => {
-      tenant.value.features = { wishlist: { enabled: true } };
+      setFeatures({ wishlist: { enabled: true } });
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct() },
         global: { stubs },
@@ -397,7 +466,7 @@ describe('ProductCard', () => {
     });
 
     it('does not toggle favorites on click (opens picker dialog instead)', async () => {
-      tenant.value.features = { wishlist: { enabled: true } };
+      setFeatures({ wishlist: { enabled: true } });
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct({ alias: 'my-product' }) },
         global: { stubs },
@@ -409,7 +478,7 @@ describe('ProductCard', () => {
     });
 
     it('shows filled star when product is a favorite', () => {
-      tenant.value.features = { wishlist: { enabled: true } };
+      setFeatures({ wishlist: { enabled: true } });
       mockIsFavorite.mockReturnValue(true);
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct() },
@@ -420,7 +489,7 @@ describe('ProductCard', () => {
     });
 
     it('shows unfilled star when product is not a favorite', () => {
-      tenant.value.features = { wishlist: { enabled: true } };
+      setFeatures({ wishlist: { enabled: true } });
       mockIsFavorite.mockReturnValue(false);
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct() },
@@ -433,12 +502,12 @@ describe('ProductCard', () => {
 
   describe('feature flags', () => {
     afterEach(() => {
-      tenant.value.features = {};
+      setFeatures({});
       mockCanAccess.mockReturnValue(true);
     });
 
     it('shows add-to-cart when pricing is not configured', () => {
-      tenant.value.features = {};
+      setFeatures({});
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct() },
         global: { stubs },
@@ -449,7 +518,7 @@ describe('ProductCard', () => {
     });
 
     it('hides add-to-cart when pricing is restricted', () => {
-      tenant.value.features = { priceVisibility: { enabled: true } };
+      setFeatures({ priceVisibility: { enabled: true } });
       mockCanAccess.mockReturnValue(false);
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct() },
@@ -461,7 +530,7 @@ describe('ProductCard', () => {
     });
 
     it('shows add-to-cart when pricing is accessible', () => {
-      tenant.value.features = { priceVisibility: { enabled: true } };
+      setFeatures({ priceVisibility: { enabled: true } });
       mockCanAccess.mockReturnValue(true);
       const wrapper = mountComponent(ProductCard, {
         props: { product: makeProduct() },

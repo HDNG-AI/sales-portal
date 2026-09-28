@@ -24,7 +24,7 @@ function formatNow(): string {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: timezone.value,
+    ...(timezone.value ? { timeZone: timezone.value } : {}),
   });
 }
 

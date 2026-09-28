@@ -85,7 +85,11 @@ watch(products, async (list) => {
 </script>
 
 <template>
-  <div v-if="data.title || products?.length" class="space-y-6">
+  <div
+    v-if="data.title || products?.length"
+    class="space-y-6"
+    data-slot="cms-products"
+  >
     <div v-if="data.title" class="flex items-center justify-between">
       <h2 class="font-heading text-2xl font-bold">{{ data.title }}</h2>
     </div>
@@ -154,6 +158,7 @@ watch(products, async (list) => {
     <!-- Grid mode (default): responsive rows of product cards. -->
     <div
       v-else-if="products?.length"
+      data-slot="product-grid"
       class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4"
     >
       <ProductCard

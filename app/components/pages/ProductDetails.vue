@@ -5,7 +5,6 @@ import type { ContentAreaType } from '#shared/types/cms';
 import { CMS_SLOTS } from '#shared/types/cms-slots';
 import { BADGE_DESTRUCTIVE } from '~/lib/badge-styles';
 import {
-  AlertTriangle as AlertTriangleIcon,
   BadgeCheck,
   Download,
   ListPlus,
@@ -14,85 +13,36 @@ import {
 } from 'lucide-vue-next';
 import { useCartStore } from '~/stores/cart';
 import { useFavoritesStore } from '~/stores/favorites';
-import { useAuthStore } from '~/stores/auth';
 import {
   productPath as buildProductPath,
   categoryPath,
 } from '#shared/utils/route-helpers';
-import { recoverEntityUrl } from '~/composables/useEntityUrlRecovery';
+import { ancestorCrumbs } from '#shared/utils/breadcrumb-trail';
 
 const props = defineProps<{
+  product: DetailProduct;
+  /**
+   * The alias from the URL, which is not always the loaded product's own:
+   * under a locale fallback the default-language product answers at the
+   * requested address. Every request built below keeps asking under the
+   * address the visitor is on.
+   */
   alias: string;
 }>();
 
+// The route loads the product and hands it down. It keeps the name `product`
+// so everything below reads as it did when the fetch lived here — and it is a
+// computed, so a locale switch that swaps the product inside this same
+// instance still moves the watches. A different alias remounts the page.
+const product = computed(() => props.product);
 const slug = computed(() => props.alias);
 
 const { localeQuery, localePath } = useLocaleMarket();
-// Visibility flags gate the price/stock blocks in the top area. PriceDisplay
-// and StockBadge render an empty root when hidden, so without these the empty
-// containers still take gap-6 spacing and leave a gap above the variant
-// selector. Gating here keeps those blocks out of the layout entirely.
-const { showPrice } = usePriceVisibility();
+// Visibility flags gate price/stock output. PriceSlot deliberately remains in
+// the layout when an authenticated price can be unlocked, replacing the old
+// empty hole with an in-context login action while keeping geometry stable.
+const { showPrice, canUnlockByAuth } = usePriceVisibility();
 const { showStock } = useStockVisibility();
-
-const {
-  data: product,
-  error,
-  status,
-} = await useFetch<DetailProduct>(() => `/api/products/${slug.value}`, {
-  query: localeQuery,
-  dedupe: 'defer',
-});
-
-// On a content miss (missing product or fetch error) the old slug may be a
-// renamed/old product that should 301 to its canonical instead of 404ing
-// (Problem B). recoverEntityUrl consults the resolver, 301s to the canonical
-// (or a urlHistory redirect), and throws a fatal 404 only on a terminal miss.
-// Kept in the setup await position so the redirect/404 carries a real SSR
-// status before render. Without this, crawlers would index phantom URLs.
-if (error.value || !product.value?.productId) {
-  await recoverEntityUrl(useRoute().path);
-}
-
-const isLoading = computed(() => status.value === 'pending');
-
-// When the loaded product's canonicalUrl differs from the URL the user is
-// on, issue a real 301 to the canonical. Geins returns prefix-less
-// canonicals (e.g. /se/sv/material/grenror/grenror-150-150-88) that 404 on
-// refresh, so we normalize the canonical to the ROUTABLE /p/ form via the
-// route helper rather than redirecting to the raw value. navigateTo is
-// SSR-safe and crawler-grade (a single clean render at the final URL with no
-// hydration risk), so this replaces the former client-only
-// history.replaceState. Only fires when the canonical stays in the same
-// /market/locale/ prefix; a fallback that crossed locales (server served
-// default-language content on a missing-translation request) must not yank the
-// user back out of the locale they asked for, so samePrefix is checked on the
-// RAW canonical before normalizing. No-op when the routable target equals the
-// current path (loop guard).
-{
-  const canonical = product.value?.canonicalUrl;
-  const path = useRoute().path;
-  if (
-    canonical &&
-    typeof canonical === 'string' &&
-    samePrefix(canonical, path)
-  ) {
-    const routable = localePath(buildProductPath(canonical));
-    if (routable !== path) {
-      await navigateTo(routable, { redirectCode: 301, replace: true });
-    }
-  }
-}
-
-// Returns true when both paths share the same /market/locale/ prefix, or
-// when either is too short to have one. Used to suppress the canonical 301
-// when a locale fallback returned a canonicalUrl in a different locale.
-function samePrefix(a: string, b: string): boolean {
-  const aSeg = a.split('/').slice(1, 3);
-  const bSeg = b.split('/').slice(1, 3);
-  if (aSeg.length < 2 || bSeg.length < 2) return true;
-  return aSeg[0] === bSeg[0] && aSeg[1] === bSeg[1];
-}
 
 const { data: related } = useFetch<ListProduct[]>(
   () => `/api/products/${slug.value}/related`,
@@ -167,7 +117,6 @@ const quantity = ref(1);
 
 const cartStore = useCartStore();
 const favoritesStore = useFavoritesStore();
-const authStore = useAuthStore();
 const { hasFeature, isCatalogMode } = useTenant();
 const { buildProductImageAlt } = useProductImageAlt();
 const { canAccess } = useFeatureAccess();
@@ -302,7 +251,10 @@ interface VariantMetaProduct {
   alias?: string | null;
   name?: string | null;
   articleNumber?: string | null;
-  unitPrice?: { sellingPriceIncVatFormatted?: string | null } | null;
+  unitPrice?: {
+    sellingPriceIncVatFormatted?: string | null;
+    sellingPriceExVatFormatted?: string | null;
+  } | null;
 }
 
 const { data: siblingProducts, execute: fetchSiblings } = useFetch<{
@@ -324,28 +276,29 @@ watch(
   { immediate: true },
 );
 
-const variantProductsByAlias = computed<
-  Record<
-    string,
-    {
-      priceFormatted?: string | null;
-      articleNumber?: string | null;
-      name?: string | null;
-    }
-  >
->(() => {
-  const map: Record<
-    string,
-    {
-      priceFormatted?: string | null;
-      articleNumber?: string | null;
-      name?: string | null;
-    }
-  > = {};
+// Both VAT variants travel to the sheet: the row picks between them from the
+// buyer's switcher, so deciding here would put the rows out of step with the
+// main price on the same page.
+type VariantRowMeta = {
+  priceIncVatFormatted?: string | null;
+  priceExVatFormatted?: string | null;
+  articleNumber?: string | null;
+  name?: string | null;
+};
+
+const variantProductsByAlias = computed<Record<string, VariantRowMeta>>(() => {
+  const map: Record<string, VariantRowMeta> = {};
   for (const p of siblingProducts.value?.products ?? []) {
     if (!p?.alias) continue;
     map[p.alias] = {
-      priceFormatted: p.unitPrice?.sellingPriceIncVatFormatted ?? null,
+      // Both VAT modes, so the selector can render the buyer's chosen one
+      // (upstream #335) — still behind this fork's price gate.
+      priceIncVatFormatted: showPrice.value
+        ? (p.unitPrice?.sellingPriceIncVatFormatted ?? null)
+        : null,
+      priceExVatFormatted: showPrice.value
+        ? (p.unitPrice?.sellingPriceExVatFormatted ?? null)
+        : null,
       articleNumber: p.articleNumber ?? null,
       name: p.name ?? null,
     };
@@ -422,21 +375,39 @@ const visibleCampaigns = computed(() =>
   filterVisibleCampaigns(product.value?.discountCampaigns ?? []),
 );
 
+const priceSlotMode = computed<'contract' | 'list' | 'hidden' | null>(() => {
+  if (showPrice.value) {
+    return product.value?.discountType === 'EXTERNAL' ? 'contract' : 'list';
+  }
+  return canUnlockByAuth.value ? 'hidden' : null;
+});
+
 // Breadcrumbs
 const { t } = useI18n();
 
+// The trail follows the PRIMARY category's path, always — not the category the
+// visitor navigated in from. A product has one place it lives, so the trail,
+// the canonical URL and the structured data agree; a visitor arriving from a
+// secondary category sees a trail that does not mention it, deliberately.
+//
+// Ancestors are walked server-side out of the category closure the product
+// response already carries, so there is no request here. The category's own
+// href comes from its canonicalUrl: rebuilding it from the bare alias produced
+// `/c/<alias>`, which answers 301 on every nested category.
 const breadcrumbItems = computed(() => {
   const items: { label: string; href?: string }[] = [
     { label: t('common.home'), href: localePath('/') },
   ];
 
-  // Extract category from the product's primaryCategory if available
+  items.push(...ancestorCrumbs(product.value?.ancestors, localePath));
+
   const category = product.value?.primaryCategory;
   if (category?.name) {
-    const catAlias = category.alias || category.name.toLowerCase();
     items.push({
       label: category.name,
-      href: localePath(categoryPath(`/${catAlias}`)),
+      href: localePath(
+        categoryPath(category.canonicalUrl || `/${category.alias ?? ''}`),
+      ),
     });
   }
 
@@ -448,101 +419,26 @@ const breadcrumbItems = computed(() => {
 });
 
 // SEO
-const plainDescription = computed(
-  () =>
-    product.value?.texts?.text1?.replace(/<[^>]*>/g, '').slice(0, 160) ?? '',
-);
-
-const primaryImageUrl = computed(
-  () =>
-    product.value?.productImages?.find((i) => i.isPrimary)?.url ??
-    product.value?.productImages?.[0]?.url ??
-    '',
-);
-
 const productPath = computed(() => `/p/${slug.value}`);
 // localeAlternates holds the real per-locale slugs published by setAlternates
 // above (populated with immediate:true so the watch fires before this line).
 // It is useState-backed (SSR-safe, no window) and reactive so hreflang stays
 // correct after client-side navigation without any hydration mismatch.
-const { seoLinks } = useSeoLinks(productPath, localeAlternates);
-
-useHead({
-  title: () => product.value?.name ?? '',
+useProductSeo({
+  product: () => product.value,
+  path: () => productPath.value,
+  breadcrumbs: () => breadcrumbItems.value,
+  localeAlternates,
+  sku: () => resolvedSku.value?.skuId?.toString() ?? '',
+  // A getter, not `true`: this fork hides prices from unauthenticated
+  // buyers, and an offers block for a price the page does not show would
+  // be a schema.org claim the page cannot back up.
+  withOffers: () => showPrice.value,
 });
-
-useSeoMeta({
-  description: () => plainDescription.value,
-  ogTitle: () => product.value?.name ?? '',
-  ogDescription: () => plainDescription.value,
-  ogImage: () => primaryImageUrl.value || undefined,
-  ogUrl: () => seoLinks.value.find((l) => l.rel === 'canonical')?.href ?? '',
-});
-
-// JSON-LD structured data (Schema.org Product + BreadcrumbList)
-useSchemaOrg([
-  defineProduct({
-    name: () => product.value?.name ?? '',
-    description: () => plainDescription.value,
-    image: () =>
-      product.value?.productImages?.map((img) => img.url).filter(Boolean) ?? [],
-    brand: () =>
-      product.value?.brand?.name
-        ? { '@type': 'Brand', name: product.value.brand.name }
-        : undefined,
-    sku: () => resolvedSku.value?.skuId?.toString() ?? '',
-    offers: () =>
-      product.value?.unitPrice
-        ? {
-            '@type': 'Offer' as const,
-            price: product.value.unitPrice.sellingPriceIncVat ?? 0,
-            priceCurrency: product.value.unitPrice.currency?.code ?? 'SEK',
-            availability: product.value.totalStock?.inStock
-              ? 'https://schema.org/InStock'
-              : 'https://schema.org/OutOfStock',
-            itemCondition: 'https://schema.org/NewCondition',
-          }
-        : undefined,
-    aggregateRating: () =>
-      product.value?.rating?.reviewCount
-        ? {
-            '@type': 'AggregateRating' as const,
-            ratingValue: product.value.rating.averageRating ?? 0,
-            reviewCount: product.value.rating.reviewCount,
-          }
-        : undefined,
-  }),
-  defineBreadcrumb({
-    itemListElement: () =>
-      breadcrumbItems.value.map((bc, i) => ({
-        '@type': 'ListItem' as const,
-        position: i + 1,
-        name: bc.label,
-        item: bc.href,
-      })),
-  }),
-]);
 </script>
 
 <template>
-  <!-- Loading skeleton -->
-  <ProductDetailsSkeleton
-    v-if="isLoading && !product"
-    data-testid="pdp-loading"
-  />
-
-  <!-- Error state -->
-  <EmptyState
-    v-else-if="error"
-    :icon="AlertTriangleIcon"
-    :title="$t('product.failed_to_load')"
-    :description="$t('common.something_went_wrong')"
-    action-label="Home"
-    :action-to="localePath('/')"
-    data-testid="pdp-error"
-  />
-
-  <div v-else-if="product" class="px-4 py-8 lg:px-6">
+  <div class="px-4 py-8 lg:px-6">
     <div class="mx-auto max-w-7xl space-y-8">
       <!-- Print-only header: store logo + timestamp + product URL.
          Hidden on screen, shown via @media print. -->
@@ -551,63 +447,21 @@ useSchemaOrg([
       <!-- Breadcrumbs -->
       <AppBreadcrumbs v-if="breadcrumbItems.length" :items="breadcrumbItems" />
 
-      <!-- PDP top area: 3-column layout per Figma
-         lg+: gallery (max 400) | main info | right card
-         md:  gallery + info on first row, right card below
-         mobile: stacked single column -->
-      <div
-        class="bg-card grid gap-6 rounded-lg border p-4 md:p-6 lg:grid-cols-[400px_1fr_265px] lg:gap-10"
-        data-testid="pdp-top-area"
-      >
-        <!-- Left: Gallery -->
-        <ErrorBoundary section="product-gallery">
-          <ProductGallery
-            v-if="product.productImages?.length"
-            :images="product.productImages"
-            :product-name="product.name ?? ''"
-            class="w-full max-w-[400px]"
-          />
-        </ErrorBoundary>
-
-        <!-- Middle: Product info -->
-        <div class="flex flex-col gap-6">
-          <!-- Product name + meta -->
-          <div class="flex flex-col gap-1">
-            <h1
-              class="font-heading my-[15px] text-3xl leading-tight font-bold"
-              data-testid="product-name"
-            >
-              {{ product.name }}
-            </h1>
-
-            <!-- Article number -->
-            <p
-              v-if="product.articleNumber"
-              class="text-muted-foreground text-[20px]"
-              data-testid="product-article-number"
-            >
-              Art nr. {{ product.articleNumber }}
-            </p>
-
-            <!-- Brand -->
-            <p
-              v-if="product.brand?.name"
-              class="text-muted-foreground"
-              data-testid="product-brand"
-            >
-              {{ product.brand.name }}
-            </p>
-          </div>
-
+      <ProductTopArea :product="product">
+        <template #info>
           <!-- Price: sits above the long-form description so the dominant
              commerce signal anchors the column. -->
-          <PriceDisplay
-            v-if="product.unitPrice && showPrice"
+          <PriceSlot
+            v-if="
+              priceSlotMode && (product.unitPrice || priceSlotMode === 'hidden')
+            "
+            :mode="priceSlotMode"
             :price="product.unitPrice"
             :lowest-price="product.lowestPrice"
             :discount-type="product.discountType"
             :campaign-names="visibleCampaigns.map((c) => c.name)"
             class="text-2xl font-bold"
+            testid="pdp-price"
           />
 
           <!-- Text 3: extra detail copy under the price -->
@@ -636,7 +490,7 @@ useSchemaOrg([
 
           <!-- Negotiated price info banner -->
           <div
-            v-if="product.discountType === 'EXTERNAL'"
+            v-if="product.discountType === 'EXTERNAL' && showPrice"
             class="flex items-center gap-2 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800"
             data-testid="negotiated-price-banner"
           >
@@ -661,16 +515,22 @@ useSchemaOrg([
             :skus="product.skus ?? []"
             :product-images="product.productImages ?? []"
             :product-name="product.name ?? ''"
-            :price-formatted="
-              product.unitPrice?.sellingPriceIncVatFormatted ?? null
+            :price-inc-vat-formatted="
+              showPrice
+                ? (product.unitPrice?.sellingPriceIncVatFormatted ?? null)
+                : null
+            "
+            :price-ex-vat-formatted="
+              showPrice
+                ? (product.unitPrice?.sellingPriceExVatFormatted ?? null)
+                : null
             "
             :product-article-number="product.articleNumber ?? null"
             :variant-products="variantProductsByAlias"
           />
-        </div>
+        </template>
 
-        <!-- Right: actions + info card -->
-        <aside class="flex flex-col gap-4">
+        <template #aside>
           <!-- Quantity + Add to cart + Wishlist -->
           <template v-if="canPurchase">
             <OutOfStockBlock v-if="isOutOfStock" />
@@ -724,7 +584,7 @@ useSchemaOrg([
               <span>{{ $t('product.download_data_sheet') }}</span>
             </button>
             <button
-              v-if="hasFeature('wishlist') && authStore.isAuthenticated"
+              v-if="hasFeature('wishlist')"
               type="button"
               class="text-muted-foreground hover:text-foreground flex items-center gap-2 py-2.5 text-left text-[13px] transition-colors"
               data-testid="pdp-save-favourite"
@@ -740,7 +600,6 @@ useSchemaOrg([
               </span>
             </button>
             <button
-              v-if="authStore.isAuthenticated"
               type="button"
               class="text-muted-foreground hover:text-foreground flex items-center gap-2 py-2.5 text-left text-[13px] transition-colors"
               data-testid="pdp-add-to-lists"
@@ -770,8 +629,8 @@ useSchemaOrg([
               </span>
             </NuxtLink>
           </div>
-        </aside>
-      </div>
+        </template>
+      </ProductTopArea>
 
       <!-- Product tabs (full width) -->
       <ErrorBoundary section="product-tabs">

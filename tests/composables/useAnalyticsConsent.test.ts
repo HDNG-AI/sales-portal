@@ -1,10 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, computed as vueComputed } from 'vue';
 
-// Track useStorage calls
+// Track useStorage calls. Cached by key, because the real useStorage returns
+// the SAME ref for a given key — a fresh ref per call would hand the footer
+// link and the banner independent copies of a value they must share.
+const storageRefs = new Map<
+  string,
+  ReturnType<typeof ref<'accepted' | 'declined' | null>>
+>();
 const useStorageSpy = vi.fn(
-  (_key: string, defaultValue: 'accepted' | 'declined' | null) =>
-    ref(defaultValue),
+  (key: string, defaultValue: 'accepted' | 'declined' | null) => {
+    const existing = storageRefs.get(key);
+    if (existing) return existing;
+    const created = ref(defaultValue);
+    storageRefs.set(key, created);
+    return created;
+  },
 );
 
 vi.mock('@vueuse/core', () => ({
@@ -19,10 +30,40 @@ const mockUseTenant = () => ({
   tenantId: mockTenantId,
 });
 
+// useState is Nuxt's SSR-safe shared ref. A plain ref per key is enough here:
+// the composable only needs the reopened flag to survive within one caller,
+// and the store is cleared between tests so nothing leaks across them.
+const nuxtState = new Map<string, ReturnType<typeof ref<boolean>>>();
+const mockUseState = (key: string, init: () => boolean) => {
+  const existing = nuxtState.get(key);
+  if (existing) return existing;
+  const created = ref(init());
+  nuxtState.set(key, created);
+  return created;
+};
+
 vi.mock('#imports', () => ({
   useTenant: () => mockUseTenant(),
   computed: (fn: () => unknown) => vueComputed(fn),
+  useState: (key: string, init: () => boolean) => mockUseState(key, init),
 }));
+
+// The auto-imported useState resolves through #app/composables/state, not
+// #imports — without this the real one runs and asks for a Nuxt instance.
+vi.mock('#app/composables/state', () => ({
+  useState: (key: string, init: () => boolean) => mockUseState(key, init),
+}));
+
+// Withdrawal has to clear what was already dropped, not just stop the next
+// injection — spied rather than exercised, since the clearing itself is
+// covered against a real document in tests/unit/tracking-cookies.test.ts.
+const clearTrackingCookiesSpy = vi.fn(() => [] as string[]);
+vi.mock('../../app/utils/tracking-cookies', () => ({
+  clearTrackingCookies: () => clearTrackingCookiesSpy(),
+}));
+vi.stubGlobal('useState', (key: string, init: () => boolean) =>
+  mockUseState(key, init),
+);
 
 vi.mock('../../app/composables/useTenant', () => ({
   useTenant: () => mockUseTenant(),
@@ -33,8 +74,10 @@ describe('useAnalyticsConsent', () => {
 
   beforeEach(async () => {
     useStorageSpy.mockClear();
-    useStorageSpy.mockImplementation((_key, defaultValue) => ref(defaultValue));
+    storageRefs.clear();
     mockTenantId.value = 'test-tenant';
+    nuxtState.clear();
+    clearTrackingCookiesSpy.mockClear();
 
     vi.resetModules();
     const mod = await import('../../app/composables/useAnalyticsConsent');
@@ -92,5 +135,66 @@ describe('useAnalyticsConsent', () => {
       'analytics-consent-other-tenant',
       null,
     );
+  });
+
+  it('isPrompting is true before any choice and false once one is stored', () => {
+    const { isPrompting, accept } = useAnalyticsConsent();
+    expect(isPrompting.value).toBe(true);
+    accept();
+    expect(isPrompting.value).toBe(false);
+  });
+
+  it('reopen() prompts again without discarding the stored choice', () => {
+    // The whole point: a visitor reopening the banner to reconsider must not
+    // have their existing answer wiped just by looking at it.
+    const { isPrompting, consent, hasInteracted, accept, reopen } =
+      useAnalyticsConsent();
+    accept();
+    expect(isPrompting.value).toBe(false);
+
+    reopen();
+
+    expect(isPrompting.value).toBe(true);
+    expect(consent.value).toBe(true);
+    expect(hasInteracted.value).toBe(true);
+  });
+
+  it('revoking from a reopened banner withdraws consent and closes it', () => {
+    const { isPrompting, consent, accept, reopen, revoke } =
+      useAnalyticsConsent();
+    accept();
+    reopen();
+
+    revoke();
+
+    expect(consent.value).toBe(false);
+    expect(isPrompting.value).toBe(false);
+  });
+
+  it('shares the reopened flag across callers', () => {
+    // The footer link and the banner are separate components; one calling
+    // reopen() has to be visible to the other.
+    const link = useAnalyticsConsent();
+    const banner = useAnalyticsConsent();
+    link.accept();
+    expect(banner.isPrompting.value).toBe(false);
+
+    link.reopen();
+
+    expect(banner.isPrompting.value).toBe(true);
+  });
+
+  it('revoke() clears the cookies already set', () => {
+    const { revoke } = useAnalyticsConsent();
+    revoke();
+    expect(clearTrackingCookiesSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('accept() clears nothing', () => {
+    // Consenting is not a reason to drop anything, and clearing here would
+    // wipe the identifiers a returning visitor already agreed to.
+    const { accept } = useAnalyticsConsent();
+    accept();
+    expect(clearTrackingCookiesSpy).not.toHaveBeenCalled();
   });
 });

@@ -71,7 +71,7 @@ describe('CreateTenantSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts a payload with timezone omitted (createTenant defaults it to UTC)', () => {
+  it('accepts a payload with timezone omitted, substituting no zone', () => {
     const result = CreateTenantSchema.safeParse({ hostname: 'a.example.com' });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.timezone).toBeUndefined();

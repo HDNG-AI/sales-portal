@@ -97,17 +97,26 @@ describe('PriceDisplay (unit)', () => {
   });
 
   describe('price visibility', () => {
-    it('renders nothing when price is hidden, regardless of auth-unlock flag', () => {
+    it('shows login CTA when auth can unlock a hidden price', () => {
       showPriceRef.value = false;
-      for (const flag of [true, false]) {
-        canUnlockByAuthRef.value = flag;
-        const wrapper = mount(PriceDisplay.default, {
-          props: { price: makePrice() },
-          ...globalMounts,
-        });
-        expect(wrapper.text()).not.toContain('product.login_for_prices');
-        expect(wrapper.text()).not.toContain('100 kr');
-      }
+      canUnlockByAuthRef.value = true;
+      const wrapper = mount(PriceDisplay.default, {
+        props: { price: makePrice() },
+        ...globalMounts,
+      });
+      expect(wrapper.text()).toContain('product.login_for_prices');
+      expect(wrapper.text()).not.toContain('100 kr');
+    });
+
+    it('renders no price CTA when hidden pricing cannot be unlocked by auth', () => {
+      showPriceRef.value = false;
+      canUnlockByAuthRef.value = false;
+      const wrapper = mount(PriceDisplay.default, {
+        props: { price: makePrice() },
+        ...globalMounts,
+      });
+      expect(wrapper.text()).not.toContain('product.login_for_prices');
+      expect(wrapper.text()).not.toContain('100 kr');
     });
 
     it('shows price when showPrice is true', () => {

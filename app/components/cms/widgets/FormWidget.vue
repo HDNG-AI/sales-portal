@@ -18,12 +18,12 @@ import type {
 import type { SupportedLocale } from '#shared/utils/locale-market';
 import { getCountryOptions } from '~/utils/country-options';
 import { buildMailto } from '~/utils/mailto';
-import { safeLocationRedirect } from '~/utils/client-helpers';
 import {
   HONEYPOT_FIELDS,
   FORM_STARTED_AT_FIELD,
   FORM_DURATION_FIELD,
 } from '#shared/utils/form-post';
+import { safeLocationRedirect } from '~/utils/client-helpers';
 
 const props = defineProps<{
   data: FormWidgetData;
@@ -39,9 +39,6 @@ const countryOptions = computed(() =>
 );
 
 const formValues = reactive<Record<string, string>>({});
-// Checkbox values are kept apart from text: a group shares one name and holds
-// several values, which the flat string map cannot express.
-const checkedValues = reactive<Record<string, boolean>>({});
 const honeypotValues = reactive<Record<string, string>>(
   Object.fromEntries(HONEYPOT_FIELDS.map((name) => [name, ''])),
 );
@@ -54,6 +51,18 @@ const submitted = ref(false);
 onMounted(() => {
   startedAt.value = Date.now();
 });
+// Checkboxes are kept apart from the text map: a group shares one name and
+// holds several values at once, which a flat string map cannot express.
+const checkedValues = reactive<Record<string, boolean>>({});
+
+/**
+ * Identity of one checkbox. A group shares `name` and differs by `value`, so
+ * state is keyed by both — keyed by name alone, ticking one would untick its
+ * siblings.
+ */
+function checkboxKey(field: FormWidgetField): string {
+  return field.value ? `${field.name}:${field.value}` : field.name;
+}
 const fieldErrors = reactive<Record<string, string>>({});
 const touched = reactive<Record<string, boolean>>({});
 
@@ -71,7 +80,7 @@ const fieldSchemaMap = computed(() => {
   const map: Record<string, z.ZodTypeAny> = {};
   for (const field of props.data?.fields ?? []) {
     if (field.type === 'checkbox') {
-      // Validated on submit against checkedValues, not as a string.
+      // Ticked state is a boolean, not a string; validated in validateAll.
       continue;
     }
     if (field.type === 'email') {
@@ -121,28 +130,32 @@ function handleSelectChange(name: string, val: string) {
 }
 
 function validateAll(): boolean {
+  // Checkboxes in a group share one `name`, and so one error slot. Collected
+  // first and written after the loop: assigning per box, a required option
+  // left unticked would set the error and the next optional box in the same
+  // group would immediately clear it, letting the form submit without it.
+  const groupMissing = new Set<string>();
+  const groupSeen = new Set<string>();
+
   for (const field of props.data?.fields ?? []) {
     touched[field.name] = true;
     if (field.type === 'checkbox') {
-      // A required checkbox means consent: it has to be ticked, and an
-      // unticked one is an error rather than an empty value.
-      fieldErrors[field.name] =
-        field.required && !checkedValues[checkboxKey(field)]
-          ? 'form.field_required'
-          : '';
+      groupSeen.add(field.name);
+      // A required checkbox is a consent tick: it has to be ticked, where a
+      // required text field only has to be non-empty.
+      if (field.required && !checkedValues[checkboxKey(field)]) {
+        groupMissing.add(field.name);
+      }
       continue;
     }
     validateField(field.name);
   }
-  return Object.values(fieldErrors).every((v) => !v);
-}
 
-/**
- * Checkboxes sharing a `name` are one group, so state is keyed by name and
- * value together — otherwise ticking one would untick its siblings.
- */
-function checkboxKey(field: FormWidgetField): string {
-  return field.value ? `${field.name}:${field.value}` : field.name;
+  for (const name of groupSeen) {
+    fieldErrors[name] = groupMissing.has(name) ? 'form.field_required' : '';
+  }
+
+  return Object.values(fieldErrors).every((v) => !v);
 }
 
 defineExpose({ formValues, fieldErrors, touched, handleSubmit, validateAll });
@@ -162,7 +175,76 @@ function resolveSubject(): string {
   return props.data?.templateName?.trim() || t('form.default_subject');
 }
 
-/** The values to submit, including the fields the receiver checks for spam. */
+/**
+ * One reported line per field, in the order the form declares them.
+ *
+ * Checkboxes sharing a `name` are one group and report on a single line, so a
+ * three-option multi-select reads "Interested in: A, B" rather than repeating
+ * the whole answer under each option's own label. Fields left empty are
+ * omitted: an unfilled optional field would otherwise contribute a bare
+ * "Label:" line, and a long form is mostly optional fields.
+ */
+/**
+ * The heading a checkbox group reports under.
+ *
+ * Read from every box in the group rather than the one that happens to be
+ * ticked first: `groupLabel` sits on the first option by convention, and if a
+ * buyer leaves that one unticked the group would otherwise be reported under
+ * a later option's own label — "Monitoring: Monitoring" instead of
+ * "Interested in: Monitoring".
+ */
+function resolveGroupLabel(
+  fields: FormWidgetField[],
+  field: FormWidgetField,
+): string {
+  for (const candidate of fields) {
+    if (candidate.name !== field.name) continue;
+    if (candidate.groupLabel) return candidate.groupLabel;
+  }
+  return field.label;
+}
+
+function buildMailtoFields(
+  fields: FormWidgetField[],
+): { label: string; value: string }[] {
+  const lines: { label: string; value: string }[] = [];
+  const groupIndex = new Map<string, number>();
+
+  for (const field of fields) {
+    if (field.type === 'checkbox') {
+      if (!checkedValues[checkboxKey(field)]) continue;
+      // A box with no `value` is a standalone tick, so its own label is the
+      // question and the answer is simply that it was ticked.
+      const answer = field.value ?? t('form.checkbox_checked');
+      const existing = groupIndex.get(field.name);
+      if (existing !== undefined) {
+        const line = lines[existing];
+        if (line) line.value = `${line.value}, ${answer}`;
+        continue;
+      }
+      groupIndex.set(field.name, lines.length);
+      lines.push({
+        label: field.value ? resolveGroupLabel(fields, field) : field.label,
+        value: answer,
+      });
+      continue;
+    }
+
+    const value = (formValues[field.name] ?? '').trim();
+    if (!value) continue;
+    lines.push({ label: field.label, value });
+  }
+
+  return lines;
+}
+
+/**
+ * The values to submit, including the fields the receiver checks for spam.
+ *
+ * Checkboxes carry `value` and share a `name`, so a group arrives as an array
+ * under one key rather than as several keys — the shape a receiver can map,
+ * where the mailto body is prose it would have to parse back.
+ */
 function collectSubmission(): Record<string, string | string[]> {
   const payload: Record<string, string | string[]> = {};
 
@@ -193,28 +275,28 @@ async function handleSubmit() {
   if (!validateAll()) return;
 
   const postUrl = props.data?.postUrl;
-  const payload = collectSubmission();
+  if (postUrl) return submitOverHttp(postUrl);
 
-  if (!postUrl) {
-    const url = buildMailto({
-      recipient: props.data?.sendFormToEmail ?? '',
-      subject: resolveSubject(),
-      fields: (props.data?.fields ?? []).map((f: FormWidgetField) => ({
-        label: f.label,
-        value: String(payload[f.name] ?? ''),
-      })),
-    });
-    safeLocationRedirect(url);
-    return;
-  }
+  const fields = props.data?.fields ?? [];
 
-  // Only the honeypot is worth checking here, and only on this path. A filled
-  // honeypot is never a person, so dropping it costs nothing. Timing is left
-  // to the receiver on purpose: bailing on a fast submit would silently
-  // discard a real person's form for typing quickly, and the receiver already
-  // refuses anything under its own threshold. Nothing is checked on the
-  // mailto path at all — that opens the sender's own mail client, so there is
-  // no one to spam.
+  const mailtoFields = buildMailtoFields(fields);
+
+  const url = buildMailto({
+    recipient: props.data?.sendFormToEmail ?? '',
+    subject: resolveSubject(),
+    fields: mailtoFields,
+  });
+
+  safeLocationRedirect(url);
+}
+
+async function submitOverHttp(postUrl: string) {
+  // Only the honeypot is worth checking here. A filled one is never a person,
+  // so dropping it costs nothing. Timing is left to the receiver on purpose:
+  // bailing on a fast submit would silently discard a real person's form for
+  // typing quickly, and the receiver refuses anything under its own threshold
+  // anyway. Nothing is checked on the mailto path — that opens the sender's
+  // own mail client, so there is no one to spam.
   if (HONEYPOT_FIELDS.some((name) => (honeypotValues[name] ?? '').trim())) {
     submitted.value = true;
     return;
@@ -227,7 +309,7 @@ async function handleSubmit() {
     // reach, and keeps the CSP's connect-src at 'self'.
     await $fetch('/api/cms/form-submit', {
       method: 'POST',
-      body: { postUrl, fields: payload },
+      body: { postUrl, fields: collectSubmission() },
     });
     submitted.value = true;
   } catch {
@@ -244,6 +326,19 @@ function selectOptionsFor(field: FormWidgetField) {
     return field.options;
   }
   return countryOptions.value;
+}
+
+/**
+ * The prompt shown before a choice is made. It has to follow the same branch
+ * selectOptionsFor takes: the country prompt is only honest when the list
+ * actually is countries, and every other select was showing it regardless.
+ */
+function selectPlaceholderFor(field: FormWidgetField): string {
+  if (field.placeholder) return field.placeholder;
+  if (field.options && field.options.length > 0) {
+    return t('form.select_placeholder');
+  }
+  return t('form.country_placeholder');
 }
 </script>
 
@@ -277,17 +372,22 @@ function selectOptionsFor(field: FormWidgetField) {
         >
       </Label>
 
-      <!-- Checkbox: standalone consent, or one of a group sharing a name -->
+      <!-- Checkbox: one of a named group, or a standalone consent tick -->
       <template v-if="field.type === 'checkbox'">
         <label class="flex items-start gap-2 text-sm">
           <input
-            :id="`form-field-input-${field.name}`"
+            :id="`form-field-checkbox-${checkboxKey(field)}`"
             v-model="checkedValues[checkboxKey(field)]"
             type="checkbox"
             class="border-input accent-primary mt-0.5 size-4 rounded border"
             :aria-invalid="
               touched[field.name] && !!fieldErrors[field.name]
                 ? 'true'
+                : undefined
+            "
+            :aria-describedby="
+              touched[field.name] && fieldErrors[field.name]
+                ? `form-field-${field.name}-error`
                 : undefined
             "
             :aria-required="field.required ? 'true' : undefined"
@@ -327,7 +427,7 @@ function selectOptionsFor(field: FormWidgetField) {
             "
             :aria-required="field.required ? 'true' : undefined"
           >
-            <SelectValue :placeholder="t('form.country_placeholder')" />
+            <SelectValue :placeholder="selectPlaceholderFor(field)" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem

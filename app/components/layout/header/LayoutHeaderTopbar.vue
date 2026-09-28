@@ -1,18 +1,44 @@
 <script setup lang="ts">
-import { LogOut, Mail, User } from 'lucide-vue-next';
+import { Building2, LogOut, Mail, User } from 'lucide-vue-next';
 import { useAuthStore } from '~/stores/auth';
 import { CMS_TAGS } from '#shared/constants/cms';
+import type { Company } from '#shared/types/company';
 
 const authStore = useAuthStore();
+const { tenant } = useTenant();
 const { localePath } = useLocaleMarket();
-const { hasFeature } = useTenant();
 const { logout } = useLogout();
 const { to: contactTo, isResolved: contactResolved } = useCmsPageLink(
   CMS_TAGS.CONTACT_PAGE,
 );
-const { to: applyTo, isResolved: applyResolved } = useCmsPageLink(
-  CMS_TAGS.APPLY_PAGE,
+
+// Opt-in per tenant: the name only means something where a buyer orders on
+// behalf of an organisation, and it is a request this bar would otherwise
+// make on every page view for every tenant.
+const wantsCompanyName = computed(
+  () =>
+    tenant.value?.layout?.showCompanyName === true && authStore.isAuthenticated,
 );
+
+// Deferred rather than fetched on setup: /api/portal/company requires auth, so
+// asking before login is a guaranteed 401, and asking at all is wasted work
+// for the tenants that leave this off. Same key and dedupe as the portal
+// pages, so navigating there reuses this response instead of refetching.
+const { data: companyData, execute: loadCompany } = useFetch<{
+  company: Company;
+}>('/api/portal/company', { dedupe: 'defer', immediate: false });
+
+watch(
+  wantsCompanyName,
+  (wanted) => {
+    if (wanted && !companyData.value) loadCompany();
+  },
+  { immediate: true },
+);
+
+// Null when the buyer has no company on file, which is a normal state for a
+// private customer — the block hides rather than rendering an empty chip.
+const companyName = computed(() => companyData.value?.company?.name ?? null);
 </script>
 
 <template>
@@ -50,53 +76,44 @@ const { to: applyTo, isResolved: applyResolved } = useCmsPageLink(
         {{ $config.public.environment }}
       </div>
 
-      <!-- Right: Apply + Login -->
-      <div class="flex items-center gap-4">
+      <!-- Right: authenticated account utilities only. Anonymous login and
+           account application are promoted to the main header. -->
+      <div v-if="authStore.isAuthenticated" class="flex items-center gap-4">
+        <!-- Client-only because the company is fetched after setup: SSR renders
+             the comment placeholder and the client renders the chip, which is
+             a hydration mismatch if Vue is asked to reconcile the two. The
+             name is decorative, so arriving a beat late costs nothing. -->
+        <ClientOnly>
+          <span
+            v-if="wantsCompanyName && companyName"
+            class="hidden items-center gap-1.5 py-2 md:flex"
+            data-testid="topbar-company-name"
+          >
+            <Building2 class="size-4 shrink-0" />
+            <span class="max-w-[22ch] truncate">{{ companyName }}</span>
+          </span>
+        </ClientOnly>
         <NuxtLink
-          v-if="
-            hasFeature('applyForAccount') &&
-            !authStore.isAuthenticated &&
-            applyResolved
-          "
-          :to="applyTo"
-          class="hidden hover:underline sm:inline"
-        >
-          {{ $t('layout.apply_for_account') }}
-        </NuxtLink>
-        <button
-          v-if="!authStore.isAuthenticated"
-          type="button"
-          :aria-label="$t('auth.login')"
+          :to="localePath('/portal')"
+          :aria-label="$t('layout.customer_portal')"
           class="flex items-center gap-1.5 py-2 hover:underline"
-          data-testid="topbar-login"
-          @click="authStore.openSheet()"
+          data-testid="topbar-portal"
         >
           <User class="size-4" />
-          <span class="hidden sm:inline">{{ $t('auth.login') }}</span>
+          <span class="hidden sm:inline">{{
+            $t('layout.customer_portal')
+          }}</span>
+        </NuxtLink>
+        <button
+          type="button"
+          :aria-label="$t('auth.logout')"
+          class="hidden items-center gap-1.5 py-2 hover:underline lg:flex"
+          data-testid="topbar-logout"
+          @click="logout"
+        >
+          <LogOut class="size-4" />
+          <span class="hidden sm:inline">{{ $t('auth.logout') }}</span>
         </button>
-        <template v-else>
-          <NuxtLink
-            :to="localePath('/portal')"
-            :aria-label="$t('layout.customer_portal')"
-            class="flex items-center gap-1.5 py-2 hover:underline"
-            data-testid="topbar-portal"
-          >
-            <User class="size-4" />
-            <span class="hidden sm:inline">{{
-              $t('layout.customer_portal')
-            }}</span>
-          </NuxtLink>
-          <button
-            type="button"
-            :aria-label="$t('auth.logout')"
-            class="hidden items-center gap-1.5 py-2 hover:underline lg:flex"
-            data-testid="topbar-logout"
-            @click="logout"
-          >
-            <LogOut class="size-4" />
-            <span class="hidden sm:inline">{{ $t('auth.logout') }}</span>
-          </button>
-        </template>
       </div>
     </div>
   </div>

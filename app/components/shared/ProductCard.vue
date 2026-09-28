@@ -4,7 +4,6 @@ import { filterVisibleCampaigns, getStockStatus } from '#shared/types/commerce';
 import { productPath } from '#shared/utils/route-helpers';
 import { BADGE_DESTRUCTIVE } from '~/lib/badge-styles';
 import { ShoppingCart, Star, AlertCircle } from 'lucide-vue-next';
-import { useAuthStore } from '~/stores/auth';
 import { useCartStore } from '~/stores/cart';
 import { useFavoritesStore } from '~/stores/favorites';
 
@@ -52,12 +51,19 @@ function isFullProduct(p: ProductCardProp): p is ListProduct | DetailProduct {
 
 const cartStore = useCartStore();
 const favoritesStore = useFavoritesStore();
-const authStore = useAuthStore();
 const { hasFeature, isCatalogMode } = useTenant();
 const { canAccess } = useFeatureAccess();
 const canPurchase = computed(
   () => canAccess('orderPlacement') && !isCatalogMode.value,
 );
+const { showPrice, canUnlockByAuth } = usePriceVisibility();
+const priceSlotMode = computed<'contract' | 'list' | 'hidden' | null>(() => {
+  if (!isFullProduct(props.product)) return null;
+  if (showPrice.value) {
+    return props.product.discountType === 'EXTERNAL' ? 'contract' : 'list';
+  }
+  return canUnlockByAuth.value ? 'hidden' : null;
+});
 const isOutOfStock = computed(() => {
   if (!isFullProduct(props.product)) return false;
   const stock = props.product.totalStock;
@@ -158,8 +164,9 @@ async function addToCart() {
     v-if="variant === 'grid'"
     class="bg-card flex h-full flex-col overflow-hidden rounded-md border"
     data-testid="product-card"
+    data-slot="product-card-grid"
   >
-    <div class="relative p-3">
+    <div class="relative p-3" data-slot="product-card-media">
       <div
         class="bg-muted group relative aspect-square w-full overflow-hidden rounded-md"
       >
@@ -214,11 +221,14 @@ async function addToCart() {
       </div>
     </div>
 
-    <div class="flex flex-1 flex-col gap-2 px-4 pb-4">
+    <div
+      class="flex flex-1 flex-col gap-2 px-4 pb-4"
+      data-slot="product-card-body"
+    >
       <div class="flex items-start justify-between gap-2">
         <p
           v-if="product?.articleNumber"
-          class="text-muted-foreground text-xs"
+          class="text-muted-foreground font-mono text-xs"
           data-testid="article-number"
         >
           <template v-if="isFullProduct(product)">
@@ -230,9 +240,7 @@ async function addToCart() {
         </p>
         <span v-else />
         <Button
-          v-if="
-            productAlias && hasFeature('wishlist') && authStore.isAuthenticated
-          "
+          v-if="productAlias && hasFeature('wishlist')"
           variant="ghost"
           size="icon-sm"
           data-testid="wishlist-button"
@@ -245,6 +253,14 @@ async function addToCart() {
           <Star class="size-4" :fill="isFavorited ? 'currentColor' : 'none'" />
         </Button>
       </div>
+
+      <p
+        v-if="isFullProduct(product) && product.brand?.name"
+        data-slot="product-card-brand"
+        class="text-muted-foreground hidden font-mono text-[10px] tracking-wide uppercase"
+      >
+        {{ product.brand.name }}
+      </p>
 
       <NuxtLink v-if="productUrl" :to="productUrl" class="hover:underline">
         <h3 class="line-clamp-2 text-base leading-tight font-medium">
@@ -262,14 +278,22 @@ async function addToCart() {
         size="sm"
       />
 
-      <!-- Price (full Geins shape) -->
-      <PriceDisplay
-        v-if="isFullProduct(product) && product.unitPrice"
+      <!-- Stable price/login slot: hidden price is itself the login control.
+           return-to points at this product, not the category page. -->
+      <PriceSlot
+        v-if="
+          isFullProduct(product) &&
+          priceSlotMode &&
+          (product.unitPrice || priceSlotMode === 'hidden')
+        "
+        :mode="priceSlotMode"
         :price="product.unitPrice"
+        :return-to="productUrl ?? undefined"
         :lowest-price="product.lowestPrice"
         :discount-type="product.discountType"
         :campaign-names="visibleCampaigns.map((c) => c.name)"
         class="text-base font-semibold"
+        testid="card-price"
       />
 
       <!-- Price (brief ProductCardItem shape) -->
@@ -407,7 +431,7 @@ async function addToCart() {
         </h3>
         <p
           v-if="product?.articleNumber"
-          class="text-muted-foreground text-xs"
+          class="text-muted-foreground font-mono text-xs"
           data-testid="article-number"
         >
           <template v-if="isFullProduct(product)">
@@ -428,13 +452,20 @@ async function addToCart() {
     <div
       class="flex items-center justify-between gap-3 md:contents md:justify-end"
     >
-      <PriceDisplay
-        v-if="isFullProduct(product) && product.unitPrice"
+      <PriceSlot
+        v-if="
+          isFullProduct(product) &&
+          priceSlotMode &&
+          (product.unitPrice || priceSlotMode === 'hidden')
+        "
+        :mode="priceSlotMode"
         :price="product.unitPrice"
+        :return-to="productUrl ?? undefined"
         :lowest-price="product.lowestPrice"
         :discount-type="product.discountType"
         :campaign-names="visibleCampaigns.map((c) => c.name)"
         class="shrink-0 text-base font-semibold"
+        testid="card-price"
       />
 
       <template v-if="canPurchase">
@@ -478,11 +509,7 @@ async function addToCart() {
             </Button>
           </template>
           <Button
-            v-if="
-              productAlias &&
-              hasFeature('wishlist') &&
-              authStore.isAuthenticated
-            "
+            v-if="productAlias && hasFeature('wishlist')"
             variant="ghost"
             size="icon-sm"
             data-testid="wishlist-button"

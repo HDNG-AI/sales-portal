@@ -37,8 +37,9 @@ describe('LayoutHeaderTopbar mobile adjustments', () => {
     expect(source).toContain('data-testid="topbar-logout"');
   });
 
-  it('adds py-2 touch padding to the login and portal affordances', () => {
-    expect(classNear('topbar-login')).toContain('py-2');
+  it('keeps account utilities in the topbar only for authenticated users', () => {
+    expect(source).not.toContain('data-testid="topbar-login"');
+    expect(source).toContain('v-if="authStore.isAuthenticated"');
     expect(classNear('topbar-portal')).toContain('py-2');
   });
 
