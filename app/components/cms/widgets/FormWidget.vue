@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import type { FormEndpoint } from '#shared/utils/form-post';
 import type {
   ContentConfigType,
   FormWidgetData,
@@ -22,6 +23,7 @@ import {
   HONEYPOT_FIELDS,
   FORM_STARTED_AT_FIELD,
   FORM_DURATION_FIELD,
+  FORM_ENDPOINTS,
 } from '#shared/utils/form-post';
 import { safeLocationRedirect } from '~/utils/client-helpers';
 
@@ -274,8 +276,8 @@ async function handleSubmit() {
   if (submitting.value) return;
   if (!validateAll()) return;
 
-  const postUrl = props.data?.postUrl;
-  if (postUrl) return submitOverHttp(postUrl);
+  const endpoint = props.data?.formEndpoint;
+  if (endpoint) return submitOverHttp(endpoint);
 
   const fields = props.data?.fields ?? [];
 
@@ -290,9 +292,9 @@ async function handleSubmit() {
   safeLocationRedirect(url);
 }
 
-async function submitOverHttp(postUrl: string) {
+async function submitOverHttp(endpoint: FormEndpoint) {
   // Only the honeypot is worth checking here. A filled one is never a person,
-  // so dropping it costs nothing. Timing is left to the receiver on purpose:
+  // so dropping it saves a pointless request. Timing is left to the receiver:
   // bailing on a fast submit would silently discard a real person's form for
   // typing quickly, and the receiver refuses anything under its own threshold
   // anyway. Nothing is checked on the mailto path — that opens the sender's
@@ -305,11 +307,11 @@ async function submitOverHttp(postUrl: string) {
   submitting.value = true;
   submitError.value = '';
   try {
-    // Posted through our own server: it holds the allowlist the CMS cannot
-    // reach, and keeps the CSP's connect-src at 'self'.
-    await $fetch('/api/cms/form-submit', {
+    // /api/external prefixes the tenant's hostname, so one receiver serves
+    // every tenant and the CSP's connect-src stays at 'self'.
+    await $fetch(`/api/external/${FORM_ENDPOINTS[endpoint]}`, {
       method: 'POST',
-      body: { postUrl, fields: collectSubmission() },
+      body: collectSubmission(),
     });
     submitted.value = true;
   } catch {

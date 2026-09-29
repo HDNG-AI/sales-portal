@@ -317,14 +317,6 @@ export default defineNuxtConfig({
       driver: 'memory',
     },
 
-    // Origins a CMS form may be submitted to, comma-separated. Empty permits
-    // none. Server-side on purpose: `postUrl` arrives in CMS content, so the
-    // check has to sit somewhere that content cannot reach, and the browser
-    // never contacts the target directly — server/api/cms/form-submit.post.ts
-    // forwards it, which also keeps the CSP connect-src at 'self'.
-    // Azure: NUXT_FORM_POST_ORIGINS=https://forms.example.com
-    formPostOrigins: '',
-
     // Secret for accessing detailed health check metrics
     // Azure: NUXT_HEALTH_CHECK_SECRET=your-secret-here
     healthCheckSecret: '',

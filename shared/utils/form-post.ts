@@ -21,39 +21,6 @@ export const FORM_DURATION_FIELD = 'form_duration';
  */
 export const MIN_SUBMIT_SECONDS = 3;
 
-/**
- * Whether a CMS-supplied post target is one this deployment will submit to.
- *
- * `postUrl` arrives in page content, so it is attacker-controlled the moment
- * a merchant account is. Without an allowlist a storefront form could be
- * repointed at any collector, on a page that still looks entirely legitimate.
- * An empty allowlist permits nothing, so a deployment that has not opted in
- * falls back to mailto rather than posting somewhere unvetted.
- */
-export function isAllowedPostUrl(
-  postUrl: string | undefined,
-  allowedOrigins: readonly string[],
-): boolean {
-  if (!postUrl) return false;
-
-  let parsed: URL;
-  try {
-    parsed = new URL(postUrl);
-  } catch {
-    return false;
-  }
-
-  if (parsed.protocol !== 'https:') return false;
-
-  return allowedOrigins.some((allowed) => {
-    try {
-      return new URL(allowed).origin === parsed.origin;
-    } catch {
-      return false;
-    }
-  });
-}
-
 /** Whether the submission looks automated, by the same rules the server uses. */
 export function looksAutomated(
   honeypotValues: readonly string[],
@@ -64,3 +31,17 @@ export function looksAutomated(
   if (!startedAt) return true;
   return (now - startedAt) / 1000 < MIN_SUBMIT_SECONDS;
 }
+
+/**
+ * The receiver's endpoints, keyed by what a CMS author picks. A name rather
+ * than a URL: page content cannot then point a storefront form at a collector
+ * of its own, which is the whole reason the previous version needed an
+ * origin allowlist.
+ */
+export const FORM_ENDPOINTS = {
+  contact: 'submit',
+  support: 'submit-support',
+  newCustomer: 'new-customer',
+} as const;
+
+export type FormEndpoint = keyof typeof FORM_ENDPOINTS;

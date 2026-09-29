@@ -1,3 +1,4 @@
+import type { FormEndpoint } from '#shared/utils/form-post';
 import type { ContentContainerType, ContentAreaType } from '@geins/types';
 
 export type {
@@ -155,16 +156,16 @@ export interface FormWidgetData {
    */
   sendFormToEmail?: string;
   /**
-   * Submit over HTTP instead of opening a mail client. The origin must be
-   * allowlisted in `public.formPostOrigins`, because this value comes from
-   * CMS content: without that check a compromised merchant account could
-   * point a storefront form at any collector it liked.
+   * Submit over HTTP instead of opening a mail client, to the named receiver
+   * endpoint. A name, not a URL: the request is forwarded through
+   * /api/external, which prefixes the tenant's hostname, so one receiver
+   * serves every tenant and page content never carries an address.
    *
    * The request carries the spam fields the receiver checks — `website`,
    * `ba-honeypot`, `form_started_at`, `form_duration` — so every posted form
    * gets those traps without an author having to know they exist.
    */
-  postUrl?: string;
+  formEndpoint?: FormEndpoint;
   fields: FormWidgetField[];
   /**
    * Email subject for the mailto. Supports `{fieldName}` placeholders that are

@@ -8,7 +8,12 @@ const source = readFileSync(
     'app/components/layout/header/LayoutHeaderActionButtons.vue',
   ),
   'utf-8',
-);
+)
+  // Collapsed so the assertions below survive reformatting. Prettier rewraps
+  // long template expressions, and this file was not prettier-clean, so the
+  // first commit that staged it changed `{{ $t('x') }}` into three lines and
+  // failed every assertion that spelled one out.
+  .replace(/\s+/g, ' ');
 
 describe('LayoutHeaderActionButtons anonymous conversion actions', () => {
   it('promotes login into the main header', () => {
