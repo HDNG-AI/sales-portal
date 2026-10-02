@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "token_file": "/etc/sales-portal-staging/github-token",
+  "state_directory": "/var/lib/sales-portal-staging",
+  "container": "odelco-sales-portal",
+  "project": "odelco-sales",
+  "service": "sales-portal",
+  "initial_image": "sha256:40894676d1d3c7bb47a6a068c18b6510d8132707db040bcebfffa55fa180f8e5",
+  "networks": ["hdng-edge", "odelco-internal"],
+  "origin": "https://staging-odelco.hdng.ai",
+  "tenant_id": "odelco",
+  "storefront_path": "/se/sv/",
+  "expected_layout": {
+    "headerNavVariant": "white",
+    "storefrontStyle": "editorial"
+  }
+}
