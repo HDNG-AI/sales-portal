@@ -6,8 +6,22 @@ import {
   type WebhookRequest,
   type KvStorage,
 } from '../../server/utils/webhook-handler';
+// This fork's handler takes the shared TenantCacheStorage rather than a
+// webhook-local CacheStorage alias.
 import type { TenantCacheStorage } from '../../server/utils/tenant';
 import { MAX_WEBHOOK_BODY_SIZE } from '../../server/utils/webhook';
+import { tenantConfigKey } from '../../server/utils/tenant';
+import type { TenantConfig } from '#shared/types/tenant-config';
+
+// clearNegativeCache mutates a module-level Map, so the only way to observe
+// which hostnames were cleared is to watch the call itself.
+const { clearNegativeCacheSpy } = vi.hoisted(() => ({
+  clearNegativeCacheSpy: vi.fn(),
+}));
+vi.mock('../../server/utils/tenant', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../server/utils/tenant')>()),
+  clearNegativeCache: clearNegativeCacheSpy,
+}));
 
 // Mock useStorage for KV-backed rate limiter
 const mockRateLimitStore = new Map<string, unknown>();
@@ -77,7 +91,7 @@ function createMockCacheStorage(): {
 
 function createRequest(overrides?: Partial<WebhookRequest>): WebhookRequest {
   const secret = 'test-secret';
-  const body = JSON.stringify({ hostname: 'tenant-a.litium.portal' });
+  const body = JSON.stringify({ hostname: 'alpha.example' });
   const sig = signStripe(body, secret);
 
   return {
@@ -99,7 +113,7 @@ describe('processConfigRefresh', () => {
 
   describe('open mode (no secret configured)', () => {
     it('accepts an unsigned request with valid body and invalidates the cache', async () => {
-      const body = JSON.stringify({ hostname: 'tenant-a.litium.portal' });
+      const body = JSON.stringify({ hostname: 'alpha.example' });
       const request = createRequest({
         secrets: [],
         rawBody: body,
@@ -134,7 +148,7 @@ describe('processConfigRefresh', () => {
 
     it('still enforces the rate limiter so unauth callers cannot loop', async () => {
       const make = () => {
-        const body = JSON.stringify({ hostname: 'tenant-a.litium.portal' });
+        const body = JSON.stringify({ hostname: 'alpha.example' });
         return createRequest({
           secrets: [],
           rawBody: body,
@@ -311,16 +325,16 @@ describe('processConfigRefresh', () => {
   });
 
   it('should invalidate all alias hostname mappings when config has aliases', async () => {
-    const hostname = 'tenant-a.litium.portal';
+    const hostname = 'alpha.example';
     const secret = 'test-secret';
     const body = JSON.stringify({ hostname });
     const sig = signStripe(body, secret);
     const webhookId = 'wh_valid_123';
 
     const tenantConfig = {
-      tenantId: 'tenant-a',
-      hostname: 'tenant-a.litium.portal',
-      aliases: ['tenant-a.localhost', 'tenant-a.sales-portal.geins.dev'],
+      tenantId: 'alpha',
+      hostname: 'alpha.example',
+      aliases: ['alpha.localhost', 'alpha.sales-portal.geins.dev'],
       isActive: true,
     };
 
@@ -338,8 +352,8 @@ describe('processConfigRefresh', () => {
       setItem: kvSetItem,
     } = createMockKvStorage({
       getItem: vi.fn().mockImplementation(async (key: string) => {
-        if (key === `tenant:id:${hostname}`) return 'tenant-a';
-        if (key === 'tenant:config:tenant-a') return tenantConfig;
+        if (key === `tenant:id:${hostname}`) return 'alpha';
+        if (key === 'tenant:config:alpha') return tenantConfig;
         return null;
       }),
     });
@@ -350,17 +364,15 @@ describe('processConfigRefresh', () => {
     expect(result).toEqual({ invalidated: true });
 
     // Should remove all hostname → tenantId mappings
+    expect(kvRemoveItem).toHaveBeenCalledWith('tenant:id:alpha.example');
+    expect(kvRemoveItem).toHaveBeenCalledWith('tenant:id:alpha.localhost');
     expect(kvRemoveItem).toHaveBeenCalledWith(
-      'tenant:id:tenant-a.litium.portal',
-    );
-    expect(kvRemoveItem).toHaveBeenCalledWith('tenant:id:tenant-a.localhost');
-    expect(kvRemoveItem).toHaveBeenCalledWith(
-      'tenant:id:tenant-a.sales-portal.geins.dev',
+      'tenant:id:alpha.sales-portal.geins.dev',
     );
     // Should remove config under tenantId
-    expect(kvRemoveItem).toHaveBeenCalledWith('tenant:config:tenant-a');
+    expect(kvRemoveItem).toHaveBeenCalledWith('tenant:config:alpha');
     expect(cacheRemoveItem).toHaveBeenCalledWith(
-      'nitro/handlers:_:tenantconfigtenanta.json',
+      'nitro/handlers:_:tenantconfigalpha.json',
     );
     expect(kvSetItem).toHaveBeenCalledWith(
       `webhook:processed:${webhookId}`,
@@ -396,7 +408,7 @@ describe('processConfigRefresh', () => {
   });
 
   it('removes the Nitro handler cache with the correct escaped key format', async () => {
-    const hostname = 'tenant-b.sales-portal.geins.dev';
+    const hostname = 'beta.sales-portal.geins.dev';
     const body = JSON.stringify({ hostname });
     const sig = signStripe(body, 'test-secret');
 
@@ -408,10 +420,10 @@ describe('processConfigRefresh', () => {
 
     const { storage: kv } = createMockKvStorage({
       getItem: vi.fn().mockImplementation(async (key: string) => {
-        if (key === `tenant:id:${hostname}`) return 'tenant-b';
-        if (key === 'tenant:config:tenant-b')
+        if (key === `tenant:id:${hostname}`) return 'beta';
+        if (key === 'tenant:config:beta')
           return {
-            tenantId: 'tenant-b',
+            tenantId: 'beta',
             hostname,
             aliases: [],
             isActive: true,
@@ -427,14 +439,14 @@ describe('processConfigRefresh', () => {
     // Nitro 2.x stores defineCachedEventHandler entries as:
     //   nitro/handlers:_:{escapeKey(configKey)}.json
     // escapeKey strips all non-word chars (\W) — colons, dots, hyphens removed.
-    // configKey = "tenant:config:tenant-b" → escaped = "tenantconfigtenantb"
+    // configKey = "tenant:config:beta" → escaped = "tenantconfigbeta"
     expect(cacheRemoveItem).toHaveBeenCalledWith(
-      'nitro/handlers:_:tenantconfigtenantb.json',
+      'nitro/handlers:_:tenantconfigbeta.json',
     );
   });
 
   it('should pass with key rotation: sign with key2, secrets=[key1,key2]', async () => {
-    const hostname = 'tenant-a.litium.portal';
+    const hostname = 'alpha.example';
     const body = JSON.stringify({ hostname });
     const sig = signStripe(body, 'old-key');
 
@@ -472,5 +484,87 @@ describe('processConfigRefresh', () => {
     ).rejects.toMatchObject({
       statusCode: 429,
     });
+  });
+});
+
+describe('negative cache invalidation across aliases', () => {
+  it('clears the negative cache for every hostname the tenant claims', async () => {
+    // resolveTenant consults the negative cache before KV, so an alias probed
+    // while the tenant was unknown keeps answering 404 for the rest of its
+    // TTL even though the refreshed config is already in storage.
+    const primary = 'primary.example';
+    const alias = 'alias.example';
+    const config = {
+      tenantId: 't-alias',
+      hostname: primary,
+      aliases: [alias],
+      isActive: true,
+    } as unknown as TenantConfig;
+
+    clearNegativeCacheSpy.mockClear();
+
+    const kvStorage = {
+      getItem: vi.fn(async (key: string) =>
+        key === tenantConfigKey('t-alias') ? config : 't-alias',
+      ),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+
+    await processConfigRefresh(
+      {
+        clientIp: '10.0.0.1',
+        secrets: [],
+        rawBody: JSON.stringify({ hostname: primary }),
+        signatureHeader: undefined,
+        webhookId: undefined,
+        contentLength: 40,
+      },
+      kvStorage as unknown as KvStorage,
+      { removeItem: vi.fn() } as unknown as TenantCacheStorage,
+    );
+
+    const cleared = clearNegativeCacheSpy.mock.calls.map(([h]) => h);
+    expect(cleared).toContain(primary);
+    expect(cleared).toContain(alias);
+  });
+
+  it('still clears the hostname the webhook named when the config has dropped it', async () => {
+    // KV can map a hostname the stored config no longer claims — an alias
+    // removed from the tenant. That is exactly the hostname whose stale
+    // entry needs clearing, and reading the set from the config alone
+    // silently stops clearing it.
+    const removed = 'removed-alias.example';
+    const config = {
+      tenantId: 't-alias',
+      hostname: 'primary.example',
+      aliases: [],
+      isActive: true,
+    } as unknown as TenantConfig;
+
+    clearNegativeCacheSpy.mockClear();
+
+    const kvStorage = {
+      getItem: vi.fn(async (key: string) =>
+        key === tenantConfigKey('t-alias') ? config : 't-alias',
+      ),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+
+    await processConfigRefresh(
+      {
+        clientIp: '10.0.0.2',
+        secrets: [],
+        rawBody: JSON.stringify({ hostname: removed }),
+        signatureHeader: undefined,
+        webhookId: undefined,
+        contentLength: 40,
+      },
+      kvStorage as unknown as KvStorage,
+      { removeItem: vi.fn() } as unknown as TenantCacheStorage,
+    );
+
+    expect(clearNegativeCacheSpy.mock.calls.map(([h]) => h)).toContain(removed);
   });
 });

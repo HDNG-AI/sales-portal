@@ -41,14 +41,14 @@ function normalizeHue(h: number): number {
 }
 
 /**
- * Required color keys — all 32 color fields after derivation.
+ * Required color keys — all 34 standard color fields after derivation.
  */
 export type FullThemeColors = Required<{
   [K in keyof ThemeColors]: string;
 }>;
 
 /**
- * Derives all 26 optional colors from 6 core required colors.
+ * Derives all 28 optional colors from 6 core required colors.
  * API-provided non-null values are preserved; only null/undefined are derived.
  *
  * Derivation rules follow shadcn/ui conventions.

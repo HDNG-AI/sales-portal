@@ -103,6 +103,16 @@ export const CMS_TAGS = {
    * leading hash, matching the convention used across this registry.
    */
   TERMS_PAGE: 'terms',
+  /**
+   * Tags the CMS page the cookie banner links to for the full privacy policy.
+   * The consent prompt has to say what is collected and why, and a banner that
+   * only offers Accept/Decline does not.
+   *
+   * `privacy` for consistency with the singular, English tags above, rather
+   * than the `integrity-policies` some tenants carry today — the localized
+   * name belongs on the page, not in the tag editors type.
+   */
+  PRIVACY_PAGE: 'privacy',
 } as const;
 
 export type CmsTagKey = (typeof CMS_TAGS)[keyof typeof CMS_TAGS];

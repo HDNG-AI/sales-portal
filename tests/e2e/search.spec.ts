@@ -77,14 +77,16 @@ test.describe('Search', () => {
     const autocomplete = page.locator('[data-testid="search-autocomplete"]');
     await expect(autocomplete).toBeVisible({ timeout: 15000 });
 
-    // Results should have list items with images
-    const items = autocomplete.locator('[role="option"], li');
-    const count = await items.count();
+    // The panel opens on the loading state too (`v-if="open"`), so waiting
+    // for the container proves nothing about results — counting straight
+    // after it counts the spinner. Wait for an option, which retries past
+    // loading; the search term comes from a product discoverProduct just
+    // returned, so one is expected.
+    const items = autocomplete.locator('li[role="option"]');
+    await expect(items.first()).toBeVisible({ timeout: 15000 });
 
-    if (count > 0) {
-      const images = autocomplete.locator('img');
-      await expect(images.first()).toBeVisible({ timeout: 5000 });
-    }
+    const images = autocomplete.locator('img');
+    await expect(images.first()).toBeVisible({ timeout: 5000 });
   });
 
   test('should render a usable search input on the bare /search page', async ({
@@ -112,8 +114,12 @@ test.describe('Search', () => {
     const cards = page.locator('[data-testid="product-card"]');
     const emptyState = page.locator('[data-testid="search-empty"]');
 
-    // Wait for either products or empty state
-    await expect(cards.first().or(emptyState)).toBeVisible({ timeout: 15000 });
+    // The term is the first word of a product the catalogue API just
+    // returned, so an empty result is not a state this search reaches.
+    // `cards.first().or(emptyState)` accepted it — the same defect as the
+    // or-assertion below, written with Playwright's `.or()`.
+    await expect(cards.first()).toBeVisible({ timeout: 15000 });
+    await expect(emptyState).toBeHidden();
   });
 
   test('should show search results page with products', async ({ page }) => {
@@ -132,13 +138,11 @@ test.describe('Search', () => {
     const cards = page.locator('[data-testid="product-card"]');
     const emptyState = page.locator('[data-testid="search-empty"]');
 
-    const hasCards = await cards
-      .first()
-      .isVisible()
-      .catch(() => false);
-    const hasEmpty = await emptyState.isVisible().catch(() => false);
-
-    expect(hasCards || hasEmpty).toBe(true);
+    // The term is the first word of a product the catalogue API just
+    // returned, so an empty result is not a state this search reaches:
+    // `hasCards || hasEmpty` passed on a search that found nothing.
+    await expect(cards.first()).toBeVisible({ timeout: 15000 });
+    await expect(emptyState).toBeHidden();
   });
 
   test('should close autocomplete when input is cleared', async ({

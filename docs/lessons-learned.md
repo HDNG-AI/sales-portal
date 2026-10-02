@@ -83,6 +83,34 @@ SSR-safe helpers in `app/utils/client-helpers.ts` — prefer those over hand-rol
 
 ---
 
+## A deferred fetch rendered one thing on the server and another on the client
+
+**Symptom.** `[Vue warn]: Hydration node mismatch — rendered on server: <!---->, expected on
+client: span` from the topbar, on every page, for any signed-in buyer. Nothing looked wrong:
+the page rendered correctly once hydrated, and the component tests passed.
+
+**Root cause.** The topbar shows the buyer's company, fetched with
+`useFetch(..., { immediate: false })` and started from a watch so that tenants who leave the
+feature off never pay for the request. Nuxt only awaits `useFetch` during SSR when it runs at
+setup, so a deferred one is never awaited: the server rendered the `v-if` placeholder, the
+client rendered the chip once the response landed, and Vue was asked to reconcile two different
+nodes.
+
+The tests could not see it. They mount on the client only, where both halves agree — a
+hydration mismatch exists only in the gap between two renders, and a component test performs
+one.
+
+**Fix.** `<ClientOnly>` around the chip. The alternative was awaiting the tenant and then the
+company during SSR, which holds up the header on every request to render something most tenants
+never switch on.
+
+**Where the rule lives now.** [conventions/ssr.md](conventions/ssr.md) — the Client-Only Content
+section now names the deferred-fetch case explicitly. The short version: if a value arrives
+after setup and decides whether an element exists, the server cannot know about it, so either
+await it during SSR or keep it off the server entirely.
+
+---
+
 ## Locale and market state: thirteen problems, one root cause
 
 **Symptom.** Accumulated over months — cache keys that mixed locales, race conditions on first
@@ -140,13 +168,13 @@ exists. If it does, extract to a store getter, composable, or utility.
 **Symptom.** The E2E suite failed on roughly 82 specs on a clean checkout while CI reported green
 on the same commit. Neither number was informative.
 
-**Root cause.** Two things compounding. `tenant-a` names four different things across five domain
-endings — a tenant registered in the merchant API, fixtures written at dev-server startup, filler
-strings in unit tests, and the registered tenant's own aliases — and nothing in a running system
-distinguishes them. Separately, an auto-create fallback (since removed) fabricated a tenant for any
-hostname it could not find, so a hostname mismatch, a missing credential and an unreachable merchant
-API all produced the same result: a storefront that rendered, answered health checks and contained
-nothing.
+**Root cause.** Two things compounding. The legacy test tenant's name named four different things
+across five domain endings — a tenant registered in the merchant API, fixtures written at
+dev-server startup, filler strings in unit tests, and the registered tenant's own aliases — and
+nothing in a running system distinguishes them. Separately, an auto-create fallback (since removed)
+fabricated a tenant for any hostname it could not find, so a hostname mismatch, a missing credential
+and an unreachable merchant API all produced the same result: a storefront that rendered, answered
+health checks and contained nothing.
 
 **Fix.** The suite now asserts behaviour derived from tenant config rather than one tenant's
 settings hardcoded as application behaviour. That surfaced two genuine product bugs the

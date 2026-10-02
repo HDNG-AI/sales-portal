@@ -86,20 +86,17 @@ function sanitizeHeaders(
 }
 
 /**
- * Query-param names to redact from a logged path (case-insensitive) — the
- * query-string counterpart to sensitiveHeaders above. A route that accepts
- * a sensitive value via query string (e.g. ?key=) needs its param name
- * added here, the same way a new sensitive header gets added above.
+ * Word segments that mark a query param as sensitive — the query-string
+ * counterpart to sensitiveHeaders above.
+ *
+ * Matched per segment, not against the whole name: `loginToken` (the
+ * impersonation JWT on /account, see server/api/auth/login-as.get.ts) and
+ * `resetKey` both carry a secret, and neither is equal to any entry here.
+ * Splitting on camelCase and separators catches them via `token` / `key`
+ * while leaving `keyword` and `monkey` alone, which a plain substring test
+ * would redact.
  */
-const SENSITIVE_QUERY_PARAMS = [
-  'key',
-  'token',
-  'secret',
-  'password',
-  'apikey',
-  'api_key',
-  'access_token',
-];
+const SENSITIVE_QUERY_PARAMS = ['key', 'token', 'secret', 'password', 'apikey'];
 
 /**
  * Redacts sensitive query-param values from a path before it's logged.
@@ -108,17 +105,33 @@ const SENSITIVE_QUERY_PARAMS = [
  * via query string would otherwise reach the log sink in plaintext on
  * every request.
  */
+function isSensitiveParam(name: string): boolean {
+  return name
+    .split(/[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])/)
+    .some((segment) => SENSITIVE_QUERY_PARAMS.includes(segment.toLowerCase()));
+}
+
 export function sanitizeUrl(path: string): string {
-  const [pathname, search] = path.split('?', 2);
+  // Not split('?', 2): that drops everything after a second '?', which is a
+  // legal literal inside a value, and would silently truncate the logged path.
+  const separator = path.indexOf('?');
+  if (separator === -1) return path;
+  const pathname = path.slice(0, separator);
+  const search = path.slice(separator + 1);
   if (!search) return path;
 
   const params = new URLSearchParams(search);
-  const names = new Set(params.keys());
-  for (const name of names) {
-    if (SENSITIVE_QUERY_PARAMS.includes(name.toLowerCase())) {
+  let redacted = false;
+  for (const name of new Set(params.keys())) {
+    if (isSensitiveParam(name)) {
       params.set(name, '[REDACTED]');
+      redacted = true;
     }
   }
+  // Returning the original path when nothing matched keeps URLSearchParams
+  // from re-encoding every other request's query string (`sort=price:asc`
+  // becomes `sort=price%3Aasc`), which would shift log and metric values.
+  if (!redacted) return path;
   return `${pathname}?${params.toString()}`;
 }
 

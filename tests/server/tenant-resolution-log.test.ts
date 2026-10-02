@@ -94,7 +94,7 @@ function rawApiPayload(
     geinsSettings: {
       defaultHostName: hostname,
       additionalHostNames: options.additionalHostNames ?? [],
-      apiKey: 'E0EB51F2-B663-457F-A7F9-A75693FD8469',
+      apiKey: 'k',
       accountName: tenantId,
       channelId: '1|se',
       defaultLocale: 'sv-SE',
@@ -606,13 +606,9 @@ describe.sequential('getTenantById', () => {
     const config = kvConfig('t-1', 't-1.example');
     const storage = memoryStorage({ [tenantConfigKey('t-1')]: config });
 
-    // A raw KV read is not re-validated against the schema, so
-    // withTenantConfigDefaults() backfills `timezone` on the way out — the
-    // returned object is a copy, not the stored reference.
-    await expect(getTenantById('t-1')).resolves.toEqual({
-      ...config,
-      timezone: 'UTC',
-    });
+    // A raw KV read is not re-validated against the schema and nothing is
+    // substituted on the way out, so the stored config comes back as-is.
+    await expect(getTenantById('t-1')).resolves.toEqual(config);
     expect(storage.getItem).toHaveBeenCalledWith(tenantConfigKey('t-1'));
     expect(storage.getItem).toHaveBeenCalledTimes(1);
   });
@@ -634,6 +630,24 @@ describe.sequential('getTenantById', () => {
     await expect(getTenantById('t-off')).resolves.toBeNull();
     expect(storage.removeItem).not.toHaveBeenCalled();
     expect(storage.store.get(tenantConfigKey('t-off'))).toBe(config);
+  });
+
+  it('returns the config only because isActive is true, on one otherwise identical config', async () => {
+    // The cases above each assert one half, and the active half asserts it
+    // only by implication: `kvConfig` defaults `isActive` to true, so the
+    // first test would fail if the flag stopped deciding, and its title would
+    // not say why. Here the flag is the single difference between two
+    // otherwise identical configs at the same key, which is what makes this
+    // an assertion about the field rather than about the lookup.
+    const active = kvConfig('t-flag', 't-flag.example', { isActive: true });
+    memoryStorage({ [tenantConfigKey('t-flag')]: active });
+    await expect(getTenantById('t-flag')).resolves.toBe(active);
+
+    resetStorage();
+
+    const inactive = kvConfig('t-flag', 't-flag.example', { isActive: false });
+    memoryStorage({ [tenantConfigKey('t-flag')]: inactive });
+    await expect(getTenantById('t-flag')).resolves.toBeNull();
   });
 });
 

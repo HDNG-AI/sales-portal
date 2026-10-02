@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, assert } from 'vitest';
 import { mountComponent } from '../../utils/component';
 import type { FormWidgetData } from '#shared/types/cms';
 import FormWidget from '../../../app/components/cms/widgets/FormWidget.vue';
@@ -8,13 +8,17 @@ import FormWidget from '../../../app/components/cms/widgets/FormWidget.vue';
 // spying on navigateTo lets us assert the mailto URL without touching real
 // window.location.
 const { navigateToMock } = vi.hoisted(() => ({
-  navigateToMock: vi.fn(() => Promise.resolve()),
+  // Called only through the mocked `safeLocationRedirect` below, which passes
+  // a URL string; typing it so the assertions on that URL are checked.
+  navigateToMock: vi.fn<
+    (url: string, options?: { external?: boolean }) => Promise<void>
+  >(() => Promise.resolve()),
 }));
 
-vi.stubGlobal('navigateTo', (...args: unknown[]) => navigateToMock(...args));
+vi.stubGlobal('navigateTo', navigateToMock);
 
-// Mock the client-helpers module so safeLocationRedirect calls navigateTo
-// regardless of import.meta.client value (which is false in tests).
+// Mock the client-helpers module so the assertion watches navigateTo directly
+// rather than the real safeLocationRedirect's call into it.
 vi.mock('../../../app/utils/client-helpers', () => ({
   safeLocationRedirect: (url: string) =>
     navigateToMock(url, { external: true }),
@@ -110,6 +114,59 @@ describe('FormWidget', () => {
     const emailInput = wrapper.find('[data-testid="form-field-email"] input');
     expect(emailInput.exists()).toBe(true);
     expect(emailInput.attributes('type')).toBe('email');
+  });
+
+  // The placeholder used to be the country prompt for every select, so an
+  // "Ärende" or "Typ av ärende" dropdown invited the buyer to pick a country.
+  it('prompts with the neutral placeholder when the select brings its own options', () => {
+    const wrapper = mountWidget({
+      fields: [
+        {
+          label: 'Typ av ärende',
+          name: 'arendetyp',
+          required: true,
+          type: 'select',
+          options: [{ value: 'teknisk', label: 'Teknisk fråga' }],
+        },
+      ],
+    });
+
+    const trigger = wrapper.find('[data-testid="form-field-arendetyp"]');
+    expect(trigger.text()).toContain('form.select_placeholder');
+    expect(trigger.text()).not.toContain('form.country_placeholder');
+  });
+
+  it('keeps the country prompt when the select falls back to the country list', () => {
+    // No options of its own, so selectOptionsFor serves countries — and the
+    // country prompt is the honest one for exactly that case.
+    const wrapper = mountWidget({
+      fields: [
+        { label: 'Country', name: 'country', required: true, type: 'select' },
+      ],
+    });
+
+    expect(wrapper.find('[data-testid="form-field-country"]').text()).toContain(
+      'form.country_placeholder',
+    );
+  });
+
+  it('lets the CMS override the placeholder per field', () => {
+    const wrapper = mountWidget({
+      fields: [
+        {
+          label: 'Typ av ärende',
+          name: 'arendetyp',
+          required: true,
+          type: 'select',
+          placeholder: 'Välj ärendetyp',
+          options: [{ value: 'teknisk', label: 'Teknisk fråga' }],
+        },
+      ],
+    });
+
+    expect(
+      wrapper.find('[data-testid="form-field-arendetyp"]').text(),
+    ).toContain('Välj ärendetyp');
   });
 
   // B3: select branch is exercised — deleting the v-if="field.type==='select'" block would fail this.
@@ -217,7 +274,8 @@ describe('FormWidget', () => {
     await wrapper.vm.$nextTick();
 
     expect(navigateToMock).toHaveBeenCalledTimes(1);
-    const calledUrl: string = navigateToMock.mock.calls[0]?.[0] as string;
+    const calledUrl = navigateToMock.mock.calls[0]?.[0];
+    assert.isDefined(calledUrl);
     expect(calledUrl).toMatch(/^mailto:/);
 
     // Decode and verify subject equals the literal business-critical format.
@@ -240,9 +298,9 @@ describe('FormWidget', () => {
       .setValue('jane@acme.com');
     (wrapper.vm as unknown as { handleSubmit: () => void }).handleSubmit();
     await wrapper.vm.$nextTick();
-    const decoded = decodeURIComponent(
-      navigateToMock.mock.calls[0]?.[0] as string,
-    );
+    const calledUrl = navigateToMock.mock.calls[0]?.[0];
+    assert.isDefined(calledUrl);
+    const decoded = decodeURIComponent(calledUrl);
     expect(decoded).toContain('Contact Form');
   });
 
@@ -295,5 +353,179 @@ describe('FormWidget', () => {
       },
     });
     expect(wrapper.find('[data-testid="form-fallback"]').exists()).toBe(false);
+  });
+});
+
+describe('FormWidget checkbox fields', () => {
+  const interests: FormWidgetData['fields'] = [
+    {
+      label: 'Power',
+      name: 'interest',
+      value: 'Power',
+      groupLabel: 'Interested in',
+      required: false,
+      type: 'checkbox',
+    },
+    {
+      label: 'Monitoring',
+      name: 'interest',
+      value: 'Monitoring',
+      required: false,
+      type: 'checkbox',
+    },
+    {
+      label: 'I accept the terms',
+      name: 'terms',
+      required: true,
+      type: 'checkbox',
+    },
+  ];
+
+  function decodedBody(): string {
+    const url = String(navigateToMock.mock.calls[0]?.[0] ?? '');
+    return decodeURIComponent(url.split('&body=')[1] ?? '');
+  }
+
+  beforeEach(() => navigateToMock.mockClear());
+
+  it('renders a checkbox rather than a text input', () => {
+    const wrapper = mountWidget({ fields: interests });
+
+    expect(wrapper.findAll('input[type="checkbox"]').length).toBe(3);
+    expect(wrapper.findAll('input[type="text"]').length).toBe(0);
+  });
+
+  it('reports a group on one line under its group label', async () => {
+    const wrapper = mountWidget({ fields: interests });
+    const boxes = wrapper.findAll('input[type="checkbox"]');
+
+    await boxes[0]!.setValue(true);
+    await boxes[1]!.setValue(true);
+    await boxes[2]!.setValue(true);
+    await wrapper.find('form').trigger('submit');
+
+    // One line for the pair, not one per ticked option repeating the answer.
+    expect(decodedBody()).toContain('Interested in: Power, Monitoring');
+    expect(decodedBody()).not.toContain('Monitoring: Power');
+  });
+
+  it('reports a standalone tick under its own label', async () => {
+    const wrapper = mountWidget({ fields: interests });
+    const boxes = wrapper.findAll('input[type="checkbox"]');
+
+    await boxes[2]!.setValue(true);
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).toContain('I accept the terms:');
+  });
+
+  it('omits unticked boxes from the body', async () => {
+    const wrapper = mountWidget({ fields: interests });
+    const boxes = wrapper.findAll('input[type="checkbox"]');
+
+    await boxes[2]!.setValue(true);
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).not.toContain('Interested in');
+  });
+
+  it('blocks submit until a required checkbox is ticked', async () => {
+    const wrapper = mountWidget({ fields: interests });
+
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).not.toHaveBeenCalled();
+
+    await wrapper.findAll('input[type="checkbox"]')[2]!.setValue(true);
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves an unfilled optional text field out of the body', async () => {
+    // Every field was reported unconditionally before, so an optional field
+    // left blank contributed a bare "Label:" line.
+    const wrapper = mountWidget({
+      fields: [
+        { label: 'Company', name: 'company', required: true, type: 'input' },
+        { label: 'Phone', name: 'phone', required: false, type: 'input' },
+      ],
+    });
+
+    await wrapper.find('input[type="text"]').setValue('Acme');
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).toContain('Company: Acme');
+    expect(decodedBody()).not.toContain('Phone:');
+  });
+});
+
+describe('FormWidget checkbox group edge cases', () => {
+  // groupLabel sits on the first option; a required box sits later in the
+  // same group. Both are the shapes the per-box handling got wrong.
+  const group: FormWidgetData['fields'] = [
+    {
+      label: 'Power',
+      name: 'interest',
+      value: 'Power',
+      groupLabel: 'Interested in',
+      required: false,
+      type: 'checkbox',
+    },
+    {
+      label: 'Monitoring',
+      name: 'interest',
+      value: 'Monitoring',
+      required: true,
+      type: 'checkbox',
+    },
+    {
+      label: 'Safety',
+      name: 'interest',
+      value: 'Safety',
+      required: false,
+      type: 'checkbox',
+    },
+  ];
+
+  function decodedBody(): string {
+    const url = String(navigateToMock.mock.calls[0]?.[0] ?? '');
+    return decodeURIComponent(url.split('&body=')[1] ?? '');
+  }
+
+  beforeEach(() => navigateToMock.mockClear());
+
+  it('keeps a required option enforced when a later option clears the slot', async () => {
+    // The group shares one error slot. Written per box, the required option's
+    // error was overwritten by the optional box after it, and the form
+    // submitted without it.
+    const wrapper = mountWidget({ fields: group });
+
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).not.toHaveBeenCalled();
+
+    await wrapper.findAll('input[type="checkbox"]')[1]!.setValue(true);
+    await wrapper.find('form').trigger('submit');
+    expect(navigateToMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the group label even when the box carrying it is unticked', async () => {
+    const wrapper = mountWidget({ fields: group });
+    const boxes = wrapper.findAll('input[type="checkbox"]');
+
+    // Leave "Power" — which carries groupLabel — unticked.
+    await boxes[1]!.setValue(true);
+    await boxes[2]!.setValue(true);
+    await wrapper.find('form').trigger('submit');
+
+    expect(decodedBody()).toContain('Interested in: Monitoring, Safety');
+    expect(decodedBody()).not.toContain('Monitoring: Monitoring');
+  });
+
+  it('gives every box in a group its own id', () => {
+    const wrapper = mountWidget({ fields: group });
+    const ids = wrapper
+      .findAll('input[type="checkbox"]')
+      .map((input) => input.attributes('id'));
+
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

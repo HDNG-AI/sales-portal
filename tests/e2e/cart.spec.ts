@@ -1,12 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
   discoverPurchasableProduct,
   discoverCategory,
   addToCart,
+  fetchCart,
+  parsePrice,
+  readPrice,
   waitForHydration,
   hasE2ECredentials,
   outOfScope,
   STORAGE_STATE,
+  type ApiCart,
 } from './helpers';
 
 /**
@@ -48,11 +52,11 @@ test.describe('Cart', () => {
     );
     const cartItem = page.locator('[data-testid="cart-item"]');
 
-    // Either empty state is shown or no cart items exist
-    const hasEmpty = await emptyState.isVisible().catch(() => false);
-    const hasItems = await cartItem.isVisible().catch(() => false);
-
-    expect(hasEmpty || !hasItems).toBe(true);
+    // The context carries no cart cookie, so this cart is empty by
+    // construction — the empty state is the one state this test reaches.
+    // `hasEmpty || !hasItems` restated its first operand and passed either way.
+    await expect(emptyState).toBeVisible();
+    await expect(cartItem).toHaveCount(0);
   });
 
   test('should add a product to cart from PDP', async ({ page }) => {
@@ -128,26 +132,27 @@ test.describe('Cart', () => {
     const promoInput = drawer.locator('[data-testid="promo-input"]');
     const promoApply = drawer.locator('[data-testid="promo-apply"]');
 
-    if (await promoInput.isVisible().catch(() => false)) {
-      await promoInput.fill('INVALID_PROMO_12345');
-      await promoApply.click();
+    // Declared on the measured state rather than on `true`: `/api/cart/promo`,
+    // the store action and `PromoCodeInput` all still exist — only the markup
+    // that mounts the component is gone, parked on a design decision. Written
+    // this way the test wakes up on its own the day the field comes back.
+    outOfScope(
+      !(await promoInput.isVisible().catch(() => false)),
+      'feature-hidden',
+      'no surface renders the promo field, so no code can be submitted',
+    );
 
-      // Wait for the promo code API response
-      await page
-        .waitForResponse(
-          (resp) =>
-            resp.url().includes('/api/cart/promo') && resp.status() !== 0,
-          { timeout: 10000 },
-        )
-        .catch(() => {
-          // Fallback: API may not fire if validation is client-side
-        });
+    await promoInput.fill('INVALID_PROMO_12345');
+    await promoApply.click();
 
-      // The promo code should not be applied — no active promo visible
-      const promoRemove = drawer.locator('[data-testid="promo-remove"]');
-      const hasActivePromo = await promoRemove.isVisible().catch(() => false);
-      expect(hasActivePromo).toBe(false);
-    }
+    // The rejection the test is named for. Asserting only "no active promo" is
+    // true of a drawer that was never sent a code — which is what this used to
+    // assert, inside a branch it never entered. The error element retries, so
+    // it also serves as the wait for the response.
+    await expect(drawer.locator('[data-testid="cart-error"]')).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(drawer.locator('[data-testid="promo-remove"]')).toHaveCount(0);
   });
 
   test('should add product from PLP grid add-to-cart button', async ({
@@ -163,10 +168,17 @@ test.describe('Cart', () => {
     await waitForHydration(page);
 
     // Click the first add-to-cart button on the PLP (grid view shows "Köp", list shows "Lägg i varukorg")
+    // canPurchase depends on auth, catalog mode and stock, so a category
+    // whose first cards offer no button is a real state — the suite already
+    // treats this as something to probe (discoverPurchasableProduct).
     const addButton = page
       .locator('[data-testid="add-to-cart-button"]')
       .first();
-    if (!(await addButton.isVisible().catch(() => false))) return;
+    outOfScope(
+      !(await addButton.isVisible().catch(() => false)),
+      'fixture-missing',
+      'no product card in the discovered category offers add-to-cart',
+    );
 
     await addButton.click();
 
@@ -276,5 +288,229 @@ test.describe('Cart', () => {
     // Cart should still have items (cookie persists the cartId)
     const cartItem = page.locator('[data-testid="cart-item"]');
     await expect(cartItem.first()).toBeVisible({ timeout: 20000 });
+  });
+});
+
+/**
+ * Values, compared against the cart the server computed for the same cart id.
+ *
+ * The suite's recipe for a value assertion (see the price block in
+ * product-browsing.spec.ts): read the expected numbers from the API, read the
+ * rendered ones with `readPrice`, never compare formatted strings, and assert
+ * both sides of every flag.
+ *
+ * Each test gets a fresh context from the stored login state, which carries no
+ * cart cookie, so the cart these tests read is their own — the three browser
+ * projects run in parallel without touching each other's totals.
+ */
+test.describe('Cart values', () => {
+  // More than one, or "quantity x unit price" is not a multiplication.
+  const QUANTITY = 3;
+
+  /**
+   * Shipping has no number before checkout: `/api/cart` sends an empty fee
+   * string until an option is selected, and the two surfaces answer that
+   * differently — the page falls back to "calculated at checkout", the drawer
+   * drops the row. Asserting the fallback as text would assert the active
+   * locale, so the absence is asserted as "no digits here" instead.
+   */
+  async function expectShippingMatches(
+    cell: Locator,
+    surface: 'page' | 'drawer',
+    feeFormatted: string,
+  ) {
+    if (feeFormatted === '') {
+      if (surface === 'drawer') {
+        await expect(cell).toHaveCount(0);
+        return;
+      }
+      await expect(cell).toBeVisible();
+      const text = (await cell.innerText()).trim();
+      expect(
+        text.length,
+        'the shipping cell rendered nothing at all',
+      ).toBeGreaterThan(0);
+      expect(
+        /\d/.test(text),
+        `the API sent no shipping fee, so the cell must not show a number: ${JSON.stringify(text)}`,
+      ).toBe(false);
+      return;
+    }
+
+    expect(await readPrice(cell)).toBeCloseTo(parsePrice(feeFormatted), 2);
+  }
+
+  /** Subtotal, VAT and total on one surface, against the cart the API reports. */
+  async function expectSummaryMatches(root: Locator, cart: ApiCart) {
+    // vat_display defaults to 'ex' (app/composables/useVatDisplay.ts) and the
+    // stored login state carries that default, so the ex-VAT numbers are the
+    // ones these surfaces must show.
+    expect(
+      await readPrice(root.locator('[data-testid="cart-summary-subtotal"]')),
+    ).toBeCloseTo(cart.subTotalExVat, 2);
+    expect(
+      await readPrice(root.locator('[data-testid="cart-summary-tax"]')),
+    ).toBeCloseTo(cart.vat, 2);
+    expect(
+      await readPrice(root.locator('[data-testid="cart-summary-total"]')),
+    ).toBeCloseTo(cart.totalExVat, 2);
+  }
+
+  async function openCartPage(page: Page) {
+    await page.goto('/cart');
+    await page.waitForLoadState('load');
+    await waitForHydration(page);
+    await expect(page.locator('[data-testid="cart-item"]').first()).toBeVisible(
+      {
+        timeout: 20000,
+      },
+    );
+  }
+
+  test('drawer and cart page show the summary /api/cart reports', async ({
+    page,
+  }) => {
+    const product = await discoverPurchasableProduct(page);
+    await addToCart(page, product.alias, QUANTITY);
+
+    const drawer = page.locator('[data-testid="cart-drawer"]');
+    await expect(drawer).toBeVisible();
+    await expect(
+      drawer.locator('[data-testid="cart-item"]').first(),
+    ).toBeVisible({ timeout: 10000 });
+
+    const cart = await fetchCart(page);
+    // The quantity the PDP was asked for is the quantity the cart holds, or
+    // every number below is measured against a cart nobody asked for.
+    expect(cart.items[0]!.quantity).toBe(QUANTITY);
+
+    await expectSummaryMatches(drawer, cart);
+    await expectShippingMatches(
+      drawer.locator('[data-testid="cart-summary-shipping"]'),
+      'drawer',
+      cart.shippingFeeFormatted,
+    );
+
+    await openCartPage(page);
+
+    await expectSummaryMatches(page.locator('[data-testid="cart-page"]'), cart);
+    await expectShippingMatches(
+      page.locator('[data-testid="cart-summary-shipping"]'),
+      'page',
+      cart.shippingFeeFormatted,
+    );
+  });
+
+  test('a cart line shows quantity x unit price as its total', async ({
+    page,
+  }) => {
+    const product = await discoverPurchasableProduct(page);
+    await addToCart(page, product.alias, QUANTITY);
+    await openCartPage(page);
+
+    const cart = await fetchCart(page);
+    const line = cart.items[0]!;
+    expect(line.quantity).toBe(QUANTITY);
+
+    const item = page.locator('[data-testid="cart-item"]').first();
+    const unitPrice = await readPrice(
+      item.locator('[data-testid="cart-item-unit-price"]'),
+    );
+    const totalPrice = await readPrice(
+      item.locator('[data-testid="cart-item-total-price"]'),
+    );
+
+    expect(unitPrice).toBeCloseTo(line.unitPriceExVat, 2);
+    expect(totalPrice).toBeCloseTo(line.totalPriceExVat, 2);
+    // The multiplication itself, on both sides: the rendered pair must agree
+    // with each other and with what the server charged for the line.
+    expect(totalPrice).toBeCloseTo(unitPrice * QUANTITY, 2);
+    expect(line.totalPriceExVat).toBeCloseTo(line.unitPriceExVat * QUANTITY, 2);
+  });
+
+  test('the summary follows a quantity change', async ({ page }) => {
+    const product = await discoverPurchasableProduct(page);
+    await addToCart(page, product.alias, QUANTITY);
+    await openCartPage(page);
+
+    const before = await fetchCart(page);
+    expect(before.items[0]!.quantity).toBe(QUANTITY);
+    // A free line would make both the re-render wait and the growing subtotal
+    // below true of a cart that never changed.
+    expect(
+      before.items[0]!.unitPriceExVat,
+      'the discovered product is free, so a quantity change moves no number',
+    ).toBeGreaterThan(0);
+
+    const item = page.locator('[data-testid="cart-item"]').first();
+    const amount = item.locator('[data-testid="quantity-input"] input');
+    const lineTotal = item.locator('[data-testid="cart-item-total-price"]');
+    const increment = item.locator(
+      '[data-testid="quantity-input"] button:last-of-type',
+    );
+    const lineTotalBefore = (await lineTotal.innerText()).trim();
+
+    // Wait for the PUT itself rather than swallowing it: without the server's
+    // answer the assertions below race the update and pass on the old cart.
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (resp) =>
+          resp.url().includes('/api/cart/items') &&
+          resp.request().method() === 'PUT',
+        { timeout: 15000 },
+      ),
+      increment.click(),
+    ]);
+    expect(
+      response.ok(),
+      `PUT /api/cart/items returned HTTP ${response.status()}`,
+    ).toBe(true);
+    // The control moves optimistically on click, so it says nothing about the
+    // summary. The line total only changes once the server's cart is rendered,
+    // which is what the numbers below are read against.
+    await expect(amount).toHaveValue(String(QUANTITY + 1));
+    await expect(lineTotal).not.toHaveText(lineTotalBefore);
+
+    // Re-read: the cart the page now shows is a different cart than `before`.
+    const after = await fetchCart(page);
+    expect(after.items[0]!.quantity).toBe(QUANTITY + 1);
+    expect(after.subTotalExVat).toBeGreaterThan(before.subTotalExVat);
+
+    await expectSummaryMatches(
+      page.locator('[data-testid="cart-page"]'),
+      after,
+    );
+    expect(await readPrice(lineTotal)).toBeCloseTo(
+      after.items[0]!.unitPriceExVat * (QUANTITY + 1),
+      2,
+    );
+  });
+
+  test('the discount line carries what the API reports', async ({ page }) => {
+    const product = await discoverPurchasableProduct(page);
+    await addToCart(page, product.alias, QUANTITY);
+    await openCartPage(page);
+
+    const cart = await fetchCart(page);
+
+    // Asserting a zero here would pass whether or not the line works, so the
+    // empty case is declared rather than asserted. The day the tenant carries
+    // a promotion this becomes a real assertion instead of a skip.
+    outOfScope(
+      cart.discountIncVat === 0,
+      'tenant-config',
+      'the tenant has no promotion, so the discount line never carries a value',
+    );
+
+    const discountRow = page.locator('[data-testid="cart-summary-discount"]');
+    await expect(discountRow).toBeVisible();
+    // The row id covers the label too, hence a second id on the amount.
+    // `discountAmount` is the inc-VAT figure the store exposes
+    // (app/stores/cart.ts:24), which is what both surfaces render today.
+    expect(
+      await readPrice(
+        discountRow.locator('[data-testid="cart-summary-discount-amount"]'),
+      ),
+    ).toBeCloseTo(cart.discountIncVat, 2);
   });
 });

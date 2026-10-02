@@ -17,14 +17,12 @@ export type {
 /**
  * Feature access control — who can access a feature.
  * Standalone type so shared/ utilities don't depend on server/schemas/.
+ *
+ * Only rules the app can evaluate. The wire shape (`FeatureAccessInput`) is
+ * wider; `normalizeFeatureAccess` in server/utils/tenant.ts retires the rest.
+ * See ADR-007 for which rules were dropped and why.
  */
-export type FeatureAccess =
-  | 'all'
-  | 'authenticated'
-  | { group: string }
-  | { role: string }
-  | { permission: string }
-  | { accountType: string };
+export type FeatureAccess = 'all' | 'authenticated';
 
 /**
  * Full tenant configuration — StoreSettings from API + computed fields.
@@ -59,13 +57,19 @@ export interface TenantConfig {
   // Checkout mode
   checkoutMode: 'custom' | 'hosted';
 
-  // IANA timezone identifier (e.g. 'Europe/Stockholm'), never a raw UTC
-  // offset — offsets don't survive DST. Anchors record-type timestamps
-  // (order placed, invoice date) to the tenant's own operating timezone
-  // rather than the server's OS timezone or each viewer's browser.
-  // Defaults to 'UTC' — deliberately not a tenant-specific guess; see
-  // docs/lessons-learned.md for why defaults here must stay generic.
-  timezone: string;
+  /**
+   * IANA timezone identifier (e.g. 'Europe/Stockholm'), never a raw UTC
+   * offset — offsets don't survive DST. Anchors record-type timestamps
+   * (order placed, invoice date) to the tenant's own operating timezone
+   * rather than the server's OS timezone or each viewer's browser.
+   *
+   * Optional, and with no default on purpose. 'UTC' asserts that an
+   * unconfigured tenant operates in UTC, which is true of almost none of
+   * them, and it reads at the consumer exactly like a tenant that chose UTC
+   * deliberately. Unset means the formatter omits `timeZone` entirely.
+   * See docs/adr/024-tenant-operating-timezone.md.
+   */
+  timezone?: string;
 
   // Theme
   theme: {
@@ -96,6 +100,23 @@ export interface TenantConfig {
   layout?: {
     headerNavVariant?: 'grey' | 'white' | null;
     storefrontStyle?: 'classic' | 'editorial' | null;
+    /**
+     * Show the signed-in buyer's company in the topbar. Off unless a tenant
+     * asks for it: the name is only meaningful where buyers order on behalf
+     * of an organisation, and it costs a request per page view to fetch.
+     */
+    showCompanyName?: boolean | null;
+    /**
+     * Prices shown inclusive or exclusive of VAT before the buyer chooses.
+     * Absent means ex-VAT, the right floor for a B2B storefront.
+     */
+    vatDisplay?: 'ex' | 'inc' | null;
+    /**
+     * Take the choice away: `vatDisplay` then applies to every buyer and the
+     * switcher is hidden. Separate from `vatDisplay` because the two are
+     * independent — a tenant can default to ex-VAT and still allow switching.
+     */
+    vatDisplayLocked?: boolean | null;
   } | null;
 
   // Features — keyed by feature name
@@ -192,7 +213,7 @@ export interface PublicTenantConfig {
   aliases?: string[];
   mode: 'commerce' | 'catalog';
   checkoutMode: 'custom' | 'hosted';
-  timezone: string;
+  timezone?: string;
   theme: TenantConfig['theme'];
   branding: TenantConfig['branding'];
   layout?: TenantConfig['layout'];

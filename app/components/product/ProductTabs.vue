@@ -8,7 +8,7 @@ import {
   AccordionTrigger,
 } from '~/components/ui/accordion';
 import { formatLength, formatWeight } from '~/utils/measurements';
-import { adminText } from '~/utils/product-texts';
+import { productDescriptionTexts } from '~/utils/product-tabs';
 import {
   ExternalLink,
   FileArchive,
@@ -57,23 +57,11 @@ const props = defineProps<{
   related?: ListProduct[] | null;
 }>();
 
-// True when the HTML carries visible copy, not just empty editor markup
-// (e.g. `<p><br></p>`), so a blank field never shows an empty block.
-function hasRenderableHtml(html: string | undefined): html is string {
-  return !!html && html.replace(/<[^>]*>/g, '').trim().length > 0;
-}
-
-// The details tab shows the merchant's admin "Text 2" copy first, then
-// "Text 3", each capped at max-w-3xl. `adminText` maps the PIM box numbers
-// onto the offset Merchant API fields (see ~/utils/product-texts).
-const detailsText2 = computed(() => {
-  const html = adminText(props.product.texts, 2);
-  return hasRenderableHtml(html) ? html : undefined;
-});
-const detailsText3 = computed(() => {
-  const html = adminText(props.product.texts, 3);
-  return hasRenderableHtml(html) ? html : undefined;
-});
+// Upstream extracted this so the configurator page can reuse it; the names
+// stay local because the template reads them in four places.
+const descriptionTexts = computed(() => productDescriptionTexts(props.product));
+const detailsText2 = computed(() => descriptionTexts.value.text2);
+const detailsText3 = computed(() => descriptionTexts.value.text3);
 const hasDescription = computed(
   () => !!(detailsText2.value || detailsText3.value),
 );
@@ -134,6 +122,9 @@ const hasDocumentsContent = computed(
   () => videoItems.value.length > 0 || documentItems.value.length > 0,
 );
 
+// Deliberately not `visibleParameterGroups` from ~/utils/product-tabs: this
+// filter is a superset of it, adding the `show: false` check and the
+// media-parameter exclusion below. Keep the regex in step with the util's.
 const HIDDEN_PARAMETER_GROUPS = /^monitor$/i;
 const visibleGroups = computed(() =>
   (props.product.parameterGroups ?? [])

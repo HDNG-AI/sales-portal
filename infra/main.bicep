@@ -24,9 +24,6 @@ param location string = resourceGroup().location
 @description('Base name for resources')
 param appName string = 'sales-portal'
 
-@description('Container image to deploy (e.g., ghcr.io/org/repo:tag)')
-param containerImage string
-
 @description('GitHub Container Registry credentials - username')
 @secure()
 param ghcrUsername string = ''
@@ -55,6 +52,9 @@ param redisUrl string = ''
 
 @description('Enable analytics')
 param enableAnalytics string = ''
+
+@description('Configurator backend: off, fixture or sdk. Anything else reads as off.')
+param configuratorBackend string = 'off'
 
 @description('Log level')
 param logLevel string = 'info'
@@ -101,9 +101,15 @@ var skuConfig = {
     tier: 'Standard'
     capacity: 1
   }
+  // P1v3 (2 vCPU, 8 GB), one instance. The staging slot shares this plan, and on
+  // S1's single core its container start and warm-up starved production: two
+  // release dry runs on 2026-09-10 each timed production out for about three
+  // minutes without a swap having happened. A second core lets the slot start
+  // beside production; a second *instance* would not, since the tenant cache is
+  // per instance and the config-refresh webhook reaches only one of them.
   prod: {
-    name: 'S1'
-    tier: 'Standard'
+    name: 'P1v3'
+    tier: 'PremiumV3'
     capacity: 1
   }
 }
@@ -157,7 +163,6 @@ module webApp 'modules/webApp.bicep' = {
     name: '${resourcePrefix}-app'
     location: location
     appServicePlanId: appServicePlan.outputs.id
-    containerImage: containerImage
     ghcrUsername: ghcrUsername
     ghcrToken: ghcrToken
     environment: environment
@@ -169,6 +174,7 @@ module webApp 'modules/webApp.bicep' = {
     storageDriver: storageDriver
     redisUrl: redisUrl
     enableAnalytics: enableAnalytics
+    configuratorBackend: configuratorBackend
     logLevel: logLevel
     versionX: versionX
     // Sentry (runtime only - build-time vars are in GitHub Actions)

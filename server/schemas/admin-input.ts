@@ -61,7 +61,7 @@ export const CreateTenantSchema = z
         name: z.string(),
         // The endpoint's own precedent (see git history) is accepting just
         // the 6 core colors and deriving the rest — ThemeColorsSchema's
-        // required fields are exactly those 6, with the remaining 26 as
+        // required fields are exactly those 6, with the remaining 36 as
         // optional overrides, and it coerces any CSS color format
         // (hex/rgb/hsl/named) to OKLCH rather than accepting an arbitrary
         // string that downstream derivation would silently fall back to

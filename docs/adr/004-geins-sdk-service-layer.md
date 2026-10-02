@@ -96,7 +96,7 @@ interface TenantSDK {
 
 const tenants = new Map<string, TenantSDK>();
 
-export function getTenantSDK(event: H3Event): TenantSDK {
+export async function getTenantSDK(event: H3Event): Promise<TenantSDK> {
   const hostname = event.context.tenant.hostname;
   const existing = tenants.get(hostname);
   if (existing) return existing;
@@ -144,7 +144,7 @@ export async function login(
   credentials: AuthCredentials,
   event: H3Event,
 ): Promise<AuthResponse> {
-  const { crm } = getTenantSDK(event);
+  const { crm } = await getTenantSDK(event);
   const result = await crm.auth.login(credentials);
 
   if (!result?.succeeded || !result.tokens?.token) {
@@ -158,7 +158,7 @@ export async function refresh(
   refreshToken: string,
   event: H3Event,
 ): Promise<AuthResponse> {
-  const { crm } = getTenantSDK(event);
+  const { crm } = await getTenantSDK(event);
   const result = await crm.auth.refresh(refreshToken);
 
   if (!result?.succeeded || !result.tokens?.token) {
@@ -173,7 +173,7 @@ export async function getUser(
   userToken: string,
   event: H3Event,
 ) {
-  const { crm } = getTenantSDK(event);
+  const { crm } = await getTenantSDK(event);
   return crm.auth.getUser(refreshToken, userToken);
 }
 ```
@@ -244,7 +244,7 @@ import { loadQuery } from './graphql/loader';
 import type { H3Event } from 'h3';
 
 export async function getProduct(alias: string, event: H3Event) {
-  const { core } = getTenantSDK(event);
+  const { core } = await getTenantSDK(event);
   return core.graphql.query({
     queryAsString: loadQuery('products/product.graphql'),
     variables: { alias },

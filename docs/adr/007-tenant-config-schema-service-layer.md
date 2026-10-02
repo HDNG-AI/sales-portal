@@ -10,7 +10,7 @@ tags: [tenant, zod, schema, service-layer]
 
 ## Context
 
-The tenant configuration grew from a simple set of flags to a rich contract with 32 OKLCH color tokens, feature flags with access control, SEO, contact info, and branding. The old approach had several problems:
+The tenant configuration grew from a simple set of flags to a rich contract with 42 OKLCH color tokens, feature flags with access control, SEO, contact info, and branding. The old approach had several problems:
 
 1. **No runtime validation** — configuration from the external API was trusted at compile time only. A malformed response would cause subtle runtime errors deep in the rendering pipeline.
 2. **Flat boolean feature flags** — `TenantFeatures` was `{ enableSearch?: boolean; enableCart?: boolean; ... }`, which couldn't express access control (e.g., "only authenticated users" or "only the staff group").
@@ -23,7 +23,7 @@ The tenant configuration grew from a simple set of flags to a rich contract with
 
 All tenant configuration types are derived from a Zod schema in `server/schemas/store-settings.ts`. The schema defines the exact API contract:
 
-- 6 required OKLCH colors + 34 optional (nullable): 26 derived palette colors and 8 surface keys
+- 6 required OKLCH colors + 36 optional (nullable): 28 derived palette colors and 8 surface keys
 - Feature flags as `Record<string, { enabled: boolean; access?: FeatureAccess }>`
 - `mode: 'commerce' | 'catalog'`
 - `watermark: 'full' | 'minimal' | 'none'` on branding
@@ -75,14 +75,16 @@ One exception, narrow and deliberate: when a Geins record carries no `defaultHos
 
 ### Feature access evaluation
 
-`FeatureAccess` is defined as a standalone type in `shared/types/tenant-config.ts` (not Zod-inferred) so shared utilities can import it without pulling in server/schema code. The Zod schema still validates the same shape.
+`FeatureAccess` is defined as a standalone type in `shared/types/tenant-config.ts` (not Zod-inferred) so shared utilities can import it without pulling in server/schema code.
 
 A strategy-pattern evaluator registry in `shared/utils/feature-access.ts` evaluates access rules:
 
 - `'all'` → everyone
 - `'authenticated'` → logged-in users
-- `{ role }` → matches `user.customerType` from Geins
-- `{ group }` / `{ accountType }` → safe deny (not yet available in Geins API)
+
+**Amended 2026-09-07:** `{ group }`, `{ accountType }` and `{ permission }` were removed from `FeatureAccess` — nothing in the Geins token carries a group, an account type or a permission list, so each rule could only ever deny. `FeatureAccessSchema` still accepts all three so a stored config stays valid, and `normalizeFeatureAccess` in `server/utils/tenant.ts` retires them per config: the feature becomes `{ enabled: false }` and the reason is logged at warn.
+
+**Amended 2026-09-08:** `{ role }` went the same way, leaving `FeatureAccess` as `'all' | 'authenticated'` — exactly what the merchant admin can configure. It was evaluated as `user.customerType === rule.role`, and `customerType` is the raw `CustomerType` claim (`"2"` for an organisation account), so a matching rule would have had to read `{ role: "2" }` — a value nothing in the admin can produce. The role-gated route path went with it: `hasRole` / `hasAnyRole` in the auth store, the role branch of `app/middleware/auth.ts` and the `roles` route meta all compared against that same raw claim, and no page set it. With no object member left in `FeatureAccess`, `isEvaluableAccess` is a `typeof` check the compiler verifies, and normalisation is fail-closed: an object rule added to the schema later is retired until the predicate is widened for it.
 
 Consumer API:
 
@@ -94,7 +96,7 @@ Adding a new rule type = adding one evaluator function + extending `UserContext`
 
 ### Color derivation
 
-`server/utils/theme.ts` provides `deriveThemeColors()` which fills all 26 derived palette colors from the 6 core colors using OKLCH color-space manipulation. This runs once when building the tenant config and the result is cached.
+`server/utils/theme.ts` provides `deriveThemeColors()` which fills all 28 derived palette colors from the 6 core colors using OKLCH color-space manipulation. This runs once when building the tenant config and the result is cached.
 
 ## Consequences
 
@@ -102,7 +104,7 @@ Adding a new rule type = adding one evaluator function + extending `UserContext`
 
 - **Runtime safety** — malformed API responses are caught at parse time with structured error messages
 - **Single source of truth** — Zod schema generates all types; no manual interface sync
-- **Access control** — features support granular access (group, role, accountType)
+- **Access control** — features support granular access (authenticated)
 - **Decoupled consumers** — components use the service layer, not raw config shape
 - **No secret leaks** — `PublicTenantConfig` physically can't contain `geinsSettings` or `overrides`
 
