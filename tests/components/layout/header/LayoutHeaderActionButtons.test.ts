@@ -17,7 +17,7 @@ describe('LayoutHeaderActionButtons anonymous conversion actions', () => {
     expect(source).toContain("{{ $t('auth.login') }}");
   });
 
-  it('promotes account application when the tenant enables it', () => {
+  it('promotes account application when applyForAccount is enabled', () => {
     expect(source).toContain("hasFeature('applyForAccount')");
     expect(source).toContain('data-testid="header-apply"');
     expect(source).toContain("{{ $t('layout.apply_for_account') }}");

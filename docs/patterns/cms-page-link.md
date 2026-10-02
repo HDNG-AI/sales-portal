@@ -18,10 +18,13 @@ code (an icon button, a placed link) must point at one editor-owned page.
 Tags live in `CMS_TAGS` in `shared/constants/cms.ts` (lowercase, no leading `#`;
 `hasPageTag()` normalizes the `#` and casing the editor typed):
 
-| Constant                | Value       | Used by                  |
-| ----------------------- | ----------- | ------------------------ |
-| `CMS_TAGS.CONTACT_PAGE` | `'contact'` | Topbar "Contact us" link |
-| `CMS_TAGS.APPLY_PAGE`   | `'apply'`   | Topbar "Apply" link      |
+| Constant                | Value                  | Used by                       |
+| ----------------------- | ---------------------- | ----------------------------- |
+| `CMS_TAGS.CONTACT_PAGE` | `'contact'`            | Topbar "Contact us" link      |
+| `CMS_TAGS.APPLY_PAGE`   | `'apply'`              | Topbar "Apply" link           |
+| `CMS_TAGS.TERMS_PAGE`   | `'terms'`              | Checkout terms link           |
+| `CMS_TAGS.PRIVACY_PAGE` | `'privacy'`            | Cookie banner's policy link   |
+| `CMS_TAGS.SIDEBAR_MENU` | `'menu'`               | Renders the page with sidebar |
 
 ## Data Flow
 
@@ -43,10 +46,13 @@ Geins CMS (page tagged #contact)
    `isSafeInternalPath` at the boundary. It returns `null` only when neither a
    canonical URL nor a safe alias path is available. `cmsPages` localizes by an
    exact `languageId` match, so each locale gets its own page. Results are cached
-   in a short-TTL LRU keyed by `buildCachePrefix(event)::pagelink::<tag>`; a
-   confirmed miss is cached as an empty-string sentinel (distinguished from an
-   un-cached entry via `cache.has()`) so a missing page does not re-query every
-   render. Preview requests bypass the cache.
+   in a short-TTL LRU keyed by
+   `buildAnonymousCachePrefix(event)::pagelink::<tag>`: the query goes out
+   without a request context, so its response cannot vary by caller and the key
+   carries no identity segment. A confirmed miss is cached as an empty-string
+   sentinel (distinguished from an un-cached entry via `cache.has()`) so a
+   missing page does not re-query every render. Preview requests bypass the
+   cache.
 3. `server/api/cms/page-link.get.ts` validates `tag` with `CmsPageLinkSchema`
    (`^[a-z][a-z0-9-]*$`, max 50) and returns `{ url }`.
 4. `useCmsPageLink(tag)` (`app/composables/useCmsPageLink.ts`) takes the tag as

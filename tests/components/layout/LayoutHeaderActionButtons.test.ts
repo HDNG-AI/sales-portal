@@ -17,7 +17,7 @@ vi.mock('../../../app/composables/useCmsPageLink', () => ({
 // useTenant is mocked globally in setup-components.ts.
 // Use mockIsCatalogMode to toggle catalog mode in individual tests.
 
-const mockCanAccess = vi.fn(() => true);
+const mockCanAccess = vi.fn<(featureName: string) => boolean>(() => true);
 vi.mock('../../../app/composables/useFeatureAccess', () => ({
   useFeatureAccess: () => ({ canAccess: mockCanAccess }),
 }));

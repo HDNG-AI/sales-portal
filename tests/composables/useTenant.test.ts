@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  assert,
+} from 'vitest';
 import { ref } from 'vue';
 import type { PublicTenantConfig } from '#shared/types/tenant-config';
 
@@ -9,16 +17,28 @@ const mockError = ref<Error | null>(null);
 const mockRefresh = vi.fn();
 
 const mockApi = vi.fn();
-const mockUseFetch = vi.fn(() => ({
-  data: mockData,
-  pending: mockPending,
-  error: mockError,
-  refresh: mockRefresh,
-}));
+
+// The parameters are the ones useTenant() calls useFetch with. Declaring them
+// here is what makes every `mock.calls` read below type-checked; a bare
+// `vi.fn(() => …)` infers zero arguments.
+type ConfigFetchOptions = {
+  dedupe?: string;
+  headers?: Record<string, string>;
+  // Never passed by the composable; the test below asserts exactly that.
+  $fetch?: unknown;
+};
+const mockUseFetch = vi.fn(
+  (_url: () => string, _options: ConfigFetchOptions) => ({
+    data: mockData,
+    pending: mockPending,
+    error: mockError,
+    refresh: mockRefresh,
+  }),
+);
 
 // Mock the Nuxt auto-imports at the module level
 vi.mock('#app/composables/fetch', () => ({
-  useFetch: (...args: unknown[]) => mockUseFetch(...args),
+  useFetch: (...args: Parameters<typeof mockUseFetch>) => mockUseFetch(...args),
 }));
 
 const mockRoute = { query: {} as Record<string, string> };
@@ -26,13 +46,15 @@ const mockRequestHeaders: Record<string, string> = {};
 
 vi.mock('#app', () => ({
   useNuxtApp: () => ({ $api: mockApi }),
-  useFetch: (...args: unknown[]) => mockUseFetch(...args),
+  useFetch: (...args: Parameters<typeof mockUseFetch>) => mockUseFetch(...args),
   useRoute: () => mockRoute,
   useRequestHeaders: () => mockRequestHeaders,
 }));
 
 // Stub globals for direct access
-vi.stubGlobal('useFetch', (...args: unknown[]) => mockUseFetch(...args));
+vi.stubGlobal('useFetch', (...args: Parameters<typeof mockUseFetch>) =>
+  mockUseFetch(...args),
+);
 vi.stubGlobal('useNuxtApp', () => ({ $api: mockApi }));
 
 vi.stubGlobal('useRoute', () => mockRoute);
@@ -73,6 +95,8 @@ function createMockTenantConfig(
     css: '',
     isActive: true,
     availableLocales: [],
+    availableMarkets: [],
+    imageBaseUrl: 'https://example.com',
     ...overrides,
   };
 }
@@ -92,7 +116,9 @@ describe('useTenant', () => {
       delete mockRequestHeaders[k];
 
     vi.resetModules();
-    vi.stubGlobal('useFetch', (...args: unknown[]) => mockUseFetch(...args));
+    vi.stubGlobal('useFetch', (...args: Parameters<typeof mockUseFetch>) =>
+      mockUseFetch(...args),
+    );
     vi.stubGlobal('useNuxtApp', () => ({ $api: mockApi }));
     vi.stubGlobal('useRoute', () => mockRoute);
     vi.stubGlobal('useRequestHeaders', () => mockRequestHeaders);
@@ -110,9 +136,11 @@ describe('useTenant', () => {
       useTenant();
 
       expect(mockUseFetch).toHaveBeenCalledTimes(1);
-      const [url, options] = mockUseFetch.mock.calls[0];
+      const call = mockUseFetch.mock.calls[0];
+      assert.isDefined(call);
+      const [url, options] = call;
       expect(typeof url).toBe('function');
-      expect((url as () => string)()).toBe('/api/config');
+      expect(url()).toBe('/api/config');
       expect(options.dedupe).toBe('defer');
       // The composable no longer routes through $api ($api forwards a header
       // allowlist that excludes cookies, so it would silently return the LIVE
@@ -507,10 +535,10 @@ describe('useTenant', () => {
 
   describe('availableLocales', () => {
     it('exposes only the locales this build ships, as short codes', () => {
-      // 'de-DE' is tenant-configured but has no message bundle in this build;
+      // 'fr-FR' is tenant-configured but has no message bundle in this build;
       // surfacing it would render a switcher entry the server 302s right back.
       mockData.value = createMockTenantConfig({
-        availableLocales: ['sv-SE', 'de-DE', 'en-GB'],
+        availableLocales: ['sv-SE', 'fr-FR', 'en-GB'],
       });
 
       const { availableLocales } = useTenant();
@@ -630,6 +658,47 @@ describe('useTenant', () => {
       expect(logoUrl.value).toBe('https://example.com/reactive-logo.png');
     });
   });
+
+  describe('analyticsConfigured', () => {
+    // The component specs mock useTenant and derive this themselves, so this
+    // is the only place the real predicate is exercised — reverting it to the
+    // feature flag alone has to fail here or it fails nowhere.
+    it('is false when the feature is on but no provider id is set', () => {
+      mockData.value = createMockTenantConfig({
+        features: { analytics: { enabled: true } },
+        seo: { googleAnalyticsId: '', googleTagManagerId: '' },
+      });
+
+      expect(useTenant().analyticsConfigured.value).toBe(false);
+    });
+
+    it('is false when a provider id is set but the feature is off', () => {
+      mockData.value = createMockTenantConfig({
+        features: { analytics: { enabled: false } },
+        seo: { googleAnalyticsId: 'G-TEST123' },
+      });
+
+      expect(useTenant().analyticsConfigured.value).toBe(false);
+    });
+
+    it('is true with the feature on and an analytics id', () => {
+      mockData.value = createMockTenantConfig({
+        features: { analytics: { enabled: true } },
+        seo: { googleAnalyticsId: 'G-TEST123' },
+      });
+
+      expect(useTenant().analyticsConfigured.value).toBe(true);
+    });
+
+    it('is true with the feature on and only a tag manager id', () => {
+      mockData.value = createMockTenantConfig({
+        features: { analytics: { enabled: true } },
+        seo: { googleTagManagerId: 'GTM-TEST' },
+      });
+
+      expect(useTenant().analyticsConfigured.value).toBe(true);
+    });
+  });
 });
 
 describe('useTenantTheme', () => {
@@ -643,7 +712,9 @@ describe('useTenantTheme', () => {
     mockUseFetch.mockClear();
 
     vi.resetModules();
-    vi.stubGlobal('useFetch', (...args: unknown[]) => mockUseFetch(...args));
+    vi.stubGlobal('useFetch', (...args: Parameters<typeof mockUseFetch>) =>
+      mockUseFetch(...args),
+    );
     vi.stubGlobal('useNuxtApp', () => ({ $api: mockApi }));
 
     const module = await import('../../app/composables/useTenant');

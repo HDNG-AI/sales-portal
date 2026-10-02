@@ -293,6 +293,7 @@ async function addToCart() {
         :discount-type="product.discountType"
         :campaign-names="visibleCampaigns.map((c) => c.name)"
         class="text-base font-semibold"
+        testid="card-price"
       />
 
       <!-- Price (brief ProductCardItem shape) -->
@@ -464,6 +465,7 @@ async function addToCart() {
         :discount-type="product.discountType"
         :campaign-names="visibleCampaigns.map((c) => c.name)"
         class="shrink-0 text-base font-semibold"
+        testid="card-price"
       />
 
       <template v-if="canPurchase">

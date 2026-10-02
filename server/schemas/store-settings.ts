@@ -127,13 +127,17 @@ const SafeUrlSchema = z.string().refine(
  * attempting construction rather than checking against
  * Intl.supportedValuesOf('timeZone'), which omits 'UTC' itself even
  * though the runtime accepts it as a real timeZone value. Rejects both
- * offsets ('GMT+1') and plausible-looking nonsense ('Ohio/United-States').
- * See docs/adr/023-tenant-operating-timezone.md for why 'UTC' — not
- * 'Etc/UTC' (functionally identical) or a tenant-specific guess — is the
- * default everywhere this schema is used.
+ * plausible-looking nonsense ('Ohio/United-States'). Offsets are refused
+ * explicitly rather than left to Intl: Intl rejects 'GMT+1' but ACCEPTS
+ * '+01:00' and '-0500' as timeZone values, and an offset cannot express
+ * DST, so a tenant stored as '+01:00' reads an hour wrong all summer.
+ *
+ * Deliberately carries no `.default()`. See the field on TenantConfig and
+ * docs/adr/024-tenant-operating-timezone.md.
  */
 export const TimezoneSchema = z.string().refine(
   (val) => {
+    if (/^[+-]/.test(val)) return false;
     try {
       new Intl.DateTimeFormat(undefined, { timeZone: val });
       return true;
@@ -147,6 +151,17 @@ export const TimezoneSchema = z.string().refine(
   },
 );
 
+export const LayoutConfigSchema = z
+  .object({
+    headerNavVariant: z.enum(['grey', 'white']).nullable().optional(),
+    storefrontStyle: z.enum(['classic', 'editorial']).nullable().optional(),
+    showCompanyName: z.boolean().nullable().optional(),
+    vatDisplay: z.enum(['ex', 'inc']).nullable().optional(),
+    vatDisplayLocked: z.boolean().nullable().optional(),
+  })
+  .nullable()
+  .optional();
+
 export const BrandingConfigSchema = z.object({
   name: z.string(),
   watermark: z.enum(['full', 'minimal', 'none']),
@@ -157,21 +172,13 @@ export const BrandingConfigSchema = z.object({
   ogImageUrl: SafeUrlSchema.nullable().optional(),
 });
 
-export const LayoutConfigSchema = z
-  .object({
-    headerNavVariant: z.enum(['grey', 'white']).nullable().optional(),
-    storefrontStyle: z.enum(['classic', 'editorial']).nullable().optional(),
-  })
-  .nullable()
-  .optional();
-
 /**
- * Feature access control — who can access a feature.
+ * Feature access control as it arrives on the wire — who can access a feature.
  * - "all": everyone
  * - "authenticated": logged-in users only
- * - { group: "staff" }: specific user group
- * - { role: "order_placer" }: specific role
- * - { accountType: "enterprise" }: specific account type
+ *
+ * `{ group }`, `{ accountType }`, `{ permission }` and `{ role }` are accepted
+ * for backwards compatibility and retired in server/utils/tenant.ts.
  */
 export const FeatureAccessSchema = z.union([
   z.literal('all'),
@@ -333,10 +340,10 @@ export const StoreSettingsSchema = z.object({
   geinsSettings: GeinsSettingsSchema,
   mode: TenantModeSchema,
   checkoutMode: z.enum(['custom', 'hosted']).default('custom'),
-  // Not a field the Geins platform sends; defaults generic (UTC) rather
-  // than guessing a tenant-specific value. See
-  // docs/adr/023-tenant-operating-timezone.md.
-  timezone: TimezoneSchema.default('UTC'),
+  // Not a field the Geins platform sends, and not defaulted: an unset
+  // timezone means "no zone was chosen", which is distinguishable from a
+  // tenant that chose UTC. See docs/adr/024-tenant-operating-timezone.md.
+  timezone: TimezoneSchema.optional(),
   theme: ThemeConfigSchema,
   branding: BrandingConfigSchema,
   layout: LayoutConfigSchema,
@@ -358,7 +365,8 @@ export type ThemeConfig = z.infer<typeof ThemeConfigSchema>;
 export type ThemeTypography = z.infer<typeof ThemeTypographySchema>;
 export type GeinsSettings = z.infer<typeof GeinsSettingsSchema>;
 export type BrandingConfig = z.infer<typeof BrandingConfigSchema>;
-export type FeatureAccess = z.infer<typeof FeatureAccessSchema>;
+/** Wire shape, wider than the evaluable `FeatureAccess` in shared/types. */
+export type FeatureAccessInput = z.infer<typeof FeatureAccessSchema>;
 export type FeatureConfig = z.infer<typeof FeatureConfigSchema>;
 export type SeoConfig = z.infer<typeof SeoConfigSchema>;
 export type ContactConfig = z.infer<typeof ContactConfigSchema>;

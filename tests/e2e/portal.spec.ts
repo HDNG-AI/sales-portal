@@ -1,9 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   waitForHydration,
   hasE2ECredentials,
   outOfScope,
+  fetchOrder,
+  fetchOrders,
+  fetchQuote,
+  fetchQuoteList,
+  fetchQuotes,
+  fetchProductListSample,
+  fetchProductsByAliases,
+  parsePrice,
+  readPrice,
   STORAGE_STATE,
+  type ApiOrder,
+  type ApiQuote,
+  type ProductListRow,
 } from './helpers';
 
 /**
@@ -40,18 +52,16 @@ test.describe('Portal Overview', () => {
     const statGrid = page.locator('.grid.grid-cols-2.lg\\:grid-cols-4');
     await expect(statGrid).toBeVisible({ timeout: PAGE_TIMEOUT });
 
-    // Latest orders section
-    const latestOrdersHeading = page.getByText('Senaste beställningar');
-    const hasLatestOrders = await latestOrdersHeading
-      .isVisible()
-      .catch(() => false);
-    // The heading text comes from i18n — accept either translated or the section existing
-    if (!hasLatestOrders) {
-      // Fallback: check that portal-orders-table exists (rendered by PortalOrdersTable)
-      const ordersTable = page.locator('[data-testid="portal-orders-table"]');
-      const hasTable = await ordersTable.isVisible().catch(() => false);
-      expect(hasTable || hasLatestOrders).toBe(true);
-    }
+    // Latest orders section. This used to sit inside `if (!hasLatestOrders)`,
+    // guarded by a lookup for the section heading — a branch that never runs,
+    // because the heading does render, so the assertion below never executed.
+    // PortalOrdersTable's wrapper sits on the non-empty branch and
+    // `orders-empty` on the other, so exactly one of the two is in the DOM.
+    const ordersTable = page.locator('[data-testid="portal-orders-table"]');
+    const ordersEmpty = page.locator('[data-testid="orders-empty"]');
+    const hasTable = await ordersTable.isVisible().catch(() => false);
+    const hasEmpty = await ordersEmpty.isVisible().catch(() => false);
+    expect(hasTable).not.toBe(hasEmpty);
 
     // Pending quotations section
     const quotationsTable = page.locator(
@@ -65,6 +75,14 @@ test.describe('Portal Overview', () => {
       .isVisible()
       .catch(() => false);
     expect(hasQuotations || hasQuotationsEmpty).toBe(true);
+    if (hasQuotations) {
+      // The wrapper is on the non-empty branch, so its presence means rows.
+      // Count the visible ones — both responsive shapes render N rows each.
+      const rows = quotationsTable.locator(
+        '[data-testid="pending-quote-row"]:visible',
+      );
+      expect(await rows.count()).toBeGreaterThan(0);
+    }
 
     // Your lists section
     const listsTable = page.locator('[data-testid="your-lists-table"]');
@@ -72,17 +90,22 @@ test.describe('Portal Overview', () => {
     const hasLists = await listsTable.isVisible().catch(() => false);
     const hasListsEmpty = await listsEmpty.isVisible().catch(() => false);
     expect(hasLists || hasListsEmpty).toBe(true);
+    if (hasLists) {
+      const rows = listsTable.locator('[data-testid="your-list-row"]:visible');
+      expect(await rows.count()).toBeGreaterThan(0);
+    }
 
-    // Purchased products section
+    // Purchased products section. The account has purchased products (measured
+    // against /api/orders/products), so the empty state is not a state this
+    // tenant reaches and `hasProducts || hasProductsEmpty` accepted it anyway.
     const productsGrid = page.locator(
       '[data-testid="purchased-products-grid"]',
     );
     const productsEmpty = page.locator(
       '[data-testid="purchased-products-empty"]',
     );
-    const hasProducts = await productsGrid.isVisible().catch(() => false);
-    const hasProductsEmpty = await productsEmpty.isVisible().catch(() => false);
-    expect(hasProducts || hasProductsEmpty).toBe(true);
+    await expect(productsGrid).toBeVisible({ timeout: PAGE_TIMEOUT });
+    await expect(productsEmpty).toBeHidden();
   });
 });
 
@@ -113,14 +136,31 @@ test.describe('Portal Orders', () => {
     const hasTable = await ordersTable.isVisible().catch(() => false);
     const hasEmpty = await ordersEmpty.isVisible().catch(() => false);
 
-    expect(hasTable || hasEmpty).toBe(true);
+    // Exactly one of the two: `portal-orders-table` wraps the non-empty
+    // branch, so it exists only when the list has rows. The or-form accepted
+    // either, and while the wrapper covered the empty state too it could not
+    // fail at all.
+    expect(hasTable).not.toBe(hasEmpty);
 
-    // If table is visible, verify table headers exist
     if (hasTable) {
-      const headerCells = ordersTable.locator('thead th');
-      const count = await headerCells.count();
-      // Expected columns: Id, Skapad, Lagd av, Typ, Summa, Status, (actions)
-      expect(count).toBeGreaterThanOrEqual(6);
+      // Both responsive shapes sit in the DOM at once and CSS decides which
+      // one shows, so count what is visible. `md` is 768px (Tailwind), the
+      // same breakpoint the table's `md:hidden` / `hidden md:table` use.
+      // Without the branch, `thead th` counted the desktop headers on Mobile
+      // Chrome too, where none of them is rendered.
+      const isNarrow = (page.viewportSize()?.width ?? 1280) < 768;
+
+      const visibleRows = ordersTable.locator(
+        '[data-testid="order-row"]:visible',
+      );
+      expect(await visibleRows.count()).toBeGreaterThan(0);
+
+      if (!isNarrow) {
+        const headerCells = ordersTable.locator('thead th:visible');
+        const count = await headerCells.count();
+        // Expected columns: Id, Skapad, Lagd av, Typ, Summa, Status, (actions)
+        expect(count).toBeGreaterThanOrEqual(6);
+      }
     }
   });
 
@@ -135,16 +175,27 @@ test.describe('Portal Orders', () => {
     const loading = page.locator('[data-testid="orders-loading"]');
     await expect(loading).toBeHidden({ timeout: PAGE_TIMEOUT });
 
-    // Check if there are any order view links
-    const viewLink = page.locator('[data-testid="order-view-link"]').first();
-    const hasViewLink = await viewLink.isVisible().catch(() => false);
+    // The account owns orders, so an empty list is a broken fixture rather
+    // than a scope boundary: `fixture-missing` means data the platform cannot
+    // produce (helpers.ts), which an unseeded account is not. This used to
+    // declare the skip and before that to `return`, and both hid the wrong
+    // selector below for as long as no order existed.
+    await expect(
+      page.locator('[data-testid="portal-orders-table"]'),
+      'the orders list rendered its empty state — the test account lost its orders',
+    ).toBeVisible({ timeout: PAGE_TIMEOUT });
 
-    if (!hasViewLink) {
-      // No orders — skip detail test
-      return;
-    }
-
-    await viewLink.click();
+    // Desktop puts a view link in the row, mobile makes the whole card the
+    // link; both are anchors into the order, so match on the destination
+    // rather than on a testid only the desktop one carries. Both shapes are in
+    // the DOM at once and CSS decides which one shows, hence `:visible`.
+    const orderLink = page
+      .locator(
+        '[data-testid="portal-orders-table"] a[href*="/portal/orders/"]:visible',
+      )
+      .first();
+    await expect(orderLink).toBeVisible({ timeout: PAGE_TIMEOUT });
+    await orderLink.click();
     await page.waitForLoadState('load');
     await waitForHydration(page);
 
@@ -153,21 +204,315 @@ test.describe('Portal Orders', () => {
     const backLink = page.locator('[data-testid="back-link"]');
     await expect(backLink).toBeVisible({ timeout: PAGE_TIMEOUT });
 
-    // Action buttons should render
-    const actionButtons = page.locator('[data-testid="action-buttons"]');
-    await expect(actionButtons).toBeVisible({ timeout: PAGE_TIMEOUT });
+    // The toolbar carrying the back link and reorder button
+    // (app/pages/portal/orders/[id].vue).
+    const actionToolbar = page.locator('[data-testid="order-action-toolbar"]');
+    await expect(actionToolbar).toBeVisible({ timeout: PAGE_TIMEOUT });
 
-    // Order items table or loading should be present
+    // The detail page finishes loading. `hasDetail || hasLoading` accepted one
+    // that never did, and put the row assertion below inside `if (hasDetail)`,
+    // so a page stuck on its spinner passed without a row ever being read.
     const orderDetail = page.locator('[data-testid="order-detail"]');
     const orderLoading = page.locator('[data-testid="order-loading"]');
-    const hasDetail = await orderDetail.isVisible().catch(() => false);
-    const hasLoading = await orderLoading.isVisible().catch(() => false);
-    expect(hasDetail || hasLoading).toBe(true);
+    await expect(orderDetail).toBeVisible({ timeout: PAGE_TIMEOUT });
+    await expect(orderLoading).toBeHidden();
 
-    if (hasDetail) {
-      // Items table should be present
-      const itemsTable = page.locator('[data-testid="order-items-table"]');
-      await expect(itemsTable).toBeVisible({ timeout: PAGE_TIMEOUT });
+    // The order rows live in a desktop table (`hidden lg:block`) or, below
+    // lg, behind a sheet trigger. Assert the one this project can see —
+    // before the fixture existed this branch never ran on mobile, so the
+    // desktop-only assertion looked fine.
+    // Both are in the DOM at once, so match on visibility rather than DOM
+    // order — the table comes first either way.
+    const orderRows = page.locator(
+      '[data-testid="order-items-table"]:visible, [data-testid="view-rows-trigger"]:visible',
+    );
+    await expect(orderRows.first()).toBeVisible({ timeout: PAGE_TIMEOUT });
+  });
+});
+
+/**
+ * Portal Order Values
+ *
+ * Every amount on the orders surfaces, against the numbers the orders API
+ * answered with. Numbers, never strings: the same order's total is
+ * "1 125 kr" from the list endpoint and "1 125,00 kr" from the detail one, so
+ * a string comparison across the two views fails on a correct application.
+ *
+ * Orders are chosen by what they contain — most lines, amounts that do not
+ * terminate in two decimals — never by a fixed id, which would rot the day
+ * the account is reseeded.
+ */
+test.describe('Portal Order Values', () => {
+  /** What one rendered amount may be off by: the screen rounds to two decimals, the API does not. */
+  const ROUNDING = 0.005;
+
+  /** True for a number the screen cannot show exactly, e.g. 7.904 VAT. */
+  function isUnrounded(value: number): boolean {
+    return Math.abs(value * 100 - Math.round(value * 100)) > 1e-9;
+  }
+
+  function withMostLines(orders: ApiOrder[]): ApiOrder {
+    return orders.reduce((a, b) => (b.items.length > a.items.length ? b : a));
+  }
+
+  /**
+   * The order whose amounts do not terminate in two decimals. The screen must
+   * round while the API does not, so this is where a rounding defect shows —
+   * and where an assertion against the raw number without a tolerance would
+   * fail a correct page.
+   */
+  function withUnroundedAmounts(orders: ApiOrder[]): ApiOrder | undefined {
+    return orders.find(
+      (order) =>
+        isUnrounded(order.vat) ||
+        isUnrounded(order.totalExVat) ||
+        order.items.some(
+          (line) =>
+            isUnrounded(line.unitPriceIncVat) ||
+            isUnrounded(line.totalPriceIncVat),
+        ),
+    );
+  }
+
+  /** How many lines of an order carry a quantity above one. */
+  function multiQuantityLines(order: ApiOrder): number {
+    return order.items.filter((line) => line.quantity > 1).length;
+  }
+
+  function withMostMultiQuantityLines(orders: ApiOrder[]): ApiOrder {
+    return orders.reduce((a, b) =>
+      multiQuantityLines(b) > multiQuantityLines(a) ? b : a,
+    );
+  }
+
+  async function openOrdersList(page: Page) {
+    await page.goto('/se/sv/portal/orders');
+    await page.waitForLoadState('load');
+    await waitForHydration(page);
+    await expect(page.locator('[data-testid="orders-loading"]')).toBeHidden({
+      timeout: PAGE_TIMEOUT,
+    });
+    await expect(
+      page.locator('[data-testid="portal-orders-table"]'),
+      'the orders list rendered its empty state — the test account lost its orders',
+    ).toBeVisible({ timeout: PAGE_TIMEOUT });
+  }
+
+  async function openOrderDetail(page: Page, publicId: string) {
+    await page.goto(`/se/sv/portal/orders/${publicId}`);
+    await page.waitForLoadState('load');
+    await waitForHydration(page);
+    await expect(page.locator('[data-testid="order-detail"]')).toBeVisible({
+      timeout: PAGE_TIMEOUT,
+    });
+  }
+
+  /** One rendered order line: the three numbers a line shows. */
+  interface ScreenLine {
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+  }
+
+  /**
+   * The lines as the running project can see them. Above `lg` they are the
+   * desktop table; below it that table is hidden and the rows live in the
+   * sheet behind `view-rows-trigger`. Both carry the same three numbers per
+   * line, so no project has to leave the line assertions off.
+   */
+  async function readOrderLines(page: Page): Promise<ScreenLine[]> {
+    const onDesktop = await page
+      .locator('[data-testid="order-items-table"]')
+      .isVisible()
+      .catch(() => false);
+
+    if (!onDesktop) {
+      await page.locator('[data-testid="view-rows-trigger"]').click();
+      await expect(page.locator('[data-testid="item-rows-sheet"]')).toBeVisible(
+        {
+          timeout: PAGE_TIMEOUT,
+        },
+      );
+    }
+
+    const prefix = onDesktop ? 'order-item' : 'item-rows';
+    const rows = page.locator(
+      onDesktop
+        ? '[data-testid="order-item-row"]'
+        : '[data-testid="item-rows-row"]',
+    );
+
+    const lines: ScreenLine[] = [];
+    for (let index = 0; index < (await rows.count()); index++) {
+      const row = rows.nth(index);
+      const quantity = (
+        await row.locator(`[data-testid="${prefix}-quantity"]`).innerText()
+      ).trim();
+      lines.push({
+        quantity: Number(quantity),
+        unitPrice: await readPrice(
+          row.locator(`[data-testid="${prefix}-unit-price"]`),
+        ),
+        totalPrice: await readPrice(
+          row.locator(`[data-testid="${prefix}-total-price"]`),
+        ),
+      });
+      expect(
+        Number.isFinite(lines[index]!.quantity),
+        `line ${index} shows no quantity: ${JSON.stringify(quantity)}`,
+      ).toBe(true);
+    }
+    return lines;
+  }
+
+  test('the list, the detail page and the API agree on an order total', async ({
+    page,
+  }) => {
+    await openOrdersList(page);
+
+    // Both list shapes are in the DOM at once and CSS decides which one shows.
+    const row = page.locator('[data-testid="order-row"]:visible').first();
+    await expect(row).toBeVisible({ timeout: PAGE_TIMEOUT });
+
+    // Desktop puts the link in a cell of the row, mobile makes the row itself
+    // the link. Its href is what pairs the amount in this row with the order
+    // the detail endpoint answers for: that endpoint keys on `publicId`, not
+    // on the numeric id the row displays.
+    const innerLink = row.locator('a[href*="/portal/orders/"]');
+    const href = (await innerLink.count())
+      ? await innerLink.first().getAttribute('href')
+      : await row.getAttribute('href');
+    const publicId = href?.split('/').filter(Boolean).pop();
+    expect(publicId, `no order id in the row's link: ${href}`).toBeTruthy();
+
+    const listTotal = await readPrice(
+      row.locator('[data-testid="order-total"]'),
+    );
+
+    const api = await fetchOrder(page, publicId!);
+    expect(listTotal).toBeCloseTo(api.totalIncVat, 2);
+
+    await openOrderDetail(page, api.publicId);
+
+    expect(
+      await readPrice(page.locator('[data-testid="order-summary-total"]')),
+    ).toBeCloseTo(api.totalIncVat, 2);
+
+    // Two fields for one amount, both sent today. A page that reads either
+    // must land on the same number.
+    if (api.orderTotalIncVat !== undefined) {
+      expect(api.orderTotalIncVat).toBeCloseTo(api.totalIncVat, 2);
+    }
+
+    // Ex-VAT reaches no cell on this page — subtotal, tax and total are all
+    // inc-VAT strings — so the three amounts are held to each other where
+    // ex-VAT exists at all, in the API's own numbers.
+    expect(api.totalIncVat - api.totalExVat).toBeCloseTo(api.vat, 2);
+    expect(
+      await readPrice(page.locator('[data-testid="order-summary-tax"]')),
+    ).toBeCloseTo(api.vat, 2);
+
+    // Subtotal equals total on every order the account owns, because none
+    // carries a shipping fee. The assertion holds the subtotal to the API,
+    // but on this data it cannot tell the two cells apart: a passing run is
+    // not evidence that the subtotal cell reads the subtotal.
+    expect(
+      await readPrice(page.locator('[data-testid="order-summary-subtotal"]')),
+    ).toBeCloseTo(api.subTotalIncVat, 2);
+
+    // No order has a priced shipping option, so the API sends an empty fee
+    // string. Asserting the rendered fallback would assert the active locale;
+    // the absence of a number is the assertion.
+    const shipping = page.locator('[data-testid="order-summary-shipping"]');
+    if (api.shippingFeeFormatted === '') {
+      const text = (await shipping.innerText()).trim();
+      expect(
+        /\d/.test(text),
+        `the API sent no shipping fee, so the cell must not show a number: ${JSON.stringify(text)}`,
+      ).toBe(false);
+    } else {
+      expect(await readPrice(shipping)).toBeCloseTo(
+        parsePrice(api.shippingFeeFormatted),
+        2,
+      );
+    }
+
+    // The desktop table repeats the total in its footer: two renderings of one
+    // number on one page, which must not drift apart.
+    const footerTotal = page.locator(
+      '[data-testid="order-items-footer-total"]',
+    );
+    if (await footerTotal.isVisible().catch(() => false)) {
+      expect(await readPrice(footerTotal)).toBeCloseTo(api.totalIncVat, 2);
+    }
+  });
+
+  test('the line totals add up to the total the order shows', async ({
+    page,
+  }) => {
+    const orders = await fetchOrders(page);
+    const unrounded = withUnroundedAmounts(orders);
+    expect(
+      unrounded,
+      'no order on the account has an amount that needs rounding, so the run ' +
+        'cannot show a rounding defect. Place one with a price that does not ' +
+        'terminate in two decimals.',
+    ).toBeDefined();
+
+    for (const api of [withMostLines(orders), unrounded!]) {
+      const apiSum = api.items.reduce(
+        (sum, line) => sum + line.totalPriceIncVat,
+        0,
+      );
+      expect(apiSum).toBeCloseTo(api.totalIncVat, 2);
+
+      await openOrderDetail(page, api.publicId);
+      const lines = await readOrderLines(page);
+      expect(lines.length).toBe(api.items.length);
+
+      const screenTotal = await readPrice(
+        page.locator('[data-testid="order-summary-total"]'),
+      );
+      const screenSum = lines.reduce((sum, line) => sum + line.totalPrice, 0);
+      // Every rendered amount carries its own rounding, the total included.
+      expect(Math.abs(screenSum - screenTotal)).toBeLessThanOrEqual(
+        (lines.length + 1) * ROUNDING,
+      );
+    }
+  });
+
+  test('a line with a quantity above one shows quantity x unit price as its total', async ({
+    page,
+  }) => {
+    const orders = await fetchOrders(page);
+    const api = withMostMultiQuantityLines(orders);
+    expect(
+      multiQuantityLines(api),
+      'every line on every order carries quantity 1. Orders used to arrive ' +
+        'with their lines expanded that way, which makes the multiplication ' +
+        'below unfalsifiable — three of a product must stay one line of three.',
+    ).toBeGreaterThan(0);
+
+    await openOrderDetail(page, api.publicId);
+    const lines = await readOrderLines(page);
+    expect(lines.length).toBe(api.items.length);
+
+    for (const [index, line] of lines.entries()) {
+      const apiLine = api.items[index]!;
+      expect(line.quantity).toBe(apiLine.quantity);
+      expect(line.unitPrice).toBeCloseTo(apiLine.unitPriceIncVat, 2);
+      expect(line.totalPrice).toBeCloseTo(apiLine.totalPriceIncVat, 2);
+
+      if (apiLine.quantity <= 1) continue;
+      // The multiplication on both sides. On screen the tolerance grows with
+      // the quantity: a unit price rounded to two decimals is multiplied by it.
+      expect(
+        Math.abs(line.totalPrice - line.unitPrice * line.quantity),
+      ).toBeLessThanOrEqual((line.quantity + 1) * ROUNDING);
+      expect(apiLine.totalPriceIncVat).toBeCloseTo(
+        apiLine.unitPriceIncVat * apiLine.quantity,
+        2,
+      );
     }
   });
 });
@@ -190,20 +535,16 @@ test.describe('Portal Purchased Products', () => {
     const loading = page.locator('[data-testid="products-loading"]');
     await expect(loading).toBeHidden({ timeout: PAGE_TIMEOUT });
 
-    // Either products table or empty state
+    // The account has purchased products, so the pagination footer is the
+    // state this tenant reaches — it renders whenever there is data, even on a
+    // single page. `hasEmpty || hasPagination` accepted the empty list too.
     const productsEmpty = page.locator('[data-testid="products-empty"]');
     const productsPagination = page.locator(
       '[data-testid="products-pagination"]',
     );
 
-    const hasEmpty = await productsEmpty.isVisible().catch(() => false);
-    const hasPagination = await productsPagination
-      .isVisible()
-      .catch(() => false);
-
-    // One of these states should be true: empty state, or content with pagination footer
-    // (pagination footer always renders when there's data, even if single page)
-    expect(hasEmpty || hasPagination).toBe(true);
+    await expect(productsPagination).toBeVisible({ timeout: PAGE_TIMEOUT });
+    await expect(productsEmpty).toBeHidden();
   });
 });
 
@@ -255,14 +596,30 @@ test.describe('Portal Quotations', () => {
     const hasTable = await quotationsTable.isVisible().catch(() => false);
     const hasEmpty = await quotationsEmpty.isVisible().catch(() => false);
 
-    expect(hasTable || hasEmpty).toBe(true);
+    // Exactly one of the two: `quotations-table` wraps the non-empty branch,
+    // so it exists only when the list has rows. This states the invariant more
+    // plainly than `hasTable || hasEmpty`; it does not catch more, since
+    // `v-if` / `v-else` already makes both-true impossible. What the rows and
+    // headers below assert is the part the old test never had.
+    expect(hasTable).not.toBe(hasEmpty);
 
-    // If table is visible, verify rows have expected structure
     if (hasTable) {
-      const headerCells = quotationsTable.locator('thead th');
-      const count = await headerCells.count();
-      // Expected columns: Quote number, Created, Contact, Total, Status, (actions)
-      expect(count).toBeGreaterThanOrEqual(5);
+      // Both responsive shapes sit in the DOM at once and CSS decides which
+      // one shows, so count what is visible. `md` is 768px (Tailwind), the
+      // same breakpoint the page's `md:hidden` / `hidden md:block` use.
+      const isNarrow = (page.viewportSize()?.width ?? 1280) < 768;
+
+      const visibleRows = quotationsTable.locator(
+        '[data-testid="quotation-row"]:visible',
+      );
+      expect(await visibleRows.count()).toBeGreaterThan(0);
+
+      if (!isNarrow) {
+        const headerCells = quotationsTable.locator('thead th:visible');
+        const count = await headerCells.count();
+        // Expected columns: Quote number, Created, Contact, Total, Status, (actions)
+        expect(count).toBeGreaterThanOrEqual(5);
+      }
     }
   });
 
@@ -277,27 +634,28 @@ test.describe('Portal Quotations', () => {
     const loading = page.locator('[data-testid="quotations-loading"]');
     await expect(loading).toBeHidden({ timeout: PAGE_TIMEOUT });
 
-    // The current test account has no quotes. Declared, not silently skipped:
-    // the seeded team-owned tenant (SAL-361) gives this test its data.
-    const empty = page.locator('[data-testid="quotations-empty"]');
-    const hasEmpty = await empty.isVisible().catch(() => false);
-    outOfScope(
-      hasEmpty,
-      'fixture-missing',
-      'test account has no quotes — seeded by the team-owned tenant (SAL-361)',
-    );
+    // Requesting a quotation is the half the platform does not offer; reading
+    // one it already holds works, and that is what this test covers. So an
+    // empty list here is a broken fixture rather than a scope boundary — it
+    // used to be declared as one, which hid every selector below.
+    await expect(
+      page.locator('[data-testid="quotations-table"]'),
+      'the quotations list rendered its empty state — the test account lost its quotations',
+    ).toBeVisible({ timeout: PAGE_TIMEOUT });
 
-    // Click the first view link (desktop table preferred, falls back to mobile card)
-    const viewLink = page
-      .locator('[data-testid="quotation-view-link"]')
+    // Desktop puts a view link in the row, mobile makes the whole card the
+    // link; both are anchors into the quote, so match on the destination
+    // rather than on a testid only the desktop one carries. Both shapes are in
+    // the DOM at once and CSS decides which one shows, hence `:visible` — the
+    // old `.count()` branch saw the hidden desktop link on Mobile Chrome and
+    // clicked something nothing renders.
+    const quoteLink = page
+      .locator(
+        '[data-testid="quotations-table"] a[href*="/portal/quotations/"]:visible',
+      )
       .first();
-    const quotationRow = page.locator('[data-testid="quotation-row"]').first();
-    const linkCount = await viewLink.count();
-    if (linkCount > 0) {
-      await viewLink.click();
-    } else {
-      await quotationRow.click();
-    }
+    await expect(quoteLink).toBeVisible({ timeout: PAGE_TIMEOUT });
+    await quoteLink.click();
 
     // Wait for navigation to the locale-prefixed detail URL (uuid segment)
     await page.waitForURL(/\/se\/sv\/portal\/quotations\/[\w-]+/, {
@@ -313,14 +671,33 @@ test.describe('Portal Quotations', () => {
     await expect(page.locator('[data-testid="quote-title"]')).toBeVisible();
     await expect(page.locator('[data-testid="status-badge"]')).toBeVisible();
 
-    // Items table with at least one line item row
-    await expect(
-      page.locator('[data-testid="line-items-table"]'),
-    ).toBeVisible();
-    const lineItemCount = await page
-      .locator('[data-testid="line-item-row"]')
-      .count();
-    expect(lineItemCount).toBeGreaterThan(0);
+    // The line items render as a desktop table (`hidden lg:block`) or, below
+    // lg, inside a sheet behind a trigger — the same split the order detail
+    // page has. Assert the shape this project can actually see and count the
+    // rows in it; the desktop-only assertion could not pass on Mobile Chrome.
+    // `lg` is 1024px (Tailwind), the breakpoint the page itself branches on.
+    const isNarrow = (page.viewportSize()?.width ?? 1280) < 1024;
+    if (isNarrow) {
+      const rowsTrigger = page.locator('[data-testid="view-rows-trigger"]');
+      await expect(rowsTrigger).toBeVisible({ timeout: PAGE_TIMEOUT });
+      await rowsTrigger.click();
+      const sheetRows = page.locator('[data-testid="item-rows-row"]');
+      await expect(sheetRows.first()).toBeVisible({ timeout: PAGE_TIMEOUT });
+      expect(await sheetRows.count()).toBeGreaterThan(0);
+      // Close it again: an open sheet covers the back link asserted below.
+      await page.keyboard.press('Escape');
+      await expect(page.locator('[data-testid="item-rows-sheet"]')).toBeHidden({
+        timeout: PAGE_TIMEOUT,
+      });
+    } else {
+      await expect(
+        page.locator('[data-testid="line-items-table"]'),
+      ).toBeVisible();
+      const lineItemCount = await page
+        .locator('[data-testid="line-item-row"]')
+        .count();
+      expect(lineItemCount).toBeGreaterThan(0);
+    }
 
     // Sidebar summary
     await expect(page.locator('[data-testid="quote-summary"]')).toBeVisible();
@@ -356,5 +733,500 @@ test.describe('Portal Quotations', () => {
     await expect(page.locator('[data-testid="quotations-table"]')).toBeVisible({
       timeout: PAGE_TIMEOUT,
     });
+  });
+});
+
+/**
+ * Portal Quotation Values
+ *
+ * Every amount the quotation surfaces show, against the numbers `/api/quotes`
+ * answered with. Numbers, never strings: the list and the detail format the
+ * same total with a different number of decimals, and both use a non-breaking
+ * space and a decimal comma.
+ *
+ * This is the only surface where unit price x quantity can be asserted at all.
+ * Every order line the storefront produces carries quantity 1, so there the
+ * multiplication has no data; a quotation carries lines of 50 and 12. The
+ * multiplication is asserted on the API's raw numbers: 12 x 14.875 is 178.50,
+ * while 12 x the rendered 14,88 is 178.56, so multiplying what the screen
+ * shows would assert the defect rather than catch it.
+ *
+ * Quotations are chosen by what they contain — a unit price that needs more
+ * than two decimals, a quantity above one — never by a fixed id, which would
+ * rot the day the account is reseeded.
+ */
+test.describe('Portal Quotation Values', () => {
+  /** What one rendered amount may be off by: the screen rounds to two decimals, the API does not. */
+  const ROUNDING = 0.005;
+
+  /**
+   * Slack on every tolerance below. 14.88 - 14.875 is 0.005000000000000782 in
+   * binary floating point, so a tie against half a cent fails a comparison
+   * written exactly.
+   */
+  const SLACK = 1e-9;
+
+  /** True for a number the screen cannot show exactly, e.g. a unit price of 14.875. */
+  function isUnrounded(value: number): boolean {
+    return Math.abs(value * 100 - Math.round(value * 100)) > SLACK;
+  }
+
+  /**
+   * A rendered amount against the raw number behind it.
+   *
+   * `toBeCloseTo(value, 2)` is the wrong tool here: it demands a difference
+   * below half a cent, and a unit price of 14.875 rounds to 14,88 — exactly
+   * half a cent away. That is correct rendering, so the tolerance includes it.
+   */
+  function expectRendered(rendered: number, raw: number, what: string) {
+    expect(
+      Math.abs(rendered - raw),
+      `${what}: the screen shows ${rendered}, the API says ${raw}`,
+    ).toBeLessThanOrEqual(ROUNDING + SLACK);
+  }
+
+  /**
+   * The quotation priced in more than two decimals — the one where a page
+   * that rounds before it multiplies lands on a different number than one
+   * that multiplies first. Without it the run proves nothing about rounding,
+   * so its absence fails rather than passes quietly.
+   */
+  async function unroundedQuote(page: Page): Promise<ApiQuote> {
+    const quotes = await fetchQuotes(page);
+    const quote = quotes.find((candidate) =>
+      candidate.items.some((line) => isUnrounded(line.unitPrice)),
+    );
+    expect(
+      quote,
+      'no quotation the account can read is priced in more than two decimals, ' +
+        'so this run cannot show a page that rounds a unit price before it ' +
+        'multiplies. Give a quotation line a unit price like 14.875.',
+    ).toBeDefined();
+    return quote!;
+  }
+
+  async function openQuotationsList(page: Page) {
+    await page.goto('/se/sv/portal/quotations');
+    await page.waitForLoadState('load');
+    await waitForHydration(page);
+    await expect(page.locator('[data-testid="quotations-loading"]')).toBeHidden(
+      {
+        timeout: PAGE_TIMEOUT,
+      },
+    );
+    await expect(
+      page.locator('[data-testid="quotations-table"]'),
+      'the quotations list rendered its empty state — the test account lost its quotations',
+    ).toBeVisible({ timeout: PAGE_TIMEOUT });
+  }
+
+  async function openQuotationDetail(page: Page, id: string) {
+    await page.goto(`/se/sv/portal/quotations/${id}`);
+    await page.waitForLoadState('load');
+    await waitForHydration(page);
+    await expect(page.locator('[data-testid="quote-detail"]')).toBeVisible({
+      timeout: PAGE_TIMEOUT,
+    });
+  }
+
+  /** One rendered quotation line: the three numbers a line shows. */
+  interface ScreenLine {
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+  }
+
+  /**
+   * The lines as the running project can see them. Above `lg` they are the
+   * desktop table; below it that table is hidden and the rows live in the
+   * sheet behind `view-rows-trigger`. Both carry the same three numbers per
+   * line, so no project has to leave the line assertions off.
+   */
+  async function readQuoteLines(page: Page): Promise<ScreenLine[]> {
+    const onDesktop = await page
+      .locator('[data-testid="line-items-table"]')
+      .isVisible()
+      .catch(() => false);
+
+    if (!onDesktop) {
+      await page.locator('[data-testid="view-rows-trigger"]').click();
+      await expect(page.locator('[data-testid="item-rows-sheet"]')).toBeVisible(
+        {
+          timeout: PAGE_TIMEOUT,
+        },
+      );
+    }
+
+    const prefix = onDesktop ? 'line-item' : 'item-rows';
+    const rows = page.locator(
+      onDesktop
+        ? '[data-testid="line-item-row"]'
+        : '[data-testid="item-rows-row"]',
+    );
+
+    const lines: ScreenLine[] = [];
+    for (let index = 0; index < (await rows.count()); index++) {
+      const row = rows.nth(index);
+      const quantity = (
+        await row.locator(`[data-testid="${prefix}-quantity"]`).innerText()
+      ).trim();
+      lines.push({
+        quantity: Number(quantity),
+        unitPrice: await readPrice(
+          row.locator(`[data-testid="${prefix}-unit-price"]`),
+        ),
+        totalPrice: await readPrice(
+          row.locator(`[data-testid="${prefix}-total-price"]`),
+        ),
+      });
+      expect(
+        Number.isFinite(lines[index]!.quantity),
+        `line ${index} shows no quantity: ${JSON.stringify(quantity)}`,
+      ).toBe(true);
+    }
+    return lines;
+  }
+
+  test('the list, the detail page and the API agree on a quotation total', async ({
+    page,
+  }) => {
+    await openQuotationsList(page);
+
+    // Both list shapes are in the DOM at once and CSS decides which one shows.
+    const row = page.locator('[data-testid="quotation-row"]:visible').first();
+    await expect(row).toBeVisible({ timeout: PAGE_TIMEOUT });
+
+    // Desktop puts the view link in a cell of the row, mobile makes the card
+    // itself the link. Its href carries the id both endpoints key on, which is
+    // the only thing pairing this row's amount with a quotation.
+    const innerLink = row.locator('a[href*="/portal/quotations/"]');
+    const href = (await innerLink.count())
+      ? await innerLink.first().getAttribute('href')
+      : await row.getAttribute('href');
+    const id = href?.split('/').filter(Boolean).pop();
+    expect(id, `no quotation id in the row's link: ${href}`).toBeTruthy();
+
+    const listTotal = await readPrice(
+      row.locator('[data-testid="quotation-total"]'),
+    );
+
+    const listed = (await fetchQuoteList(page)).find(
+      (quote) => quote.id === id,
+    );
+    expect(
+      listed,
+      `the list endpoint does not report the quotation the row links to: ${id}`,
+    ).toBeDefined();
+    expectRendered(listTotal, listed!.total, 'the list total');
+
+    const api = await fetchQuote(page, id!);
+    // Both endpoints computed this amount; the strings they format it into
+    // differ in decimals, the numbers must not.
+    expect(listed!.total).toBeCloseTo(api.total, 2);
+
+    await openQuotationDetail(page, api.id);
+
+    expectRendered(
+      await readPrice(page.locator('[data-testid="quote-summary-total"]')),
+      api.total,
+      'the detail total',
+    );
+    expectRendered(
+      await readPrice(page.locator('[data-testid="quote-summary-subtotal"]')),
+      api.subtotal,
+      'the subtotal',
+    );
+    // `tax` maps from the subtotal's VAT while subtotal and total are both
+    // inc-VAT, so subtotal + tax + shipping is not the total on this page.
+    // Each amount is held to the API on its own; an identity between them
+    // would fail a correct page.
+    expectRendered(
+      await readPrice(page.locator('[data-testid="quote-summary-tax"]')),
+      api.tax,
+      'the tax',
+    );
+
+    // The row renders only for a priced shipping option, so a quotation
+    // without one must show no fee at all rather than a zero.
+    if (api.shipping > 0) {
+      expectRendered(
+        await readPrice(page.locator('[data-testid="quote-summary-shipping"]')),
+        api.shipping,
+        'the shipping fee',
+      );
+    } else {
+      await expect(page.locator('[data-testid="shipping-row"]')).toHaveCount(0);
+    }
+  });
+
+  test('the quotation lines add up to the subtotal it shows', async ({
+    page,
+  }) => {
+    const api = await unroundedQuote(page);
+
+    const apiSum = api.items.reduce((sum, line) => sum + line.totalPrice, 0);
+    expect(apiSum).toBeCloseTo(api.subtotal, 2);
+
+    await openQuotationDetail(page, api.id);
+    const lines = await readQuoteLines(page);
+    expect(lines.length).toBe(api.items.length);
+
+    const screenSubtotal = await readPrice(
+      page.locator('[data-testid="quote-summary-subtotal"]'),
+    );
+    const screenSum = lines.reduce((sum, line) => sum + line.totalPrice, 0);
+    // Every rendered amount carries its own rounding, the subtotal included.
+    expect(Math.abs(screenSum - screenSubtotal)).toBeLessThanOrEqual(
+      (lines.length + 1) * ROUNDING + SLACK,
+    );
+  });
+
+  test('a line priced in more than two decimals still multiplies out', async ({
+    page,
+  }) => {
+    const api = await unroundedQuote(page);
+    expect(
+      api.items.filter((line) => line.quantity > 1).length,
+      'every line of the quotation carries quantity 1, which makes the ' +
+        'multiplication below unfalsifiable — 12 of a product must stay one ' +
+        'line of twelve.',
+    ).toBeGreaterThan(0);
+
+    await openQuotationDetail(page, api.id);
+    const lines = await readQuoteLines(page);
+    expect(lines.length).toBe(api.items.length);
+
+    for (const [index, line] of lines.entries()) {
+      const apiLine = api.items[index]!;
+      expect(line.quantity).toBe(apiLine.quantity);
+      expectRendered(
+        line.unitPrice,
+        apiLine.unitPrice,
+        `line ${index} unit price`,
+      );
+      expectRendered(
+        line.totalPrice,
+        apiLine.totalPrice,
+        `line ${index} total`,
+      );
+
+      // The multiplication itself, on the raw numbers: 12 x 14.875 = 178.50
+      // exactly. On screen the unit price is already rounded to two decimals,
+      // so its product drifts with the quantity and gets the tolerance — the
+      // rendered line total is the one held to the API above.
+      expect(apiLine.totalPrice).toBeCloseTo(
+        apiLine.unitPrice * apiLine.quantity,
+        2,
+      );
+      if (apiLine.quantity <= 1) continue;
+      expect(
+        Math.abs(line.totalPrice - line.unitPrice * line.quantity),
+      ).toBeLessThanOrEqual((apiLine.quantity + 1) * ROUNDING + SLACK);
+    }
+  });
+});
+
+/**
+ * Portal Saved List Total
+ *
+ * The one total in the portal the app computes itself: the list page reduces
+ * over the prices `/api/products/by-aliases` returned and formats the sum once
+ * at two decimals. Every other amount in this file arrives finished from the
+ * API, so this is the only number that can be wrong through our own
+ * arithmetic rather than the platform's.
+ *
+ * The list under test is built here, through the app's own UI. Saved lists
+ * have no server API at all — they live in the browser's localStorage via the
+ * SDK's ListsSession (`docs/patterns/lists.md`) — so "a list the account owns"
+ * means a list this browser context owns, and the signed-in state the suite
+ * restores carries none. The context is thrown away with the test, so nothing
+ * is left behind and no two tests can see each other's list.
+ */
+test.describe('Portal Saved List Total', () => {
+  /** The screen rounds the sum to two decimals; the prices it sums are not rounded. */
+  const ROUNDING = 0.005;
+
+  /** Binary floating point puts a tie a hair outside an exactly written tolerance. */
+  const SLACK = 1e-9;
+
+  function isUnrounded(value: number): boolean {
+    return Math.abs(value * 100 - Math.round(value * 100)) > SLACK;
+  }
+
+  /** The sum of prices each rounded to two decimals first. */
+  function sumOfRounded(prices: number[]): number {
+    return prices.reduce(
+      (sum, price) => sum + Math.round(price * 100) / 100,
+      0,
+    );
+  }
+
+  /**
+   * Two catalogue products chosen by price, never by alias: both priced in
+   * more than two decimals, and the pair must round differently depending on
+   * when the rounding happens — 249.504 + 44.904 is 294.41 rounded once and
+   * 294.40 rounded twice. A pair without that property would pass a page that
+   * rounds every row before adding, which is the defect worth catching.
+   */
+  async function pickUnroundedPair(page: Page): Promise<ProductListRow[]> {
+    const unrounded = (await fetchProductListSample(page))
+      .filter((row) => isUnrounded(row.exVat))
+      .sort((a, b) => b.exVat - a.exVat);
+    expect(
+      unrounded.length,
+      'fewer than two catalogue products are priced in more than two decimals, ' +
+        'so a list of them cannot show the difference between rounding each ' +
+        'price and rounding the sum',
+    ).toBeGreaterThanOrEqual(2);
+
+    const pair = unrounded.slice(0, 2);
+    const exact = pair.reduce((sum, row) => sum + row.exVat, 0);
+    expect(
+      Math.abs(
+        Math.round(exact * 100) / 100 - sumOfRounded(pair.map((p) => p.exVat)),
+      ),
+      `${pair.map((p) => p.exVat).join(' + ')} rounds the same either way, so ` +
+        'the pair cannot tell the two implementations apart',
+    ).toBeGreaterThan(0);
+    return pair;
+  }
+
+  /**
+   * A saved list holding these aliases, created the way a buyer creates one:
+   * the portal's create sheet, then the add-to-list dialog on each PDP. The
+   * sheet navigates straight to the new list, which is where its id comes from.
+   */
+  async function createListWith(
+    page: Page,
+    aliases: string[],
+    name: string,
+  ): Promise<string> {
+    await page.goto('/se/sv/portal/lists');
+    await page.waitForLoadState('load');
+    await waitForHydration(page);
+
+    await page.locator('[data-testid="saved-lists-create"]').click();
+    await page.locator('[data-testid="create-list-name"]').fill(name);
+    await page.locator('[data-testid="create-list-submit"]').click();
+    await page.waitForURL(/\/portal\/saved-lists\/[\w-]+/, {
+      timeout: PAGE_TIMEOUT,
+    });
+    const listId = new URL(page.url()).pathname
+      .split('/')
+      .filter(Boolean)
+      .pop();
+    expect(listId, `no list id in ${page.url()}`).toBeTruthy();
+
+    for (const alias of aliases) {
+      await page.goto(`/p/${alias}`);
+      await page.waitForLoadState('load');
+      await waitForHydration(page);
+
+      const trigger = page.locator('[data-testid="pdp-add-to-lists"]');
+      await expect(
+        trigger,
+        'the PDP offers no add-to-list button — the tenant has the wishlist feature off',
+      ).toBeVisible({ timeout: PAGE_TIMEOUT });
+      await trigger.click();
+
+      const row = page.locator(
+        `[data-testid="add-to-list-row"][data-list-id="${listId}"]`,
+      );
+      await expect(row).toBeVisible({ timeout: PAGE_TIMEOUT });
+      await row.click();
+      // The dialog writes to localStorage with no request to wait for, so the
+      // checkbox state is what says the product reached the list.
+      await expect(row.locator('[data-slot="checkbox"]')).toHaveAttribute(
+        'data-state',
+        'checked',
+      );
+      await page.locator('[data-testid="add-to-list-done"]').click();
+    }
+
+    return listId!;
+  }
+
+  async function openList(page: Page, listId: string) {
+    await page.goto(`/se/sv/portal/saved-lists/${listId}`);
+    await page.waitForLoadState('load');
+    await waitForHydration(page);
+    // The products are fetched client-side after the list loads, so the card
+    // carrying the total is the signal, not the page load.
+    await expect(page.locator('[data-testid="list-loading"]')).toBeHidden({
+      timeout: PAGE_TIMEOUT,
+    });
+    await expect(page.locator('[data-testid="list-total-card"]')).toBeVisible({
+      timeout: PAGE_TIMEOUT,
+    });
+  }
+
+  async function readListTotal(page: Page): Promise<number> {
+    return readPrice(page.locator('[data-testid="list-total-amount"]'));
+  }
+
+  test('the list total is the sum of the prices the API returned, in both VAT modes', async ({
+    page,
+  }) => {
+    await page.goto('/se/sv/portal/lists');
+    await page.waitForLoadState('load');
+    await waitForHydration(page);
+
+    const pair = await pickUnroundedPair(page);
+    const aliases = pair.map((product) => product.alias);
+    const listId = await createListWith(page, aliases, 'Value check');
+
+    await openList(page, listId);
+
+    const api = await fetchProductsByAliases(page, aliases);
+    // `by-aliases` drops an alias it cannot resolve instead of failing, and the
+    // page sums what came back. Without these two counts a list that quietly
+    // lost a member would still match its own smaller sum.
+    expect(
+      api.length,
+      'the products endpoint returned fewer products than the list has members',
+    ).toBe(aliases.length);
+    expect(await page.locator('[data-testid="list-item-row"]').count()).toBe(
+      aliases.length,
+    );
+
+    const exSum = api.reduce((sum, product) => sum + product.exVat, 0);
+    const incSum = api.reduce((sum, product) => sum + product.incVat, 0);
+
+    // Ex VAT is what the stored session carries (`vat_display=ex`).
+    const exTotal = await readListTotal(page);
+    expect(Math.abs(exTotal - exSum)).toBeLessThanOrEqual(ROUNDING + SLACK);
+
+    // The half the pair was chosen for: a page that rounded each row before
+    // adding would land here instead, and every assertion above would still
+    // pass.
+    expect(
+      Math.abs(exTotal - sumOfRounded(api.map((product) => product.exVat))),
+      'the total matches the sum of the rounded prices, so the page rounds ' +
+        'before it adds',
+    ).toBeGreaterThan(ROUNDING);
+
+    // The toggle is a cookie read during render, so it is set and the page
+    // re-rendered rather than clicked.
+    await page.context().addCookies([
+      {
+        name: 'vat_display',
+        value: 'inc',
+        url: page.url(),
+      },
+    ]);
+    await page.reload();
+    await waitForHydration(page);
+    await expect(page.locator('[data-testid="list-total-card"]')).toBeVisible({
+      timeout: PAGE_TIMEOUT,
+    });
+
+    const incTotal = await readListTotal(page);
+    expect(Math.abs(incTotal - incSum)).toBeLessThanOrEqual(ROUNDING + SLACK);
+    // The deny direction: the toggle must change which field is summed, not
+    // merely re-label the same number.
+    expect(
+      Math.abs(incTotal - exTotal),
+      'the inc-VAT total equals the ex-VAT one, so the toggle changed nothing',
+    ).toBeGreaterThan(ROUNDING);
   });
 });

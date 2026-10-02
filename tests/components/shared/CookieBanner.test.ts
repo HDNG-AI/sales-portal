@@ -1,0 +1,208 @@
+import { describe, it, expect, beforeEach, assert, vi } from 'vitest';
+import { nextTick, ref } from 'vue';
+import type { PublicTenantConfig } from '#shared/types/tenant-config';
+import { mountComponent } from '../../utils/component';
+import CookieBanner from '../../../app/components/shared/CookieBanner.vue';
+import { useTenant } from '../../../app/composables/useTenant';
+import { useAnalyticsConsent } from '../../../app/composables/useAnalyticsConsent';
+
+// The banner is `!hasInteracted && hasFeature('analytics')`. `hasFeature` comes
+// from the useTenant mock in tests/setup-components.ts, which reads the tenant
+// fixture, so writing `features` here drives the real read.
+//
+// There is nothing to un-mock: this component asks `hasFeature`, not
+// `canAccess`, so the tier-wide useFeatureAccess mock is not in the path. That
+// is also why the key has no access cells — see the coverage map.
+const { tenant } = useTenant();
+
+function setFeatures(features: PublicTenantConfig['features']) {
+  assert.isDefined(tenant.value);
+  tenant.value.features = features;
+}
+
+// useCmsPageLink reaches for useFetch and useRequestURL, which need a Nuxt
+// instance the component tier has not got. Same shape as the topbar spec's
+// mock (tests/components/layout/LayoutHeaderTopbar.test.ts:36), with refs the
+// tests drive so both the resolved and unresolved branches are reachable.
+// The resolved URL, not the tag: the page keeps its localized alias.
+const privacyToRef = ref('/se/sv/integritetspolicy');
+const privacyResolvedRef = ref(true);
+const { useCmsPageLinkMock } = vi.hoisted(() => ({
+  useCmsPageLinkMock: vi.fn(),
+}));
+
+useCmsPageLinkMock.mockImplementation(() => ({
+  to: privacyToRef,
+  isResolved: privacyResolvedRef,
+}));
+
+vi.mock('../../../app/composables/useCmsPageLink', () => ({
+  useCmsPageLink: useCmsPageLinkMock,
+}));
+
+/**
+ * Analytics only counts as configured when the feature is on AND a provider id
+ * is present — the prompt must not ask about cookies nothing would set.
+ */
+function enableAnalytics() {
+  assert.isDefined(tenant.value);
+  tenant.value.features = { analytics: { enabled: true } };
+  tenant.value.seo = { ...tenant.value.seo, googleAnalyticsId: 'G-TEST123' };
+}
+
+// Teleport renders to document.body, which the wrapper cannot see; stubbing it
+// keeps the dialog inline. Precedent:
+// tests/components/layout/LayoutHeaderMobileSearch.test.ts:17.
+const stubs = { teleport: true };
+
+const BANNER = '[role="dialog"]';
+
+function findBanner() {
+  return mountComponent(CookieBanner, { global: { stubs } }).find(BANNER);
+}
+
+describe('CookieBanner', () => {
+  beforeEach(() => {
+    setFeatures({});
+    privacyToRef.value = '/se/sv/integritetspolicy';
+    privacyResolvedRef.value = true;
+    useCmsPageLinkMock.mockClear();
+    // useAnalyticsConsent is backed by useStorage, and `isolate: false` lets
+    // localStorage outlive a single spec. A stored choice would make
+    // hasInteracted true and hide the banner whatever the feature says.
+    localStorage.clear();
+  });
+
+  it('shows the cookie banner when analytics is enabled', () => {
+    enableAnalytics();
+    const banner = findBanner();
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('cookies.banner_text');
+    expect(useCmsPageLinkMock).toHaveBeenCalledOnce();
+  });
+
+  it('hides the cookie banner when analytics is disabled', () => {
+    setFeatures({ analytics: { enabled: false } });
+    expect(findBanner().exists()).toBe(false);
+    expect(useCmsPageLinkMock).not.toHaveBeenCalled();
+  });
+
+  it('hides the cookie banner when analytics is absent from features', () => {
+    setFeatures({});
+    expect(findBanner().exists()).toBe(false);
+    expect(useCmsPageLinkMock).not.toHaveBeenCalled();
+  });
+
+  it('hides the cookie banner once a choice is stored', () => {
+    enableAnalytics();
+    assert.isDefined(tenant.value);
+    localStorage.setItem(
+      `analytics-consent-${tenant.value.tenantId}`,
+      JSON.stringify('accepted'),
+    );
+    expect(findBanner().exists()).toBe(false);
+  });
+
+  it('shows the banner again after reopen(), with the stored choice intact', async () => {
+    // The whole point of the footer entry point: `revoke()` is otherwise
+    // unreachable once a choice is stored, so consent cannot be withdrawn.
+    enableAnalytics();
+    assert.isDefined(tenant.value);
+    localStorage.setItem(
+      `analytics-consent-${tenant.value.tenantId}`,
+      JSON.stringify('accepted'),
+    );
+    expect(findBanner().exists()).toBe(false);
+
+    useAnalyticsConsent().reopen();
+    await nextTick();
+
+    expect(findBanner().exists()).toBe(true);
+    // Reopening is not an answer. Asserted against what is persisted rather
+    // than a derived ref, because that is what has to survive: closing the
+    // banner again must not have turned a settled choice into a blank.
+    expect(
+      localStorage.getItem(`analytics-consent-${tenant.value.tenantId}`),
+    ).toBe(JSON.stringify('accepted'));
+  });
+
+  it('links the banner to the CMS privacy policy when one is tagged', () => {
+    // Accept/Decline without saying what is collected is not informed consent.
+    enableAnalytics();
+    privacyToRef.value = '/se/sv/integritetspolicy';
+    privacyResolvedRef.value = true;
+
+    const link = mountComponent(CookieBanner, { global: { stubs } }).find(
+      '[data-testid="cookie-privacy-link"]',
+    );
+
+    expect(link.exists()).toBe(true);
+    expect(link.attributes('href') ?? link.attributes('to')).toBe(
+      '/se/sv/integritetspolicy',
+    );
+  });
+
+  it('still shows the banner when no privacy page is tagged', () => {
+    // A tenant that has not tagged one must still get a consent prompt; the
+    // link is the part that goes missing, not the banner.
+    enableAnalytics();
+    privacyResolvedRef.value = false;
+
+    const wrapper = mountComponent(CookieBanner, { global: { stubs } });
+
+    expect(wrapper.find(BANNER).exists()).toBe(true);
+    expect(wrapper.find('[data-testid="cookie-privacy-link"]').exists()).toBe(
+      false,
+    );
+  });
+
+  it('gives Accept and Decline the same visual weight', () => {
+    // A primary Accept beside a muted Decline steers the answer, which goes to
+    // whether the consent is freely given at all (GDPR Recital 43) — regulators
+    // have fined on exactly this asymmetry.
+    enableAnalytics();
+
+    const buttons = mountComponent(CookieBanner, { global: { stubs } })
+      .find(BANNER)
+      .findAll('button');
+
+    expect(buttons.length).toBe(2);
+    const [accept, decline] = buttons;
+    expect(accept!.classes().sort()).toEqual(decline!.classes().sort());
+  });
+
+  it('tells the visitor they can withdraw before they consent', () => {
+    // GDPR Art. 7(3): the right to withdraw must be communicated *prior to*
+    // consent, not merely exist afterwards. The footer control satisfies the
+    // "as easy as" half; this sentence is the other half.
+    enableAnalytics();
+
+    const banner = mountComponent(CookieBanner, { global: { stubs } }).find(
+      BANNER,
+    );
+
+    expect(banner.find('[data-testid="cookie-withdraw-note"]').exists()).toBe(
+      true,
+    );
+    expect(banner.text()).toContain('cookies.withdraw_note');
+  });
+
+  it('stays hidden when analytics is enabled but no provider is configured', () => {
+    // The bug this gate fixes: with the feature on and no id, the analytics
+    // plugin returns early and sets nothing, so a prompt here would ask the
+    // visitor to consent to cookies that never arrive.
+    assert.isDefined(tenant.value);
+    tenant.value.features = { analytics: { enabled: true } };
+    tenant.value.seo = { googleAnalyticsId: '', googleTagManagerId: '' };
+
+    expect(findBanner().exists()).toBe(false);
+  });
+
+  it('shows when only a tag manager id is configured', () => {
+    assert.isDefined(tenant.value);
+    tenant.value.features = { analytics: { enabled: true } };
+    tenant.value.seo = { googleTagManagerId: 'GTM-TEST' };
+
+    expect(findBanner().exists()).toBe(true);
+  });
+});
