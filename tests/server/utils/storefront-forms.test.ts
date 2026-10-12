@@ -34,6 +34,15 @@ describe('Odelco public forms', () => {
     });
     expect(mail.subject).not.toContain('\n');
   });
+  it('accepts Swedish field identifiers from Geins CMS', () => {
+    const localized = prepareStorefrontFormMail({
+      kind: 'contact',
+      fields: { företag: 'Odelco Test AB', 'e-postadress': 'svenska@example.org', message: 'Hej' },
+    });
+    expect(localized.replyTo).toBe('svenska@example.org');
+    expect(localized.subject).toBe('Odelco · Kontakt: Odelco Test AB');
+  });
+
   it('keeps support destination separate', () => {
     expect(prepareStorefrontFormMail({ kind: 'support', fields }).to).toBe('support@odelco.se');
   });
