@@ -39,6 +39,8 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const { localePath } = useLocaleMarket();
+// Fail closed even when a parent still holds a price from an old session.
+const { showPrice, canUnlockByAuth } = usePriceVisibility();
 
 const returnTarget = computed(() => props.returnTo || route.fullPath);
 const loginTarget = computed(() => ({
@@ -59,7 +61,7 @@ const loginTarget = computed(() => ({
     data-testid="price-slot"
   >
     <PriceDisplay
-      v-if="mode === 'contract' || mode === 'list'"
+      v-if="(mode === 'contract' || mode === 'list') && showPrice"
       :price="price"
       :show-vat="showVat"
       :show-discount="showDiscount"
@@ -70,7 +72,7 @@ const loginTarget = computed(() => ({
     />
 
     <NuxtLink
-      v-else-if="mode === 'hidden'"
+      v-else-if="mode === 'hidden' || canUnlockByAuth"
       :to="loginTarget"
       class="text-primary inline-flex items-center font-semibold hover:underline"
       data-testid="price-login"
@@ -79,7 +81,7 @@ const loginTarget = computed(() => ({
     </NuxtLink>
 
     <button
-      v-else
+      v-else-if="mode === 'quote'"
       type="button"
       class="text-primary inline-flex items-center font-semibold hover:underline"
       data-testid="price-quote"

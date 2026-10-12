@@ -352,6 +352,41 @@ describe('useAuthStore', () => {
       expect(mockFetchImpl).toHaveBeenCalledWith('/api/auth/me');
     });
 
+    it('reloads stale customer-specific data when an authenticated session expires', async () => {
+      const store = useAuthStore();
+      store.user = { ...mockUser };
+      mockFetchImpl.mockResolvedValueOnce({ user: null });
+
+      await store.fetchUser();
+
+      expect(store.user).toBeNull();
+      expect(mockReloadNuxtApp).toHaveBeenCalledWith({
+        force: true,
+        path: '/se/sv/portal',
+        ttl: 1000,
+      });
+    });
+
+    it('does not reload when the same authenticated session is still valid', async () => {
+      const store = useAuthStore();
+      store.user = { ...mockUser };
+      mockFetchImpl.mockResolvedValueOnce({ user: mockUser });
+
+      await store.fetchUser();
+
+      expect(mockReloadNuxtApp).not.toHaveBeenCalled();
+    });
+
+    it('reloads cached prices when an account switches', async () => {
+      const store = useAuthStore();
+      store.user = { ...mockUser };
+      mockFetchImpl.mockResolvedValueOnce({ user: { ...mockUser, userId: 'other' } });
+
+      await store.fetchUser();
+
+      expect(mockReloadNuxtApp).toHaveBeenCalledTimes(1);
+    });
+
     it('should set user to null when no session', async () => {
       const store = useAuthStore();
       mockFetchImpl.mockResolvedValueOnce({ user: null });
