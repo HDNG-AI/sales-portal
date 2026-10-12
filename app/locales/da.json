@@ -978,6 +978,8 @@
     "field_required": "Dette felt er obligatorisk.",
     "invalid_email": "Angiv en gyldig e-mailadresse.",
     "select_placeholder": "Vælg...",
-    "submit": "Send"
+    "submit": "Send",
+    "submit_success": "Tak — din besked er sendt.",
+    "submit_failed": "Noget gik galt. Prøv igen, eller kontakt os telefonisk."
   }
 }
