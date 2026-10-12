@@ -131,21 +131,41 @@ export const useAuthStore = defineStore('auth', () => {
           user: AuthUser | null;
           market?: string | null;
         }>('/api/auth/me');
+        const previousUserId = user.value?.userId ?? null;
+        const hadSession = user.value !== null;
         user.value = response.user ?? null;
         // Session restore detected a market mismatch: full reload to the
         // market the buyer is allowed on. Skip on SSR (no window). Guard
         // against loops by short-circuiting when the swapped target equals
         // the current pathname.
+        let redirectedForMarket = false;
         if (response.market && import.meta.client) {
           const current = window.location.pathname;
           const target = swapMarketInPath(current, response.market);
           if (target !== current) {
+            redirectedForMarket = true;
             await navigateTo(target, { external: true, replace: true });
           }
         }
+        // A stale authenticated page may still hold a customer-specific price
+        // payload. A full SSR reload after session loss or account switching
+        // discards that payload and re-fetches the correct anonymous/account data.
+        if (
+          import.meta.client &&
+          hadSession &&
+          (user.value === null ||
+            (previousUserId !== null && user.value.userId !== previousUserId)) &&
+          !redirectedForMarket
+        ) {
+          reloadNuxtApp({ force: true, path: window.location.pathname, ttl: 1000 });
+        }
       } catch {
+        const hadSession = user.value !== null;
         user.value = null;
         logger.warn('Failed to fetch current user');
+        if (hadSession && import.meta.client) {
+          reloadNuxtApp({ force: true, path: window.location.pathname, ttl: 1000 });
+        }
       } finally {
         isInitialized.value = true;
         _fetchPromise = null;
