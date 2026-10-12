@@ -45,7 +45,7 @@ export function isLikelyAutomated(fields: StorefrontFormInput['fields'], now = D
 }
 
 const cleanHeader = (text: string, max = 100) =>
-  text.replace(/[\r\n\x00-\x1f\x7f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  text.replace(/[<>]/g, ' ').split('').map((ch) => { const code = ch.charCodeAt(0); return code < 32 || code === 127 ? ' ' : ch; }).join('').replace(/\s+/g, ' ').trim().slice(0, max);
 
 export function prepareStorefrontFormMail(input: StorefrontFormInput): {
   to: string; subject: string; replyTo: string; text: string;
