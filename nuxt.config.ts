@@ -223,6 +223,11 @@ export default defineNuxtConfig({
   robots: { enabled: true },
   sitemap: {
     enabled: true,
+    // Every public page lives under /{market}/{locale}/ and comes from the
+    // source below. What Nuxt discovers on its own are the app routes without
+    // that prefix: cart, checkout, account, portal and test pages, none of
+    // which belong in a search index.
+    excludeAppSources: true,
     sources: ['/api/__sitemap__/urls'],
   },
   schemaOrg: { enabled: true },
