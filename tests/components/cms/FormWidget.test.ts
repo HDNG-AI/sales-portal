@@ -392,7 +392,9 @@ describe('FormWidget checkbox fields', () => {
     const wrapper = mountWidget({ fields: interests });
 
     expect(wrapper.findAll('input[type="checkbox"]').length).toBe(3);
-    expect(wrapper.findAll('input[type="text"]').length).toBe(0);
+    // Honeypot text inputs are intentionally present but hidden from visitors.
+    expect(wrapper.findAll('[data-testid^="form-field-"] input[type="text"]').length).toBe(0);
+    expect(wrapper.findAll('input[name="website"], input[name="ba-honeypot"]').length).toBe(2);
   });
 
   it('reports a group on one line under its group label', async () => {
