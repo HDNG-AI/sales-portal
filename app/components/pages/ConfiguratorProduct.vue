@@ -12,6 +12,7 @@ import { CMS_SLOTS } from '#shared/types/cms-slots';
 import type { DetailProduct, ListProduct } from '#shared/types/commerce';
 import type { ConfigurationChange } from '#shared/types/configurator';
 import { ancestorCrumbs } from '#shared/utils/breadcrumb-trail';
+import { stripLocaleMarketPrefix } from '#shared/utils/locale-market';
 import { categoryPath } from '#shared/utils/route-helpers';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
@@ -100,9 +101,12 @@ watch(
 
 // No `offers`: what a configured product costs is settled by the configuration,
 // so there is no single price to publish before it is committed.
+const route = useRoute();
 useProductSeo({
   product: () => product,
-  path: () => `/p/${alias}`,
+  // The address the page answers at, as on the ordinary product page.
+  path: () => stripLocaleMarketPrefix(route.path),
+  sku: () => product.articleNumber ?? '',
   breadcrumbs: () => breadcrumbItems.value,
   localeAlternates,
   withOffers: false,

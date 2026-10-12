@@ -14,6 +14,9 @@ vi.stubGlobal('defineProduct', defineProductMock);
 vi.stubGlobal('defineBreadcrumb', defineBreadcrumbMock);
 vi.stubGlobal('useHead', vi.fn());
 vi.stubGlobal('useSchemaOrg', vi.fn());
+vi.mock('../../../app/composables/useTenant', () => ({
+  useTenant: () => ({ imageBaseUrl: ref('https://img.test') }),
+}));
 vi.mock('@unhead/schema-org/vue', () => ({
   defineProduct: defineProductMock,
   defineBreadcrumb: defineBreadcrumbMock,
@@ -119,7 +122,23 @@ describe('useProductSeo', () => {
     const long = `<p>${'a'.repeat(300)}</p>`;
     const { product } = run(makeProduct({ texts: { text1: long } }), false);
 
-    expect(product.description!()).toBe('a'.repeat(160));
+    expect(product.description!()).toBe(`${'a'.repeat(159)}…`);
+  });
+
+  it('falls back to the long text when the short text is empty', () => {
+    const { product } = run(
+      makeProduct({
+        texts: {
+          text1: '',
+          text2: '<p>Laddningsfördelare för två batterier.</p>',
+        },
+      }),
+      false,
+    );
+
+    expect(product.description!()).toBe(
+      'Laddningsfördelare för två batterier.',
+    );
   });
 
   it('publishes every product image, in the order they arrive', () => {
@@ -128,6 +147,23 @@ describe('useProductSeo', () => {
     expect(product.image!()).toEqual([
       'https://cdn.test/a.jpg',
       'https://cdn.test/b.jpg',
+    ]);
+  });
+
+  it('builds image addresses from the file name when the API sends no url', () => {
+    const { product } = run(
+      makeProduct({
+        productImages: [
+          { fileName: 'a.jpg', isPrimary: false },
+          { fileName: 'b.jpg', isPrimary: true },
+        ],
+      }),
+      false,
+    );
+
+    expect(product.image!()).toEqual([
+      'https://img.test/product/raw/a.jpg',
+      'https://img.test/product/raw/b.jpg',
     ]);
   });
 

@@ -18,6 +18,7 @@ import {
   categoryPath,
 } from '#shared/utils/route-helpers';
 import { ancestorCrumbs } from '#shared/utils/breadcrumb-trail';
+import { stripLocaleMarketPrefix } from '#shared/utils/locale-market';
 
 const props = defineProps<{
   product: DetailProduct;
@@ -419,7 +420,11 @@ const breadcrumbItems = computed(() => {
 });
 
 // SEO
-const productPath = computed(() => `/p/${slug.value}`);
+// The canonical is the address the page answers at. The route has already
+// 301'd to the product's own canonical where it could, so this path keeps the
+// category segments; a bare `/p/<alias>` would itself answer 301, a canonical
+// that points away from the page.
+const productPath = computed(() => stripLocaleMarketPrefix(route.path));
 // localeAlternates holds the real per-locale slugs published by setAlternates
 // above (populated with immediate:true so the watch fires before this line).
 // It is useState-backed (SSR-safe, no window) and reactive so hreflang stays
@@ -429,7 +434,9 @@ useProductSeo({
   path: () => productPath.value,
   breadcrumbs: () => breadcrumbItems.value,
   localeAlternates,
-  sku: () => resolvedSku.value?.skuId?.toString() ?? '',
+  // The article number, which is what a buyer searches for; skuId is internal.
+  sku: () =>
+    resolvedSku.value?.articleNumber ?? product.value?.articleNumber ?? '',
   // A getter, not `true`: this fork hides prices from unauthenticated
   // buyers, and an offers block for a price the page does not show would
   // be a schema.org claim the page cannot back up.
@@ -453,8 +460,7 @@ useProductSeo({
              commerce signal anchors the column. -->
           <PriceSlot
             v-if="
-              priceSlotMode &&
-              (product.unitPrice || priceSlotMode === 'hidden')
+              priceSlotMode && (product.unitPrice || priceSlotMode === 'hidden')
             "
             :mode="priceSlotMode"
             :price="product.unitPrice"
