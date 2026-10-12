@@ -8,7 +8,7 @@ export interface StorefrontFormInput {
 
 const VALID_EMAIL = /^[^\s@<>\r\n]+@[^\s@<>\r\n]+\.[^\s@<>\r\n]+$/;
 const RESERVED = new Set(['website', 'ba-honeypot', 'form_started_at', 'form_duration']);
-const REPLY_FIELD = /^(e[-_ ]?mail|e[-_ ]?post|epostadress|emailaddress|kontakt[-_ ]?email|customeremail)$/i;
+const REPLY_FIELD = /^(e[-_ ]?mail(?:address|adress)?|e[-_ ]?post(?:adress)?|kontakt[-_ ]?e[-_ ]?mail|customer[-_ ]?email)$/i;
 const COMPANY_FIELD = /^(company|companyname|company_name|foretag|företag|foretagsnamn|företagsnamn|organisation|organization)$/i;
 
 export function parseStorefrontFormInput(raw: unknown): StorefrontFormInput | null {
