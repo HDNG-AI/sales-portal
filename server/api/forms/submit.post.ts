@@ -14,20 +14,22 @@ export default defineEventHandler(async (event) => {
   // Only explicitly configured Odelco hosts. Other tenants never get to send
   // through this project's credentials, even with forged submitted fields.
   const tenant = event.context.tenant;
-  const host = tenant?.hostname?.toLowerCase() ?? '';
+  // A resolved tenant may have a canonical hostname (odelco.se) while
+  // storefront staging runs on an alias (staging-odelco.hdng.ai).
+  // Match the resolved tenant identity AND the actual request host.
+  const requestHost = (getRequestHost(event, { xForwardedHost: false }) || '').toLowerCase();
   const permitted = (process.env.ODELCO_FORMS_ALLOWED_HOSTS || '')
     .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
-  if (!tenant?.config || !permitted.includes(host)) {
+  if (tenant?.tenantId !== 'odelco' || !tenant?.config || !permitted.includes(requestHost)) {
     throw createError({ statusCode: 404, statusMessage: 'Not Found' });
   }
 
   // Browsers set Origin on POST. Reject cross-site submissions outright;
   // this is not the only spam control (bots can forge Origin).
   const origin = getHeader(event, 'origin');
-  const requestHost = getRequestHost(event, { xForwardedHost: false });
   let originHost = '';
   try { originHost = origin ? new URL(origin).host.toLowerCase() : ''; } catch { /* reject below */ }
-  if (!originHost || originHost !== requestHost?.toLowerCase()) {
+  if (!originHost || originHost !== requestHost) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden' });
   }
 
@@ -40,7 +42,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 503, statusMessage: 'CRM intake not configured' });
   }
 
-  const limited = await limiter.check(`${host}:${getClientIp(event)}`);
+  const limited = await limiter.check(`${requestHost}:${getClientIp(event)}`);
   if (!limited.allowed) {
     throw createError({ statusCode: 429, statusMessage: 'Try again later' });
   }
