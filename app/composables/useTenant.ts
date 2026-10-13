@@ -152,6 +152,7 @@ export function useTenant() {
     checkoutMode,
     timezone,
     watermark,
+    productTextPlacement,
     productMediaParameters,
     availableLocales,
     availableMarkets,
