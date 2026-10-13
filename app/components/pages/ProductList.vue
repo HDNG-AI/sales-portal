@@ -21,6 +21,7 @@ import {
   productPath,
 } from '#shared/utils/route-helpers';
 import { ancestorCrumbs } from '#shared/utils/breadcrumb-trail';
+import { metaDescription } from '#shared/utils/meta-description';
 import { recoverEntityUrl } from '~/composables/useEntityUrlRecovery';
 
 const props = defineProps<{
@@ -268,10 +269,16 @@ useHead({
     props.alias.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
 });
 
+// The merchant's description is editor HTML; a raw slice of it put tags into
+// the description meta tag.
+const listDescription = computed(() =>
+  metaDescription(pageInfo.value?.primaryDescription),
+);
+
 useSeoMeta({
-  description: () => pageInfo.value?.primaryDescription?.slice(0, 160) ?? '',
+  description: () => listDescription.value,
   ogTitle: () => pageInfo.value?.name ?? '',
-  ogDescription: () => pageInfo.value?.primaryDescription?.slice(0, 160) ?? '',
+  ogDescription: () => listDescription.value,
   ogUrl: () => seoLinks.value.find((l) => l.rel === 'canonical')?.href ?? '',
 });
 
