@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantConfig } from '#shared/types/tenant-config';
+import partialPayloadFixture from '../fixtures/store-settings/partial-payload.json';
+import { createDefaultTheme } from '../../server/utils/tenant-css';
 
 import {
   createTenant,
@@ -11,6 +13,9 @@ import {
   tenantConfigKey,
   tenantIdKey,
   resolveTenant,
+  tenantRefreshStateKey,
+  TENANT_REMOTE_REFRESH_MS,
+  isTenantRefreshFresh,
   hostnamesToInvalidate,
   DEFAULT_GEINS_SETTINGS,
 } from '../../server/utils/tenant';
@@ -782,5 +787,125 @@ describe('write ordering', () => {
 
     expect(mappingWrites.length).toBeGreaterThan(0);
     expect(lastMappingWrite).toBeLessThan(firstInvalidation);
+  });
+});
+
+describe('Geins Store Settings freshness (missed Studio webhook)', () => {
+  const hostname = 'staging-odelco.example.com';
+  const tenantId = 'odelco';
+
+  function remotePayload() {
+    return {
+      ...partialPayloadFixture,
+      tenantId,
+      geinsSettings: {
+        ...partialPayloadFixture.geinsSettings,
+        defaultHostName: hostname,
+      },
+      appSettings: {
+        ...partialPayloadFixture.appSettings,
+        theme: {
+          ...partialPayloadFixture.appSettings.theme,
+          typography: {
+            ...partialPayloadFixture.appSettings.theme.typography,
+            fontFamily: 'Geist',
+          },
+        },
+      },
+    };
+  }
+
+  async function seedCachedInter(source: 'remote' | 'local' = 'remote') {
+    await createTenant({
+      hostname,
+      tenantId,
+      config: {
+        isActive: true,
+        geinsSettings: GEINS_SETTINGS,
+        theme: {
+          ...createDefaultTheme(tenantId),
+          typography: { fontFamily: 'Inter', headingFontFamily: 'Roboto Slab' },
+        },
+      },
+    });
+    kvStore.set(tenantRefreshStateKey(tenantId), {
+      source,
+      checkedAt: Date.now() - TENANT_REMOTE_REFRESH_MS - 1,
+    });
+  }
+
+  it('re-fetches an expired published theme and busts the /api/config cache', async () => {
+    await seedCachedInter();
+    cacheStore.set('nitro/handlers:_:tenantconfigodelco.json', { old: true });
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify(remotePayload()), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+
+    const result = await resolveTenant(hostname);
+
+    expect(result?.theme.typography?.fontFamily).toBe('Geist');
+    expect(kvStore.get(tenantConfigKey(tenantId))).toMatchObject({
+      theme: { typography: { fontFamily: 'Geist' } },
+    });
+    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(false);
+    expect(mockClearSdkCache).toHaveBeenCalledWith(tenantId);
+    expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
+      source: 'remote',
+    });
+
+    // Repeat requests within the freshness window should not hit Geins again.
+    await resolveTenant(hostname);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves last known good config on transient Geins transport failure', async () => {
+    await seedCachedInter();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+
+    const result = await resolveTenant(hostname);
+
+    expect(result?.theme.typography?.fontFamily).toBe('Inter');
+    expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
+      source: 'remote',
+    });
+  });
+
+  it('does not overwrite a locally administered tenant with Geins data', async () => {
+    await seedCachedInter('local');
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify(remotePayload()), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+
+    const result = await resolveTenant(hostname);
+
+    expect(result?.theme.typography?.fontFamily).toBe('Inter');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a previously remote tenant disappears from Geins', async () => {
+    await seedCachedInter();
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response('not found', { status: 404 }),
+    ));
+
+    expect(await resolveTenant(hostname)).toBeNull();
+  });
+
+  it('treats a legacy, unstamped cached tenant as requiring a provenance check', () => {
+    expect(isTenantRefreshFresh(null)).toBe(false);
+    expect(isTenantRefreshFresh({
+      checkedAt: Date.now() - TENANT_REMOTE_REFRESH_MS - 1,
+      source: 'remote',
+    })).toBe(false);
+    expect(isTenantRefreshFresh({
+      checkedAt: Date.now(),
+      source: 'remote',
+    })).toBe(true);
+    expect(isTenantRefreshFresh({
+      checkedAt: 0,
+      source: 'local',
+    })).toBe(true);
   });
 });

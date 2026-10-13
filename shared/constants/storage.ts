@@ -13,6 +13,8 @@ export const KV_STORAGE_KEYS = {
   TENANT_ID_PREFIX: 'tenant:id:',
   /** Prefix for tenant configuration storage */
   TENANT_CONFIG_PREFIX: 'tenant:config:',
+  /** Last successful read of Geins tenant settings; local overrides remain distinct. */
+  TENANT_REFRESH_STATE_PREFIX: 'tenant:refresh-state:',
   /** Prefix for persistent portal-specific overrides */
   TENANT_OVERRIDE_PREFIX: 'tenant:override:',
   /** Prefix for webhook delivery deduplication */

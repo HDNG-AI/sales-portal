@@ -1,3 +1,4 @@
+import { protectProductPrices } from '../../../utils/price-response';
 import { ProductAliasSchema } from '../../../schemas/api-input';
 import { getRelatedProducts } from '../../../services/products';
 
@@ -8,10 +9,11 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      return getRelatedProducts(
+      const related = await getRelatedProducts(
         { alias: validatedAlias, userToken: auth?.authToken },
         event,
       );
+      return protectProductPrices(event, auth, related);
     },
     { operation: 'products.related.get' },
   );

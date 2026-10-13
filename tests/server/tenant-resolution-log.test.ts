@@ -378,7 +378,13 @@ describe.sequential('resolveTenant resolution log', () => {
     // useStorage is called once per KV step; keep the seeded store for all of them.
     mockUseStorage.mockReturnValue({
       getItem: vi.fn((key: string) =>
-        Promise.resolve(key.endsWith(`:${host}`) ? 'kv-tenant' : config),
+        Promise.resolve(
+          key.startsWith('tenant:refresh-state:')
+            ? { source: 'remote', checkedAt: Date.now() }
+            : key.endsWith(`:${host}`)
+              ? 'kv-tenant'
+              : config,
+        ),
       ),
       setItem: vi.fn(),
       removeItem: vi.fn(),
@@ -457,7 +463,8 @@ describe.sequential('resolveTenantOutcome KV paths', () => {
     }
     // Nothing is stored under the hostname-keyed config key.
     expect(storage.store.has(tenantConfigKey(host))).toBe(false);
-    expect(storage.store.size).toBe(1 + 1 + aliases.length);
+    // One extra KV record tracks the remote cache's freshness/provenance.
+    expect(storage.store.size).toBe(2 + 1 + aliases.length);
   });
 
   it('after a resolve, an alias is a KV hit: no merchant API call', async () => {

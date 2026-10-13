@@ -17,6 +17,7 @@ import {
   DEFAULT_GEINS_SETTINGS,
   invalidateTenantCaches,
   tenantOverrideKey,
+  tenantRefreshStateKey,
   type TenantPortalOverrides,
 } from './tenant';
 import { withoutUndefined } from './object';
@@ -177,6 +178,10 @@ export async function createTenant(
       hostname: existingConfig.hostname,
     });
     await storage.setItem(tenantConfigKey(finalTenantId), updatedConfig);
+    await storage.setItem(tenantRefreshStateKey(finalTenantId), {
+      checkedAt: Date.now(),
+      source: 'local',
+    });
     await persistCmsOverride(storage, finalTenantId, partialConfig.cms);
     // Sequenced, not Promise.all: clearing the negative cache before
     // tenantIdKey(<alias>) is durable leaves a window where a request for
@@ -217,6 +222,10 @@ export async function createTenant(
   const finalConfig = mergeTenantConfig(baseConfig, partialConfig, identity);
 
   await storage.setItem(tenantConfigKey(finalTenantId), finalConfig);
+  await storage.setItem(tenantRefreshStateKey(finalTenantId), {
+    checkedAt: Date.now(),
+    source: 'local',
+  });
   await persistCmsOverride(storage, finalTenantId, partialConfig?.cms);
   await writeHostnameMappings(storage, finalConfig);
   // Clears any negative-cache entry from a lookup that happened before this
@@ -252,6 +261,10 @@ export async function updateTenant(
   });
 
   await storage.setItem(tenantConfigKey(tid), updatedConfig);
+  await storage.setItem(tenantRefreshStateKey(tid), {
+    checkedAt: Date.now(),
+    source: 'local',
+  });
   await persistCmsOverride(storage, tid, updates.cms);
   await writeHostnameMappings(storage, updatedConfig);
   await invalidateTenantCaches(
@@ -289,6 +302,7 @@ export async function deleteTenant(hostname: string): Promise<boolean> {
 
     await Promise.all([
       storage.removeItem(tenantConfigKey(tid)),
+      storage.removeItem(tenantRefreshStateKey(tid)),
       storage.removeItem(tenantOverrideKey(tid)),
       invalidateTenantCaches(
         tid,

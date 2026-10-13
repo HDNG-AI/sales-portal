@@ -162,6 +162,29 @@ describe('Product API Routes', () => {
       expect(result).toEqual({ id: 1, name: 'My Product', ancestors: [] });
     });
 
+    it('removes private Odelco price data from anonymous product responses', async () => {
+      vi.mocked(getRouterParam).mockReturnValue('private-product');
+      mockGraphqlQuery.mockResolvedValue({
+        product: {
+          id: 1, name: 'Private product',
+          unitPrice: { sellingPriceIncVat: 125, sellingPriceExVatFormatted: '100 SEK' },
+          lowestPrice: { lowestPriceIncVat: 120 },
+        },
+      });
+      const event = {
+        context: {
+          tenant: {
+            config: { features: { priceVisibility: { enabled: true, access: 'authenticated' } } },
+          },
+        },
+      } as unknown as H3Event;
+      const response = (await handler(event)) as Record<string, unknown>;
+      expect(response).toMatchObject({ id: 1, name: 'Private product' });
+      expect(response).not.toHaveProperty('unitPrice');
+      expect(response).not.toHaveProperty('lowestPrice');
+      expect(JSON.stringify(response)).not.toContain('100 SEK');
+    });
+
     it('sanitizes every product text before it leaves the API', async () => {
       // Merchant-API text reaches the client verbatim otherwise. The handler
       // sanitizes text1/text2/text3 and nothing asserted that until now.
