@@ -18,7 +18,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
+          # Read-only GITHUB_TOKEN stays available for fetching the private staging ref.
+          persist-credentials: true
       - name: Compare main and Odelco staging
         shell: bash
         run: |
