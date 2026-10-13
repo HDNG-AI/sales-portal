@@ -89,6 +89,8 @@ vi.stubGlobal(
 );
 vi.stubGlobal('readValidatedBody', vi.fn());
 vi.stubGlobal('readBody', vi.fn());
+vi.stubGlobal('getAuthCookies', vi.fn(() => ({ authToken: null, refreshToken: null })));
+vi.stubGlobal('setResponseHeader', vi.fn());
 vi.stubGlobal('defineEventHandler', (fn: AnyFn) => fn);
 vi.stubGlobal('wrapServiceCall', async (fn: () => Promise<unknown>) => fn());
 
@@ -105,9 +107,61 @@ const mockCart = {
   summary: { total: { sellingPriceIncVat: 0 } },
 };
 
+const restrictedCartEvent = {
+  context: {
+    tenant: {
+      hostname: 'odelco.se', tenantId: 'odelco',
+      config: {
+        tenantId: 'odelco',
+        features: { priceVisibility: { enabled: true, access: 'authenticated' } },
+      },
+    },
+  },
+  node: { req: { headers: {} } },
+} as unknown as import('h3').H3Event;
+
+const privatePricedCart = {
+  id: 'private-cart-1',
+  items: [{ skuId: 101, quantity: 2, unitPrice: { sellingPriceIncVat: 250 },
+    itemValueIncVatFormatted: '500 SEK' }],
+  shipping: { feeIncVatFormatted: '45 SEK' },
+  summary: { total: { sellingPriceIncVat: 500 } },
+};
+
 describe('Cart API Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('B2B anonymous cart response boundary', () => {
+    it('does not return private unit, item, summary or shipping prices via GET with cartId', async () => {
+      vi.mocked(getQuery).mockReturnValue({ cartId: 'private-cart-1' });
+      mockCartGet.mockResolvedValue(privatePricedCart);
+      const handler = (await import('../../../server/api/cart/index.get')).default;
+      const result = await handler(restrictedCartEvent);
+      expect(result?.items?.[0]).toMatchObject({ skuId: 101, quantity: 2 });
+      const response = JSON.stringify(result);
+      for (const field of ['unitPrice', 'sellingPrice', 'itemValue', 'feeIncVat', '500 SEK', '45 SEK']) {
+        expect(response).not.toContain(field);
+      }
+      expect(setResponseHeader).toHaveBeenCalledWith(
+        restrictedCartEvent, 'Cache-Control', 'private, no-store',
+      );
+    });
+
+    it('does not expose restricted prices on create and add-item responses', async () => {
+      mockCartCreate.mockResolvedValue(privatePricedCart);
+      mockCartAddItem.mockResolvedValue(privatePricedCart);
+      const createHandler = (await import('../../../server/api/cart/index.post')).default;
+      const created = await createHandler(restrictedCartEvent);
+      expect(JSON.stringify(created)).not.toContain('sellingPrice');
+      vi.mocked(readValidatedBody).mockImplementation(async (_event, parse) =>
+        (parse as AnyFn)({ cartId: 'private-cart-1', skuId: 101, quantity: 2 }));
+      const addHandler = (await import('../../../server/api/cart/items.post')).default;
+      const added = await addHandler(restrictedCartEvent);
+      expect(JSON.stringify(added)).not.toContain('feeIncVat');
+      expect(JSON.stringify(added)).not.toContain('itemValue');
+    });
   });
 
   describe('GET /api/cart', () => {

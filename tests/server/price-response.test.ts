@@ -80,6 +80,35 @@ describe('protectProductPrices: server-side response boundary', () => {
     expect(getUser).not.toHaveBeenCalled();
   });
 
+  it('redacts nested CartType money fields without hiding stock/count', async () => {
+    const cart = {
+      id: 'opaque-cart-id', totalStock: 7,
+      items: [{
+        skuId: 50, quantity: 2,
+        unitPrice: { sellingPriceIncVat: 250 },
+        itemValueIncVatFormatted: '500 SEK',
+        lineTotalExVat: 400,
+      }],
+      summary: {
+        total: { sellingPriceIncVat: 500, sellingPriceExVat: 400 },
+        subTotal: { sellingPriceExVat: 400 },
+        paymentFeeIncVatFormatted: '25 SEK',
+      },
+      shipping: { feeIncVatFormatted: '45 SEK' },
+      discountTotal: 50,
+    };
+    const source = JSON.parse(JSON.stringify(cart));
+    const result = await protectProductPrices(event(restricted), null, cart);
+    const serialized = JSON.stringify(result);
+    for (const secret of ['sellingPrice', 'unitPrice', 'itemValue', 'lineTotal', 'feeIncVat', 'paymentFee', 'discountTotal', '500 SEK', '45 SEK']) {
+      expect(serialized).not.toContain(secret);
+    }
+    expect(result).toMatchObject({
+      id: 'opaque-cart-id', totalStock: 7, items: [{ skuId: 50, quantity: 2 }],
+    });
+    expect(cart).toEqual(source);
+  });
+
   it('removes entire Price facets even when numeric values have generic names', async () => {
     const filters = { count: 3, filters: { facets: [
       { type: 'Brand', filterId: 'Brand', values: [{ value: 'X' }] },
