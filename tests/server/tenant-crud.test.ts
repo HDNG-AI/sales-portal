@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantConfig } from '#shared/types/tenant-config';
 import partialPayloadFixture from '../fixtures/store-settings/partial-payload.json';
+import { createDefaultTheme } from '../../server/utils/tenant-css';
 
 import {
   createTenant,
@@ -822,6 +823,7 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
         isActive: true,
         geinsSettings: GEINS_SETTINGS,
         theme: {
+          ...createDefaultTheme(tenantId),
           typography: { fontFamily: 'Inter', headingFontFamily: 'Roboto Slab' },
         },
       },
