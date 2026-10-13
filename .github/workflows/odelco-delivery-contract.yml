@@ -1,0 +1,28 @@
+name: Odelco delivery contract (advisory)
+
+on:
+  pull_request:
+    branches: [main, odelco-staging, production]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  declaration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Unit test delivery contract rules
+        run: node --test .github/scripts/verify-delivery-contract.test.mjs
+      - name: Check declared branch, Odelco impact and backport plan
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BASE: ${{ github.base_ref }}
+          # Intentionally advisory while existing PRs adopt the template.
+          # After validating the checker, set true and require this check
+          # in GitHub Settings > Rules > Rulesets.
+          DELIVERY_METADATA_ENFORCE: 'false'
+        run: node .github/scripts/verify-delivery-contract.mjs
