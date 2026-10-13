@@ -189,7 +189,7 @@ function stripHtml(value: string | null | undefined): string {
 
 const underPricePlain = computed(() =>
   stripHtml(
-    productTextPlacement.value === 'semantic'
+    productTextPlacement?.value === 'semantic'
       ? semanticProductTexts(product.value).short
       : product.value?.texts?.text3,
   ),
