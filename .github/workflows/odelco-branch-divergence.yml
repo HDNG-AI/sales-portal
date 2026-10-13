@@ -1,0 +1,54 @@
+name: Odelco branch divergence (advisory)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1-5'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with full git history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compare main and Odelco staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main odelco-staging
+          main="$(git rev-parse origin/main)"
+          staging="$(git rev-parse origin/odelco-staging)"
+          # git cherry uses patch-id to discount cherry-picked equivalents.
+          # Squash merges, merge commits and logically identical fixes may
+          # still appear here: these are review candidates, not verified gaps.
+          results="$(git cherry origin/odelco-staging origin/main || true)"
+          count="$(printf '%s\n' "$results" | grep -c '^+' || true)"
+          {
+            echo '## Odelco branch-drift audit (advisory)'
+            echo "- main: \`$main\`"
+            echo "- odelco-staging: \`$staging\`"
+            echo "- Non-patch-equivalent main commits to **review**: $count"
+            echo
+            echo 'This is not proof that functionality is missing: assess tenant impact and inspect actual deployed source.'
+            echo 'An accepted main PR must also record its Odelco backport disposition in the delivery contract.'
+            echo
+            if [[ "$count" -gt 0 ]]; then
+              echo '| Commit | Subject |'
+              echo '| --- | --- |'
+              printf '%s\n' "$results" | grep '^+' | head -25 | while read -r marker sha; do
+                subject="$(git log -1 --format=%s "$sha" | tr '|' '/')"
+                printf '| \`%s\` | %s |\n' "${sha:0:12}" "$subject"
+              done
+              if [[ "$count" -gt 25 ]]; then echo; echo "Only first 25 shown."; fi
+            else
+              echo 'No patch-divergent main commits found.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
