@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mountComponent } from '../../utils/component';
 import ProductTabs from '../../../app/components/product/ProductTabs.vue';
 import { makeListProduct } from '../../fixtures/product';
+import { useTenant } from '../../../app/composables/useTenant';
 
 const stubs = {
   Tabs: {
