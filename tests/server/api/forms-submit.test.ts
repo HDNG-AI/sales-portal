@@ -73,15 +73,12 @@ describe('POST /api/forms/submit (mocked Scaleway; no network)', () => {
   });
 
   afterAll(() => {
-    for (const [key, name] of [
-      ['allowed', 'ODELCO_FORMS_ALLOWED_HOSTS'],
-      ['key', 'SCALEWAY_STOREFRONT_SECRET_KEY'],
-      ['project', 'SCALEWAY_STOREFRONT_PROJECT_ID'],
-    ] as const) {
-      const value = original[key];
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
+    if (original.allowed === undefined) delete process.env.ODELCO_FORMS_ALLOWED_HOSTS;
+    else process.env.ODELCO_FORMS_ALLOWED_HOSTS = original.allowed;
+    if (original.key === undefined) delete process.env.SCALEWAY_STOREFRONT_SECRET_KEY;
+    else process.env.SCALEWAY_STOREFRONT_SECRET_KEY = original.key;
+    if (original.project === undefined) delete process.env.SCALEWAY_STOREFRONT_PROJECT_ID;
+    else process.env.SCALEWAY_STOREFRONT_PROJECT_ID = original.project;
     vi.unstubAllGlobals();
   });
 
