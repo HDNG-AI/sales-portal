@@ -82,12 +82,17 @@ describe('protectProductPrices: server-side response boundary', () => {
   });
 
   it('fails closed when CRM validation is unavailable', async () => {
-    getUser.mockRejectedValue(new Error('Unavailable'));
+    // Exercise a CRM transport failure explicitly without leaving a rejected
+    // promise in the Vitest mock queue for later tests.
+    getUser.mockImplementationOnce(() => {
+      throw new Error('Unavailable');
+    });
     const output = await protectProductPrices(
       event(restricted), { authToken: 'any', refreshToken: 'any' },
       productFixture(),
     );
     expect(output).not.toHaveProperty('unitPrice');
+    expect(getUser).toHaveBeenCalledTimes(1);
   });
 
   it('requires both tokens before attempting validation', async () => {
