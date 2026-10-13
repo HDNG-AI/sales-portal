@@ -51,7 +51,11 @@ To, From, or a customer-controlled destination.
 
 The service refuses non-allowlisted hosts, unknown tenants, different-origin
 POSTs, missing customer email and malformed payloads. It rate-limits by IP and
-uses honeypot + minimum render-to-submit time. Note: the existing shared
+uses honeypot + minimum render-to-submit time. **Anti-abuse rejection never
+returns a success receipt:** this avoids silently losing a valid customer lead
+if browser autofill or quick submission triggers a heuristic. Only a validated
+Scaleway CreateEmailResponse containing an accepted email ID produces a 200;
+provider acceptance is not proof that the recipient inbox received the email. Note: the existing shared
 `getClientIp` trusts forwarded-for headers — verify that the HDNG reverse
 proxy overwrites them before relying on rate limits; add provider-edge abuse
 protection before any public high-volume launch. No submitted contents are
