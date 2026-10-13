@@ -220,6 +220,26 @@ describe('Product List API Routes', () => {
       expect(result).toEqual({ filters: [], count: 5 });
     });
 
+    it('omits anonymous Odelco Price facets including numeric bounds', async () => {
+      (getQuery as ReturnType<typeof vi.fn>).mockReturnValue({});
+      mockGraphqlQuery.mockResolvedValue({
+        filters: { filters: { facets: [
+          { type: 'Price', filterId: 'Price', values: [{ min: 1, max: 9000 }] },
+          { type: 'Brand', filterId: 'Brand', values: [{ id: 'X' }] },
+        ] } },
+      });
+      const event = createMockEvent();
+      (event.context.tenant as unknown as Record<string, unknown>).config = {
+        tenantId: 'odelco',
+        features: { priceVisibility: { enabled: true, access: 'authenticated' } },
+      };
+      const response = (await handler(event)) as {
+        filters: { facets: Array<{ filterId: string }> };
+      };
+      expect(response.filters.facets.map((f) => f.filterId)).toEqual(['Brand']);
+      expect(JSON.stringify(response)).not.toContain('9000');
+    });
+
     it('should accept empty query', async () => {
       (getQuery as ReturnType<typeof vi.fn>).mockReturnValue({});
       mockGraphqlQuery.mockResolvedValue({
