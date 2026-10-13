@@ -30,7 +30,7 @@ jobs:
           # git cherry uses patch-id to discount cherry-picked equivalents.
           # Squash merges, merge commits and logically identical fixes may
           # still appear here: these are review candidates, not verified gaps.
-          results="$(git cherry origin/odelco-staging origin/main || true)"
+          results="$(git cherry origin/odelco-staging origin/main)"
           count="$(printf '%s\n' "$results" | grep -c '^+' || true)"
           {
             echo '## Odelco branch-drift audit (advisory)'
@@ -44,7 +44,7 @@ jobs:
             if [[ "$count" -gt 0 ]]; then
               echo '| Commit | Subject |'
               echo '| --- | --- |'
-              printf '%s\n' "$results" | grep '^+' | head -25 | while read -r marker sha; do
+              printf '%s\n' "$results" | grep '^+' | sed -n '1,25p' | while read -r marker sha; do
                 subject="$(git log -1 --format=%s "$sha" | tr '|' '/')"
                 printf '| \`%s\` | %s |\n' "${sha:0:12}" "$subject"
               done
