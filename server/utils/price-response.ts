@@ -41,7 +41,7 @@ export async function protectProductPrices<T>(
   auth: AuthTokens | null,
   result: T,
 ): Promise<T> {
-  const visibility = event.context.tenant?.config?.features?.priceVisibility;
+  const visibility = event.context?.tenant?.config?.features?.priceVisibility;
 
   // Keep legacy public-price behavior for tenants without a configured gate.
   if (visibility === undefined) return result;
