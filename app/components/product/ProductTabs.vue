@@ -62,7 +62,7 @@ const props = defineProps<{
 const { productTextPlacement, productMediaParameters } = useTenant();
 const semanticTexts = computed(() => semanticProductTexts(props.product));
 const descriptionTexts = computed(() => productDescriptionTexts(props.product));
-const isSemantic = computed(() => productTextPlacement.value === 'semantic');
+const isSemantic = computed(() => productTextPlacement?.value === 'semantic');
 const detailsText2 = computed(() =>
   isSemantic.value ? semanticTexts.value.long : descriptionTexts.value.text2,
 );
