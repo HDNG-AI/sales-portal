@@ -18,13 +18,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Read-only GITHUB_TOKEN stays available for fetching the private staging ref.
-          persist-credentials: true
+          # Checkout with full history already fetches branch refs. No persisted token.
+          persist-credentials: false
       - name: Compare main and Odelco staging
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main odelco-staging
+          # Fail rather than compare guessed or stale branch names.
+          git show-ref --verify --quiet refs/remotes/origin/main
+          git show-ref --verify --quiet refs/remotes/origin/odelco-staging
           main="$(git rev-parse origin/main)"
           staging="$(git rev-parse origin/odelco-staging)"
           # git cherry uses patch-id to discount cherry-picked equivalents.
