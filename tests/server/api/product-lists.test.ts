@@ -141,6 +141,26 @@ describe('Product List API Routes', () => {
       expect(result).toEqual({ products: [], count: 0 });
     });
 
+    it('does not return product list prices to anonymous Odelco browsers', async () => {
+      (getQuery as ReturnType<typeof vi.fn>).mockReturnValue({});
+      mockGraphqlQuery.mockResolvedValue({
+        products: {
+          products: [{ productId: 7, name: 'Product', unitPrice: { sellingPriceExVat: 100 } }],
+          count: 1,
+        },
+      });
+      const event = createMockEvent();
+      (event.context.tenant as unknown as Record<string, unknown>).config = {
+        features: { priceVisibility: { enabled: true, access: 'authenticated' } },
+      };
+      const response = (await handler(event)) as {
+        products: Array<Record<string, unknown>>; count: number;
+      };
+      expect(response.count).toBe(1);
+      expect(response.products[0]).toMatchObject({ name: 'Product', productId: 7 });
+      expect(response.products[0]).not.toHaveProperty('unitPrice');
+    });
+
     it('should accept empty query (all optional)', async () => {
       (getQuery as ReturnType<typeof vi.fn>).mockReturnValue({});
       mockGraphqlQuery.mockResolvedValue({
@@ -198,6 +218,26 @@ describe('Product List API Routes', () => {
       const result = await handler(event);
 
       expect(result).toEqual({ filters: [], count: 5 });
+    });
+
+    it('omits anonymous Odelco Price facets including numeric bounds', async () => {
+      (getQuery as ReturnType<typeof vi.fn>).mockReturnValue({});
+      mockGraphqlQuery.mockResolvedValue({
+        filters: { filters: { facets: [
+          { type: 'Price', filterId: 'Price', values: [{ min: 1, max: 9000 }] },
+          { type: 'Brand', filterId: 'Brand', values: [{ id: 'X' }] },
+        ] } },
+      });
+      const event = createMockEvent();
+      (event.context.tenant as unknown as Record<string, unknown>).config = {
+        tenantId: 'odelco',
+        features: { priceVisibility: { enabled: true, access: 'authenticated' } },
+      };
+      const response = (await handler(event)) as {
+        filters: { facets: Array<{ filterId: string }> };
+      };
+      expect(response.filters.facets.map((f) => f.filterId)).toEqual(['Brand']);
+      expect(JSON.stringify(response)).not.toContain('9000');
     });
 
     it('should accept empty query', async () => {

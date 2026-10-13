@@ -1,3 +1,4 @@
+import { protectProductPrices } from '../../utils/price-response';
 import { ProductListSchema } from '../../schemas/api-input';
 import { getProducts } from '../../services/product-lists';
 
@@ -15,10 +16,11 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      return await getProducts(
+      const products = await getProducts(
         { ...validated, userToken: auth?.authToken },
         event,
       );
+      return protectProductPrices(event, auth, products);
     },
     { operation: 'product-lists.products.get' },
   );

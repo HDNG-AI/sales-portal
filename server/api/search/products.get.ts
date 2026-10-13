@@ -1,3 +1,4 @@
+import { protectProductPrices } from '../../utils/price-response';
 import { SearchProductsSchema } from '../../schemas/api-input';
 import { searchProducts } from '../../services/search';
 
@@ -12,7 +13,7 @@ export default defineEventHandler(async (event) => {
         searchText: validated.query,
       };
 
-      return searchProducts(
+      const products = await searchProducts(
         {
           filter,
           skip: validated.skip,
@@ -21,6 +22,7 @@ export default defineEventHandler(async (event) => {
         },
         event,
       );
+      return protectProductPrices(event, auth, products);
     },
     { operation: 'search.products.get' },
   );

@@ -1,3 +1,4 @@
+import { protectProductPrices } from '../../utils/price-response';
 import { z } from 'zod';
 import { getProductsByIds } from '../../services/products';
 
@@ -36,10 +37,11 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      return await getProductsByIds(
+      const products = await getProductsByIds(
         { productIds: ids, userToken: auth?.authToken },
         event,
       );
+      return protectProductPrices(event, auth, products);
     },
     { operation: 'products.by-ids' },
   );
