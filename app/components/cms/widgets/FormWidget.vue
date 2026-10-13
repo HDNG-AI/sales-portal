@@ -292,16 +292,8 @@ async function handleSubmit() {
 }
 
 async function submitOverHttp(endpoint: FormEndpoint) {
-  // Only the honeypot is worth checking here. A filled one is never a person,
-  // so dropping it saves a pointless request. Timing is left to the receiver:
-  // bailing on a fast submit would silently discard a real person's form for
-  // typing quickly, and the receiver refuses anything under its own threshold
-  // anyway. Nothing is checked on the mailto path — that opens the sender's
-  // own mail client, so there is no one to spam.
-  if (HONEYPOT_FIELDS.some((name) => (honeypotValues[name] ?? '').trim())) {
-    submitted.value = true;
-    return;
-  }
+  // Do not mark a submission successful locally. Only the server can
+  // acknowledge provider acceptance. A silently discarded form is a lost lead.
 
   submitting.value = true;
   submitError.value = '';
