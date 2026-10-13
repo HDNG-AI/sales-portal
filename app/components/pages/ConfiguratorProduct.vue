@@ -154,7 +154,7 @@ const { data: pdpCmsArea } = useFetch<ContentAreaType>('/api/cms/area', {
 // ---------------------------------------------------------------------------
 
 const { productTextPlacement } = useTenant();
-const isSemantic = computed(() => productTextPlacement.value === 'semantic');
+const isSemantic = computed(() => productTextPlacement?.value === 'semantic');
 const semanticTexts = computed(() => semanticProductTexts(product));
 const descriptionTexts = computed(() =>
   isSemantic.value
