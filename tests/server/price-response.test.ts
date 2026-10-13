@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { H3Event } from 'h3';
+import { protectProductPrices } from '../../server/utils/price-response';
 
 const { getUser } = vi.hoisted(() => ({ getUser: vi.fn() }));
 vi.mock('../../server/services/auth', () => ({ getUser }));
-
-import { protectProductPrices } from '../../server/utils/price-response';
 
 type Visibility = { enabled: boolean; access?: 'all' | 'authenticated' };
 
