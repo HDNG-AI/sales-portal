@@ -19,6 +19,7 @@ import {
 } from '#shared/utils/route-helpers';
 import { ancestorCrumbs } from '#shared/utils/breadcrumb-trail';
 import { stripLocaleMarketPrefix } from '#shared/utils/locale-market';
+import { semanticProductTexts } from '~/utils/product-tabs';
 
 const props = defineProps<{
   product: DetailProduct;
@@ -118,7 +119,7 @@ const quantity = ref(1);
 
 const cartStore = useCartStore();
 const favoritesStore = useFavoritesStore();
-const { hasFeature, isCatalogMode } = useTenant();
+const { hasFeature, isCatalogMode, productTextPlacement } = useTenant();
 const { buildProductImageAlt } = useProductImageAlt();
 const { canAccess } = useFeatureAccess();
 const canPurchase = computed(
@@ -186,7 +187,13 @@ function stripHtml(value: string | null | undefined): string {
   return value ? value.replace(/<[^>]*>/g, '').trim() : '';
 }
 
-const text3Plain = computed(() => stripHtml(product.value?.texts?.text3));
+const underPricePlain = computed(() =>
+  stripHtml(
+    productTextPlacement.value === 'semantic'
+      ? semanticProductTexts(product.value).short
+      : product.value?.texts?.text3,
+  ),
+);
 
 // Full canonical URL used on the print header row 2 and as the source
 // for the alias path in the additional-images grid caption.
@@ -473,11 +480,11 @@ useProductSeo({
 
           <!-- Text 3: extra detail copy under the price -->
           <p
-            v-if="text3Plain"
+            v-if="underPricePlain"
             class="text-muted-foreground text-sm leading-relaxed"
             data-testid="product-text3"
           >
-            {{ text3Plain }}
+            {{ underPricePlain }}
           </p>
 
           <!-- Campaign badges -->
