@@ -44,9 +44,11 @@ export default defineEventHandler(async (event) => {
   if (!limited.allowed) {
     throw createError({ statusCode: 429, statusMessage: 'Try again later' });
   }
-  // A honeypot or implausibly fast submit gets a generic success without
-  // generating a message or confirming anything about the recipient.
-  if (isLikelyAutomated(input.fields)) return { ok: true };
+  // Never acknowledge an unsent customer enquiry as successful. In
+  // particular, browser autofill can occasionally trip bot heuristics.
+  if (isLikelyAutomated(input.fields)) {
+    throw createError({ statusCode: 422, statusMessage: 'Submission could not be accepted' });
+  }
 
   let message;
   try { message = prepareStorefrontFormMail(input); }
@@ -79,6 +81,17 @@ export default defineEventHandler(async (event) => {
   if (!response.ok) {
     // Never return provider diagnostics, API keys or customer content to visitors.
     throw createError({ statusCode: 502, statusMessage: 'Mail provider rejected submission' });
+  }
+  // Scaleway's CreateEmailResponse contains accepted email records. A bare
+  // HTTP 200 is not enough to tell a customer that the provider accepted mail.
+  let accepted: unknown;
+  try { accepted = await response.json(); }
+  catch {
+    throw createError({ statusCode: 502, statusMessage: 'Mail provider returned no receipt' });
+  }
+  const envelope = accepted as { emails?: Array<{ id?: string }> } | null;
+  if (!Array.isArray(envelope?.emails) || !envelope.emails.some((email) => typeof email?.id === 'string' && !!email.id)) {
+    throw createError({ statusCode: 502, statusMessage: 'Mail provider returned no receipt' });
   }
   return { ok: true };
 });
