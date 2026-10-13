@@ -8,7 +8,7 @@ import {
   AccordionTrigger,
 } from '~/components/ui/accordion';
 import { formatLength, formatWeight } from '~/utils/measurements';
-import { productDescriptionTexts } from '~/utils/product-tabs';
+import { productDescriptionTexts, semanticProductTexts } from '~/utils/product-tabs';
 import {
   ExternalLink,
   FileArchive,
@@ -59,9 +59,19 @@ const props = defineProps<{
 
 // Upstream extracted this so the configurator page can reuse it; the names
 // stay local because the template reads them in four places.
+const { productTextPlacement, productMediaParameters } = useTenant();
+const semanticTexts = computed(() => semanticProductTexts(props.product));
 const descriptionTexts = computed(() => productDescriptionTexts(props.product));
-const detailsText2 = computed(() => descriptionTexts.value.text2);
-const detailsText3 = computed(() => descriptionTexts.value.text3);
+const isSemantic = computed(() => productTextPlacement.value === 'semantic');
+const detailsText2 = computed(() =>
+  isSemantic.value ? semanticTexts.value.long : descriptionTexts.value.text2,
+);
+const detailsText3 = computed(() =>
+  isSemantic.value ? undefined : descriptionTexts.value.text3,
+);
+const technicalText = computed(() =>
+  isSemantic.value ? semanticTexts.value.technical : undefined,
+);
 const hasDescription = computed(
   () => !!(detailsText2.value || detailsText3.value),
 );
@@ -81,7 +91,7 @@ function isVisibleParameter(param: { show?: boolean }): boolean {
   return param.show !== false;
 }
 
-const { productMediaParameters } = useTenant();
+
 const classifiedParameters = computed(() => {
   const videos: ProductMediaParameter[] = [];
   const documents: ProductMediaParameter[] = [];
@@ -193,7 +203,7 @@ const specGroups = computed(() =>
     ? [...visibleGroups.value, measurementGroup.value]
     : visibleGroups.value,
 );
-const hasSpecs = computed(() => specGroups.value.length > 0);
+const hasSpecs = computed(() => specGroups.value.length > 0 || !!technicalText.value);
 const hasRelated = computed(() => (props.related?.length ?? 0) > 0);
 
 const defaultTab = computed(() => {
@@ -299,6 +309,15 @@ onMounted(() => {
         <h3 class="font-heading mb-6 text-2xl font-bold">
           {{ $t('product.specifications') }}
         </h3>
+        <!-- Product HTML is sanitized server-side before SSR + hydration. -->
+        <!-- eslint-disable vue/no-v-html -->
+        <div
+          v-if="technicalText"
+          class="prose mb-6 max-w-none"
+          data-testid="product-technical-text"
+          v-html="technicalText"
+        />
+        <!-- eslint-enable vue/no-v-html -->
         <div class="grid gap-8 md:grid-cols-2">
           <div
             v-for="group in specGroups"
@@ -465,6 +484,13 @@ onMounted(() => {
       <AccordionItem v-if="hasSpecs" value="specifications">
         <AccordionTrigger>{{ $t('product.specifications') }}</AccordionTrigger>
         <AccordionContent>
+          <!-- eslint-disable vue/no-v-html -->
+          <div
+            v-if="technicalText"
+            class="prose mb-4 max-w-none"
+            v-html="technicalText"
+          />
+          <!-- eslint-enable vue/no-v-html -->
           <div class="flex flex-col gap-4">
             <div
               v-for="group in specGroups"
