@@ -1,3 +1,4 @@
+import { protectProductPrices } from '../../utils/price-response';
 import type { CategoryNode } from '#shared/utils/breadcrumb-trail';
 import { ancestorsFromCategories } from '#shared/utils/breadcrumb-trail';
 import { ProductAliasSchema } from '../../schemas/api-input';
@@ -72,11 +73,11 @@ export default defineEventHandler(async (event) => {
         String(withoutClosure.productId),
       );
 
-      return {
+      return protectProductPrices(event, auth, {
         ...sanitizeProductTexts(withoutClosure),
         ancestors,
         ...(configurable ? { configurable } : {}),
-      };
+      });
     },
     { operation: 'products.get' },
   );
