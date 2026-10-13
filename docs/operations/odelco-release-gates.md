@@ -26,6 +26,28 @@ force; Odelco's Hetzner staging is an additional, independently verified lane.
 - Do not reset one branch to another: Odelco staging carries its own
   deployment and other scoped commits.
 
+## Geins upstream boundary — fork-only governance
+`HDNG-AI/sales-portal` is a **fork** of `geins-io/sales-portal`.
+The fork's `main` currently triggers its **own** `dev-sync.yml` workflow,
+which rebuilds the fork's `dev` staging branch and Azure dev build. This is
+**not** a push to Geins upstream, and `odelco-staging` has a separate
+HDNG staging pipeline.
+
+**Do not create an upstream Geins PR by merging or copying the entire fork's
+`main` branch.** When contributing generic engine fixes back to Geins,
+cherry-pick only the individually reviewed generic commits or isolated files,
+with an explicit check that `.github/workflows/odelco-*`,
+`.github/scripts/verify-delivery-contract*`,
+`.github/pull_request_template.md` and `docs/operations/odelco-*`
+do **not** enter the upstream diff. Odelco-only staging config, tenant material,
+and files are always excluded. This requires the *person preparing the upstream
+PR* to enforce; a workflow in the fork cannot technically guarantee what
+someone later submits manually to an upstream repository.
+
+The Odelco branch-drift audit runs from the fork's default branch solely so
+GitHub's scheduled events execute reliably. Its report is advisory and cannot
+authorize a merge, deploy or upstream contribution.
+
 ## Status contract
 1. **Code ready**: branch and change reviewable; owner/impact documented.
 2. **CI green**: required automated checks passed for the exact PR SHA.
