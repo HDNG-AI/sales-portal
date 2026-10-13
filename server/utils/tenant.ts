@@ -202,7 +202,7 @@ export type TenantResolutionOutcome =
 export interface TenantResolutionTrace {
   hostname: string;
   /** `stale` is a hit whose config no longer claims the hostname; the lookup then falls through. */
-  kv: 'hit' | 'stale' | 'miss' | 'skipped';
+  kv: 'hit' | 'stale' | 'miss' | 'skipped' | 'expired' | 'stale-on-refresh-error';
   /** The merchant API call, when one was made: its URL and status or error. */
   api?: { url: string; result: string };
   outcome: TenantResolutionOutcome;
