@@ -44,7 +44,7 @@ const form = () => ({
 function event(host = 'staging-odelco.hdng.ai', origin = 'https://' + host): H3Event {
   return {
     node: { req: { headers: { host, origin, 'x-forwarded-for': '203.0.113.10' } } },
-    context: { tenant: { hostname: 'staging-odelco.hdng.ai', config: { name: 'Odelco' } } },
+    context: { tenant: { tenantId: 'odelco', hostname: 'odelco.se', config: { name: 'Odelco' } } },
   } as unknown as H3Event;
 }
 
@@ -91,6 +91,18 @@ describe('POST /api/forms/submit (mocked Scaleway; no network)', () => {
     expect(request.to).toEqual([{ email: 'hello@hdng.ai' }]);
     expect(request.subject).toBe('Odelco · Kontakt: Test AB');
     expect(request.additional_headers).toEqual([{ key: 'Reply-To', value: 'customer@example.org' }]);
+  });
+
+  it('accepts a staging alias for the canonical Odelco tenant', async () => {
+    await expect(handler(event('staging-odelco.hdng.ai'))).resolves.toEqual({ ok: true });
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a non-Odelco tenant even on an allowed host', async () => {
+    const other = event();
+    other.context.tenant.tenantId = 'other-tenant';
+    await expect(handler(other)).rejects.toMatchObject({ statusCode: 404 });
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it('rejects a different host before calling the provider', async () => {
