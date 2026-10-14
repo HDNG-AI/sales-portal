@@ -98,3 +98,8 @@ export const CreateTenantSchema = z
   .strict();
 
 export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
+
+/** Dedicated write contract for a tenant's operating timezone only. */
+export const UpdateTenantTimezoneSchema = z
+  .object({ timezone: TimezoneSchema })
+  .strict();
