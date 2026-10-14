@@ -319,26 +319,45 @@ export interface TenantPortalOverrides {
   cms?: TenantConfig['cms'];
 }
 
+/**
+ * Approved Sales Portal-only operating timezone until Geins Studio exposes
+ * an authoritative per-tenant setting. The Odelco value is an explicit
+ * merchant decision (2026-10-14), not an inferred market/locale default.
+ * Keep this allowlist narrow: no theme, routing, or other Studio-owned keys.
+ *
+ * Applied after each Geins load (including preview) and retained in the
+ * cached effective tenant config. Geins publish refresh cannot erase it.
+ */
+const APPROVED_TENANT_TIMEZONES: Readonly<Record<string, string>> = {
+  odelco: 'Europe/Stockholm',
+};
+
 export function mergeTenantPortalOverrides(
   base: TenantConfig,
   overrides: TenantPortalOverrides | null | undefined,
 ): TenantConfig {
-  if (!overrides?.cms) return base;
+  const timezone = APPROVED_TENANT_TIMEZONES[base.tenantId];
+  if (!overrides?.cms && !timezone) return base;
 
   return {
     ...base,
-    cms: {
-      ...base.cms,
-      ...overrides.cms,
-      slots: {
-        ...(base.cms?.slots ?? {}),
-        ...(overrides.cms.slots ?? {}),
-      },
-      menus: {
-        ...(base.cms?.menus ?? {}),
-        ...(overrides.cms.menus ?? {}),
-      },
-    },
+    ...(timezone ? { timezone } : {}),
+    ...(overrides?.cms
+      ? {
+          cms: {
+            ...base.cms,
+            ...overrides.cms,
+            slots: {
+              ...(base.cms?.slots ?? {}),
+              ...(overrides.cms.slots ?? {}),
+            },
+            menus: {
+              ...(base.cms?.menus ?? {}),
+              ...(overrides.cms.menus ?? {}),
+            },
+          },
+        }
+      : {}),
   };
 }
 
