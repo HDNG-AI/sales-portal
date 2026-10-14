@@ -16,7 +16,7 @@ import * as userService from '../services/user';
  * from a filters array entirely: its values are numeric even when its keys
  * do not contain the word "price".
  */
-const PRICE_FIELD = /price|discount|currency|^vat$|^tax(?:es)?$|^amount$|^offers?$|^rebate|^(?:(?:shipping|payment)?fee|itemValue|lineValue|lineTotal|subTotal|totalAmount|netAmount|grossAmount)(?:Inc|Ex)?(?:Vat)?(?:Formatted)?$/i;
+const PRICE_FIELD = /price|discount|currency|^vat$|^tax(?:es)?$|^amount$|^offers?$|^rebate|^(?:(?:shipping|payment)?fee|itemValue|lineValue|lineTotal|subTotal|totalAmount|netAmount|grossAmount)(?:Inc|Ex)?(?:Vat)?(?:Formatted)?$|^total(?:Inc|Ex)?Vat(?:Formatted)?$|^totalFormatted$/i;
 
 function isPricingFacet(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
