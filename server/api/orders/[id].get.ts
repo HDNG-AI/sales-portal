@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
         throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
       }
       if (privateBuyer) {
-        await requireOdelcoOrderOwnership(event, tokens, order.customerId);
+        await requireOdelcoOrderOwnership(event, tokens, order.publicId, 'public');
       }
       return { order };
     },
