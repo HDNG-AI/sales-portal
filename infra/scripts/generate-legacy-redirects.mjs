@@ -29,6 +29,7 @@
  */
 
 import { writeFileSync, readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 // ---------------------------------------------------------------------------
 // Path transforms. These mirror shared/utils/route-helpers.ts
@@ -45,6 +46,13 @@ const GEINS_PREFIXES = new Set(['p', 'c', 'b', 'l', 's', 'dc']);
  *  the URL — never guessed from the URL itself. */
 const APP_PREFIX = { product: 'p', category: 'c', brand: 'b' };
 
+/** Validate a Geins locale (BCP-47 or short) and return the app's short code. */
+export function shortLocaleCode(raw) {
+  if (typeof raw !== 'string') return null;
+  const match = /^([a-z]{2})(?:-[a-z]{2})?$/i.exec(raw.trim());
+  return match ? match[1].toLowerCase() : null;
+}
+
 /**
  * Geins canonicalUrl -> sales-portal app path.
  *   ('/se/sv/p/cat/sub/item', 'product')  -> '/se/sv/p/cat/sub/item'
@@ -60,8 +68,9 @@ export function toAppPath(canonicalUrl, type) {
 
   const segments = canonicalUrl.split('?')[0].split('#')[0].split('/').filter(Boolean);
   if (segments.length < 3) return null;
-  const [market, locale] = segments;
-  if (!/^[a-z]{2}$/.test(market) || !/^[a-z]{2}$/.test(locale)) return null;
+  const [market, language] = segments;
+  const locale = shortLocaleCode(language);
+  if (!/^[a-z]{2}$/.test(market) || !locale) return null;
 
   let rest = segments.slice(2);
   if (GEINS_PREFIXES.has(rest[0])) rest = rest.slice(1);
@@ -140,8 +149,9 @@ export function resolveLegacyPath(map, rawPath) {
 // ---------------------------------------------------------------------------
 
 function fail(msg) {
-  console.error(`\n[generate-redirects] ${msg}\n`);
-  process.exit(1);
+  // Throw, so callers/tests cannot accidentally treat a partial API sweep as
+  // success. The direct CLI entrypoint prints the error and exits non-zero.
+  throw new Error(msg);
 }
 
 async function gql(endpoint, apiKey, query) {
@@ -170,41 +180,50 @@ const chan = (c) => `channelId:"${c.channelId}",languageId:"${c.languageId}",mar
  * lost, 669 silently duplicated. With the sort, rows === count === distinct.
  * The assertion below is what stops that regression reaching a redirect map.
  */
-async function fetchAllProducts(endpoint, apiKey, c) {
-  const TAKE = 200; // API hard cap: skip <= 6000, take <= 200.
+export async function fetchAllProducts(endpoint, apiKey, c) {
+  const TAKE = 200; // Geins skip <= 6000, take <= 200.
   const byId = new Map();
   let total = null;
-  let rows = 0;
 
   for (let skip = 0; total === null || skip < total; skip += TAKE) {
+    if (skip > 6000) fail('Geins paging limit reached before the full catalog was fetched.');
     const d = await gql(
       endpoint,
       apiKey,
       `{ products(${chan(c)},skip:${skip},take:${TAKE},filter:{sort:ALPHABETICAL}){
            count products{ productId articleNumber canonicalUrl name } } }`,
     );
-    const node = d.products;
-    total = node.count;
-    rows += node.products.length;
-    for (const p of node.products) byId.set(p.productId, p);
+    const node = d?.products;
+    if (!node || !Number.isSafeInteger(node.count) || node.count < 0 ||
+        !Array.isArray(node.products) || node.products.length > TAKE) {
+      fail('Malformed Geins products page; refusing to write a partial map.');
+    }
+    if (total === null) total = node.count;
+    if (node.count !== total) fail('Geins product count changed during paging; refusing a partial map.');
+
+    const expected = Math.min(TAKE, total - skip);
+    if (node.products.length !== expected) {
+      fail(`Short Geins products page at skip=${skip}: got ${node.products.length}, expected ${expected}.`);
+    }
+
+    for (const p of node.products) {
+      if (p == null || p.productId == null || byId.has(p.productId)) {
+        fail('Geins returned a product without a stable unique ID, or repeated a product across pages.');
+      }
+      byId.set(p.productId, p);
+    }
     process.stderr.write(`\r  products ${byId.size}/${total}`);
-    if (node.products.length === 0) break;
-    if (skip + TAKE > 6000) break; // API skip ceiling
   }
   process.stderr.write('\n');
-
-  if (byId.size !== total || rows !== total) {
-    fail(
-      `Product paging is lossy: API count=${total}, rows fetched=${rows}, distinct=${byId.size}. ` +
-        `Refusing to emit a partial map. Check that filter:{sort:ALPHABETICAL} is still honoured.`,
-    );
+  if (byId.size !== total) {
+    fail(`Product paging incomplete: count=${total}, distinct=${byId.size}. Refusing to emit a partial map.`);
   }
   return [...byId.values()];
 }
 
 // ---------------------------------------------------------------------------
 
-async function main() {
+export async function main() {
   const args = process.argv.slice(2);
   const flag = (n) => {
     const i = args.indexOf(n);
@@ -226,17 +245,22 @@ async function main() {
   const { channel } = await gql(
     endpoint,
     apiKey,
-    `{ channel(channelId:"${channelId}"){ id name url defaultMarketId defaultLanguageId
-         markets{ id alias } languages{ id code } } }`,
+    `{ channel(channelId:"${channelId}"){ id name url defaultMarketId
+         markets{ id alias defaultLanguageId allowedLanguages{ id code } } } }`,
   );
   if (!channel) fail(`Channel "${channelId}" not found for this API key.`);
 
-  const languageId = process.env.GEINS_LANGUAGE_ID || channel.defaultLanguageId;
   const marketId = process.env.GEINS_MARKET_ID || channel.defaultMarketId;
-  const marketAlias = channel.markets.find((m) => m.id === marketId)?.alias;
-  const localeCode = channel.languages.find((l) => l.id === languageId)?.code;
-  if (!marketAlias) fail(`Market "${marketId}" is not on channel "${channelId}".`);
-  if (!localeCode) fail(`Language "${languageId}" is not on channel "${channelId}".`);
+  const market = channel.markets?.find((m) => m.id === marketId);
+  const marketAlias = market?.alias?.toLowerCase();
+  if (!marketAlias || !/^[a-z]{2}$/.test(marketAlias)) {
+    fail(`Market "${marketId}" has no valid short alias on channel "${channelId}".`);
+  }
+  // Allowed languages belong to the selected market, not the whole channel.
+  const languageId = process.env.GEINS_LANGUAGE_ID || market.defaultLanguageId;
+  const language = market.allowedLanguages?.find((l) => l.id === languageId);
+  const localeCode = shortLocaleCode(language?.code ?? language?.id);
+  if (!localeCode) fail(`Language "${languageId}" is not allowed in market "${marketId}".`);
   const prefix = `/${marketAlias}/${localeCode}`;
   const c = { channelId, languageId, marketId };
 
@@ -442,4 +466,10 @@ function selfcheck() {
   console.error(process.exitCode ? 'selfcheck: FAILURES above' : 'selfcheck: all assertions passed');
 }
 
-main().catch((e) => fail(e?.stack || String(e)));
+// Import-safe for regression tests; executable as a standalone CLI.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error(`[generate-redirects] ${e?.message || String(e)}`);
+    process.exitCode = 1;
+  });
+}
