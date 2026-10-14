@@ -1,3 +1,4 @@
+import { protectCartPrices } from '../../utils/price-response';
 import { CartGetSchema } from '../../schemas/api-input';
 import { getCart } from '../../services/cart';
 
@@ -16,7 +17,7 @@ export default defineEventHandler(async (event) => {
         throw createAppError(ErrorCode.NOT_FOUND, 'Cart not found');
       }
 
-      return cart;
+      return protectCartPrices(event, cart);
     },
     { operation: 'cart.get' },
   );
