@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { TenantConfig } from '#shared/types/tenant-config';
+import partialPayloadFixture from '../fixtures/store-settings/partial-payload.json';
+import { createDefaultTheme } from '../../server/utils/tenant-css';
 
 import {
   createTenant,
@@ -9,7 +12,14 @@ import {
 import {
   tenantConfigKey,
   tenantIdKey,
+  resolveTenant,
+  tenantRefreshStateKey,
+  TENANT_REMOTE_REFRESH_MS,
+  isTenantRefreshFresh,
+  hostnamesToInvalidate,
   DEFAULT_GEINS_SETTINGS,
+  mergeTenantPortalOverrides,
+  resolvePreviewTenant,
 } from '../../server/utils/tenant';
 
 // Use the REAL createAppError / ErrorCode so the ownership-check test below
@@ -647,5 +657,331 @@ describe('deleteTenant', () => {
     await deleteTenant('a.example.com');
 
     expect(mockClearSdkCache).toHaveBeenCalledWith('a-tenant');
+  });
+});
+
+// These assert the negative cache's actual state, not a call to
+// clearNegativeCache. The cache is a module-level Map inside
+// server/utils/tenant.ts, and invalidateTenantCaches clears it from inside
+// that same module — a spy on the export would never see the call, so a test
+// written that way passes whether or not the hostnames are cleared. Driving
+// resolveTenant before and after is the only way to observe it.
+describe('negative cache invalidation across aliases', () => {
+  const PRIMARY = 'primary.example.com';
+  const ALIAS = 'alias.example.com';
+
+  /** Puts `hostname` in the negative cache by resolving it while unknown. */
+  async function negativeCache(hostname: string) {
+    const miss = await resolveTenant(hostname);
+    expect(miss, `${hostname} should not resolve yet`).toBeNull();
+  }
+
+  beforeEach(() => {
+    // Every KV miss falls through to the merchant API; a 404 is what puts the
+    // hostname in the negative cache in the first place.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not found', { status: 404 })),
+    );
+  });
+
+  it('clears the negative cache for an alias when the tenant is created', async () => {
+    await negativeCache(ALIAS);
+
+    await createTenant({
+      hostname: PRIMARY,
+      tenantId: 'aliased',
+      config: {
+        isActive: true,
+        aliases: [ALIAS],
+        geinsSettings: GEINS_SETTINGS,
+      },
+    });
+
+    // Without the alias in the invalidation set this stays null for the rest
+    // of the negative-cache TTL, with the fresh config already in KV.
+    const resolved = await resolveTenant(ALIAS);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.tenantId).toBe('aliased');
+  });
+
+  it('clears the negative cache for an alias added by updateTenant', async () => {
+    await createTenant({
+      hostname: PRIMARY,
+      tenantId: 'aliased',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+    await negativeCache(ALIAS);
+
+    await updateTenant(PRIMARY, { aliases: [ALIAS] });
+
+    const resolved = await resolveTenant(ALIAS);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.tenantId).toBe('aliased');
+  });
+});
+
+describe('hostnamesToInvalidate', () => {
+  const config = {
+    hostname: 'primary.example.com',
+    aliases: ['alias-one.example.com', 'alias-two.example.com'],
+  } as TenantConfig;
+
+  it('unions the config hostnames with the one the caller named', () => {
+    expect([...hostnamesToInvalidate('primary.example.com', config)]).toEqual(
+      expect.arrayContaining([
+        'primary.example.com',
+        'alias-one.example.com',
+        'alias-two.example.com',
+      ]),
+    );
+  });
+
+  it('keeps a named hostname the config no longer claims', () => {
+    // The whole reason the named hostname is a separate argument. An alias
+    // being removed is the one holding a stale entry, and it is gone from the
+    // config by the time the write completes.
+    expect(hostnamesToInvalidate('removed.example.com', config)).toContain(
+      'removed.example.com',
+    );
+  });
+
+  it('falls back to the named hostname alone when there is no config', () => {
+    expect([...hostnamesToInvalidate('only.example.com', null)]).toEqual([
+      'only.example.com',
+    ]);
+  });
+});
+
+describe('write ordering', () => {
+  it('publishes hostname mappings before clearing the negative cache', async () => {
+    // Clearing first leaves a window: a request for the alias arriving before
+    // tenantIdKey(<alias>) is durable misses KV and writes the negative entry
+    // straight back, undoing the invalidation. invocationCallOrder is a global
+    // counter across all vi.fn()s, so it orders calls on different mocks.
+    const kv = mockUseStorage('kv') as unknown as {
+      setItem: { mock: { calls: unknown[][]; invocationCallOrder: number[] } };
+    };
+    const cache = mockUseStorage('cache') as unknown as {
+      removeItem: { mock: { invocationCallOrder: number[] } };
+    };
+
+    await createTenant({
+      hostname: 'ordered.example.com',
+      tenantId: 'ordered',
+      config: {
+        isActive: true,
+        aliases: ['ordered-alias.example.com'],
+        geinsSettings: GEINS_SETTINGS,
+      },
+    });
+
+    const mappingWrites = kv.setItem.mock.calls
+      .map((call, i) => ({
+        key: call[0] as string,
+        order: kv.setItem.mock.invocationCallOrder[i]!,
+      }))
+      .filter(({ key }) => key.startsWith('tenant:id:'));
+    const lastMappingWrite = Math.max(...mappingWrites.map((w) => w.order));
+    const firstInvalidation = Math.min(
+      ...cache.removeItem.mock.invocationCallOrder,
+    );
+
+    expect(mappingWrites.length).toBeGreaterThan(0);
+    expect(lastMappingWrite).toBeLessThan(firstInvalidation);
+  });
+});
+
+describe('Geins Store Settings freshness (missed Studio webhook)', () => {
+  const hostname = 'staging-odelco.example.com';
+  const tenantId = 'odelco';
+
+  function remotePayload() {
+    return {
+      ...partialPayloadFixture,
+      tenantId,
+      geinsSettings: {
+        ...partialPayloadFixture.geinsSettings,
+        defaultHostName: hostname,
+      },
+      appSettings: {
+        ...partialPayloadFixture.appSettings,
+        theme: {
+          ...partialPayloadFixture.appSettings.theme,
+          typography: {
+            ...partialPayloadFixture.appSettings.theme.typography,
+            fontFamily: 'Geist',
+          },
+        },
+      },
+    };
+  }
+
+  async function seedCachedInter(source: 'remote' | 'local' = 'remote') {
+    await createTenant({
+      hostname,
+      tenantId,
+      config: {
+        isActive: true,
+        geinsSettings: GEINS_SETTINGS,
+        theme: {
+          ...createDefaultTheme(tenantId),
+          typography: { fontFamily: 'Inter', headingFontFamily: 'Roboto Slab' },
+        },
+      },
+    });
+    kvStore.set(tenantRefreshStateKey(tenantId), {
+      source,
+      checkedAt: Date.now() - TENANT_REMOTE_REFRESH_MS - 1,
+    });
+  }
+
+  it('re-fetches an expired published theme and busts the /api/config cache', async () => {
+    await seedCachedInter();
+    cacheStore.set('nitro/handlers:_:tenantconfigodelco.json', { old: true });
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify(remotePayload()), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+
+    const result = await resolveTenant(hostname);
+
+    expect(result?.theme.typography?.fontFamily).toBe('Geist');
+    expect(result?.timezone).toBe('Europe/Stockholm');
+    expect(kvStore.get(tenantConfigKey(tenantId))).toMatchObject({
+      timezone: 'Europe/Stockholm',
+      theme: { typography: { fontFamily: 'Geist' } },
+    });
+    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(false);
+    expect(mockClearSdkCache).toHaveBeenCalledWith(tenantId);
+    expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
+      source: 'remote',
+    });
+
+    // Repeat requests within the freshness window should not hit Geins again.
+    await resolveTenant(hostname);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves last known good config on transient Geins transport failure', async () => {
+    await seedCachedInter();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+
+    const result = await resolveTenant(hostname);
+
+    expect(result?.theme.typography?.fontFamily).toBe('Inter');
+    expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
+      source: 'remote',
+    });
+  });
+
+  it('does not overwrite a locally administered tenant with Geins data', async () => {
+    await seedCachedInter('local');
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify(remotePayload()), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+
+    const result = await resolveTenant(hostname);
+
+    expect(result?.theme.typography?.fontFamily).toBe('Inter');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a previously remote tenant disappears from Geins', async () => {
+    await seedCachedInter();
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response('not found', { status: 404 }),
+    ));
+
+    expect(await resolveTenant(hostname)).toBeNull();
+  });
+
+  it('treats a legacy, unstamped cached tenant as requiring a provenance check', () => {
+    expect(isTenantRefreshFresh(null)).toBe(false);
+    expect(isTenantRefreshFresh({
+      checkedAt: Date.now() - TENANT_REMOTE_REFRESH_MS - 1,
+      source: 'remote',
+    })).toBe(false);
+    expect(isTenantRefreshFresh({
+      checkedAt: Date.now(),
+      source: 'remote',
+    })).toBe(true);
+    expect(isTenantRefreshFresh({
+      checkedAt: 0,
+      source: 'local',
+    })).toBe(true);
+  });
+});
+
+describe('approved Odelco operating timezone', () => {
+  it('uses Europe/Stockholm even when Geins omits timezone or previously sent UTC', () => {
+    const base = {
+      tenantId: 'odelco',
+      hostname: 'staging-odelco.hdng.ai',
+      aliases: ['odelco.litium.store'],
+      timezone: 'UTC',
+      theme: { typography: { fontFamily: 'Inter' } },
+      cms: {
+        menus: { header_main: { menuLocationId: 'main-desktop' } },
+      },
+    } as TenantConfig;
+
+    const actual = mergeTenantPortalOverrides(base, undefined);
+    expect(actual.timezone).toBe('Europe/Stockholm');
+    expect(actual.hostname).toBe(base.hostname);
+    expect(actual.aliases).toBe(base.aliases);
+    expect(actual.theme).toBe(base.theme);
+    expect(actual.cms).toBe(base.cms);
+    expect(base.timezone).toBe('UTC'); // No mutation of Geins data
+  });
+
+  it('preserves CMS per-key overrides while protecting the approved timezone', () => {
+    const base = {
+      tenantId: 'odelco',
+      hostname: 'staging-odelco.hdng.ai',
+      cms: {
+        slots: { frontpage_content: { family: 'Frontpage', areaName: 'Content' } },
+        menus: { header_main: { menuLocationId: 'main' } },
+      },
+    } as TenantConfig;
+    const result = mergeTenantPortalOverrides(base, {
+      cms: { menus: { header_main: { menuLocationId: 'main-desktop' } } },
+    });
+    expect(result.timezone).toBe('Europe/Stockholm');
+    expect(result.cms?.slots).toEqual(base.cms?.slots);
+    expect(result.cms?.menus?.header_main).toEqual({ menuLocationId: 'main-desktop' });
+  });
+
+  it('does not assign a timezone to any other tenant', () => {
+    const base = {
+      tenantId: 'another-merchant',
+      hostname: 'another.example',
+      timezone: undefined,
+    } as TenantConfig;
+    expect(mergeTenantPortalOverrides(base, null)).toBe(base);
+    expect(mergeTenantPortalOverrides({ ...base, timezone: 'UTC' }, undefined).timezone).toBe('UTC');
+  });
+
+  it('applies the same approved timezone to the Geins preview lookup without writing KV', async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify({
+        ...partialPayloadFixture,
+        tenantId: 'odelco',
+        geinsSettings: {
+          ...partialPayloadFixture.geinsSettings,
+          defaultHostName: 'staging-odelco.example.com',
+        },
+        appSettings: partialPayloadFixture.appSettings,
+      }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    try {
+      const result = await resolvePreviewTenant('staging-odelco.example.com');
+      expect(result?.timezone).toBe('Europe/Stockholm');
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

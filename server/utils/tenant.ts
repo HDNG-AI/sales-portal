@@ -202,7 +202,7 @@ export type TenantResolutionOutcome =
 export interface TenantResolutionTrace {
   hostname: string;
   /** `stale` is a hit whose config no longer claims the hostname; the lookup then falls through. */
-  kv: 'hit' | 'stale' | 'miss' | 'skipped';
+  kv: 'hit' | 'stale' | 'miss' | 'skipped' | 'expired' | 'stale-on-refresh-error';
   /** The merchant API call, when one was made: its URL and status or error. */
   api?: { url: string; result: string };
   outcome: TenantResolutionOutcome;
@@ -280,6 +280,31 @@ export function tenantOverrideKey(tenantId: string): string {
   return `${KV_STORAGE_KEYS.TENANT_OVERRIDE_PREFIX}${tenantId}`;
 }
 
+/** The Geins API remains authoritative; a missed publish webhook must not pin a tenant forever. */
+export const TENANT_REMOTE_REFRESH_MS = 60_000;
+
+export type TenantRefreshState = {
+  checkedAt: number;
+  source: 'remote' | 'local' | 'unknown';
+};
+
+export function tenantRefreshStateKey(tenantId: string): string {
+  return `${KV_STORAGE_KEYS.TENANT_REFRESH_STATE_PREFIX}${tenantId}`;
+}
+
+export function isTenantRefreshFresh(
+  state: TenantRefreshState | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!state) return false; // Existing KV entries require a one-time provenance check.
+  if (state.source === 'local') return true; // KV-only tenants have no Geins counterpart.
+  return (
+    Number.isFinite(state.checkedAt) &&
+    state.checkedAt <= now &&
+    now - state.checkedAt < TENANT_REMOTE_REFRESH_MS
+  );
+}
+
 /**
  * Persistent portal-owned configuration.
  *
@@ -294,26 +319,45 @@ export interface TenantPortalOverrides {
   cms?: TenantConfig['cms'];
 }
 
+/**
+ * Approved Sales Portal-only operating timezone until Geins Studio exposes
+ * an authoritative per-tenant setting. The Odelco value is an explicit
+ * merchant decision (2026-10-14), not an inferred market/locale default.
+ * Keep this allowlist narrow: no theme, routing, or other Studio-owned keys.
+ *
+ * Applied after each Geins load (including preview) and retained in the
+ * cached effective tenant config. Geins publish refresh cannot erase it.
+ */
+const APPROVED_TENANT_TIMEZONES: Readonly<Record<string, string>> = {
+  odelco: 'Europe/Stockholm',
+};
+
 export function mergeTenantPortalOverrides(
   base: TenantConfig,
   overrides: TenantPortalOverrides | null | undefined,
 ): TenantConfig {
-  if (!overrides?.cms) return base;
+  const timezone = APPROVED_TENANT_TIMEZONES[base.tenantId];
+  if (!overrides?.cms && !timezone) return base;
 
   return {
     ...base,
-    cms: {
-      ...base.cms,
-      ...overrides.cms,
-      slots: {
-        ...(base.cms?.slots ?? {}),
-        ...(overrides.cms.slots ?? {}),
-      },
-      menus: {
-        ...(base.cms?.menus ?? {}),
-        ...(overrides.cms.menus ?? {}),
-      },
-    },
+    ...(timezone ? { timezone } : {}),
+    ...(overrides?.cms
+      ? {
+          cms: {
+            ...base.cms,
+            ...overrides.cms,
+            slots: {
+              ...(base.cms?.slots ?? {}),
+              ...(overrides.cms.slots ?? {}),
+            },
+            menus: {
+              ...(base.cms?.menus ?? {}),
+              ...(overrides.cms.menus ?? {}),
+            },
+          },
+        }
+      : {}),
   };
 }
 
@@ -360,6 +404,25 @@ export async function invalidateTenantCaches(
 // ---------------------------------------------------------------------------
 // Hostname utilities
 // ---------------------------------------------------------------------------
+
+/**
+ * Every hostname whose negative-cache entry a write to this tenant has to
+ * clear: the ones the config claims, plus the one the caller named.
+ *
+ * The named hostname matters on its own because it is not always in the
+ * config. An alias just removed from the tenant, or a hostname being deleted,
+ * is precisely the one holding a stale entry — reading the set from the
+ * config alone silently stops clearing it. Aliases matter because
+ * resolveTenant consults the negative cache before KV, so an alias probed
+ * while the tenant was still unknown keeps answering 404 for the rest of its
+ * TTL with the fresh config already in storage.
+ */
+export function hostnamesToInvalidate(
+  named: string,
+  config?: TenantConfig | null,
+): Set<string> {
+  return new Set([named, ...(config ? collectAllHostnames(config) : [])]);
+}
 
 /**
  * Collects all hostnames associated with a tenant config.
@@ -598,6 +661,7 @@ export function buildTenantConfig(settings: StoreSettings): TenantConfig {
     timezone: merged.timezone,
     theme,
     branding,
+    layout: merged.layout,
     features,
     seo: merged.seo,
     contact: merged.contact,
@@ -887,7 +951,7 @@ export function parseStoreSettingsResilient(
   ]);
 
   const MAX_SUBSTITUTIONS = 12;
-  // ThemeColorsSchema declares ~40 color keys (6 core + 26 optional + 8
+  // ThemeColorsSchema declares 42 color keys (6 core + 28 optional + 8
   // surface). 64 gives comfortable headroom for "every declared color value
   // is garbage" plus a few unknown keys, so the hard guarantee that no
   // combination of color inputs blanks a tenant holds at full strength.
@@ -1253,6 +1317,8 @@ async function resolveTenantTraced(
 
   // Step 1: hostname → tenantId
   const tenantId = await storage.getItem<string>(tenantIdKey(hostname));
+  let fallbackConfig: TenantConfig | null = null;
+  let fallbackState: TenantRefreshState | null = null;
 
   if (tenantId) {
     const config = await getTenantById(tenantId);
@@ -1268,25 +1334,63 @@ async function resolveTenantTraced(
       // correct mapping. Costs one Set membership check per cache hit.
       const claimed = collectAllHostnames(config);
       if (claimed.has(hostname)) {
-        trace.kv = 'hit';
-        trace.outcome = 'resolved';
-        trace.tenantId = tenantId;
-        return config;
+        const refreshState = await storage.getItem<TenantRefreshState>(
+          tenantRefreshStateKey(tenantId),
+        );
+        if (isTenantRefreshFresh(refreshState)) {
+          trace.kv = 'hit';
+          trace.outcome = 'resolved';
+          trace.tenantId = tenantId;
+          return config;
+        }
+        // Retain last-known-good config during transient Geins outages. Do not
+        // overwrite a tenant's portal-owned CMS overrides on refresh.
+        fallbackConfig = config;
+        fallbackState = refreshState;
+        trace.kv = 'expired';
+      } else {
+        trace.kv = 'stale';
+        logger.warn(
+          `[tenant] Stale hostname mapping: "${hostname}" → "${tenantId}" ` +
+            `but that tenant no longer claims the hostname. Busting KV and ` +
+            `re-fetching.`,
+          { hostname, staleTenantId: tenantId },
+        );
+        await storage.removeItem(tenantIdKey(hostname));
       }
-      trace.kv = 'stale';
-      logger.warn(
-        `[tenant] Stale hostname mapping: "${hostname}" → "${tenantId}" ` +
-          `but that tenant no longer claims the hostname. Busting KV and ` +
-          `re-fetching.`,
-        { hostname, staleTenantId: tenantId },
-      );
-      await storage.removeItem(tenantIdKey(hostname));
     }
   }
 
   // Cache miss — fetch from API
   const newConfig = await fetchTenantConfig(hostname, event, trace);
   if (!newConfig) {
+    // Preserve explicitly configured KV-only tenants when Geins has no record.
+    // An existing remotely sourced tenant, however, must fail closed if Geins
+    // removes it (404) or returns invalid settings.
+    if (
+      fallbackConfig &&
+      tenantId &&
+      (trace.outcome === 'transport-failure' ||
+        (trace.outcome === 'unknown-tenant' &&
+          fallbackState?.source !== 'remote'))
+    ) {
+      const source =
+        trace.outcome === 'unknown-tenant'
+          ? 'local'
+          : (fallbackState?.source ?? 'unknown');
+      await storage.setItem(tenantRefreshStateKey(tenantId), {
+        checkedAt: Date.now(),
+        source,
+      } satisfies TenantRefreshState);
+      logger.warn(
+        `[tenant] Geins refresh unavailable for ${hostname}; retaining cached configuration`,
+        { reason: trace.outcome },
+      );
+      trace.kv = 'stale-on-refresh-error';
+      trace.outcome = 'resolved';
+      trace.tenantId = tenantId;
+      return fallbackConfig;
+    }
     if (trace.outcome !== 'transport-failure') {
       addToNegativeCache(hostname, trace.outcome);
     }
@@ -1302,6 +1406,19 @@ async function resolveTenantTraced(
 
     await storage.setItem(tenantConfigKey(tid), effectiveConfig);
     await writeHostnameMappings(storage, effectiveConfig);
+    await storage.setItem(tenantRefreshStateKey(tid), {
+      checkedAt: Date.now(),
+      source: 'remote',
+    } satisfies TenantRefreshState);
+    if (fallbackConfig) {
+      // The /api/config response has its own hour-long Nitro cache. Bust it,
+      // plus SDK/negative caches, after the fresh Geins configuration is durable.
+      await invalidateTenantCaches(
+        tid,
+        collectAllHostnames(effectiveConfig),
+        useStorage('cache'),
+      );
+    }
     trace.tenantId = tid;
     return effectiveConfig;
   }

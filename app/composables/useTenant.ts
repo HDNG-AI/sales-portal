@@ -56,6 +56,24 @@ export function useTenant() {
     return featureName in (tenant.value?.features ?? {});
   };
 
+  /**
+   * Whether analytics would actually run: the feature is on AND a provider id
+   * is configured. Both halves matter — the feature flag alone leaves a tenant
+   * asking visitors to consent to cookies that nothing sets, because
+   * plugins/tenant-analytics.ts returns early without an id.
+   *
+   * Derived here rather than repeated at each caller: the consent prompt and
+   * the plugin have to agree on this, and they did not.
+   */
+  const analyticsConfigured = computed(
+    () =>
+      hasFeature('analytics') &&
+      !!(
+        tenant.value?.seo?.googleAnalyticsId ||
+        tenant.value?.seo?.googleTagManagerId
+      ),
+  );
+
   const logoUrl = computed(() => {
     return tenant.value?.branding?.logoUrl ?? '/logo.svg';
   });
@@ -139,6 +157,7 @@ export function useTenant() {
     features,
     hasFeature,
     isFeatureConfigured,
+    analyticsConfigured,
     contact,
     suspense: () => asyncData,
   };

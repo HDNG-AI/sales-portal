@@ -98,8 +98,8 @@
  *   - the admin's schema carries two colour keys, `buttonText` and
  *     `buttonPurchaseText`, that `ThemeColorsSchema` does not name. `z.object()`
  *     strips unknown keys, so they never reach `tenant-css.ts` and they are
- *     correctly absent from the 40 below. The forty keys here are what the app
- *     can receive, not what a merchant can set.
+ *     correctly absent from the 42 below. The forty-two keys here are what the
+ *     app can receive, not what a merchant can set.
  *   - retired access rules never reach the app:
  *     `server/utils/tenant.ts:normalizeFeatureAccess` rewrites a feature
  *     carrying `{group}`, `{role}`, `{permission}` or `{accountType}` to
@@ -162,6 +162,8 @@ const AUTH_SHEET = 'tests/components/auth/AuthSheet.test.ts';
 const BRAND_LOGO_FALLBACK = 'tests/components/BrandLogoFallback.test.ts';
 const POWERED_BY = 'tests/components/PoweredBy.test.ts';
 const HEADER_TOPBAR = 'tests/components/layout/LayoutHeaderTopbar.test.ts';
+const VAT_DISPLAY = 'tests/unit/composables/useVatDisplay.test.ts';
+const VAT_SWITCHER = 'tests/components/shared/VatDisplaySwitcher.test.ts';
 const PORTAL_SHELL = 'tests/components/portal/PortalShell.test.ts';
 const PRICE_DISPLAY = 'tests/components/commerce/PriceDisplay.test.ts';
 const STOCK_BADGE = 'tests/components/commerce/StockBadge.test.ts';
@@ -1200,7 +1202,8 @@ export const CONFIG_COVERAGE_MAP = {
       },
       {
         spec: SERVER_TENANT,
-        title: 'leaves timezone unset on a config stored before the field existed',
+        title:
+          'leaves timezone unset on a config stored before the field existed',
         kind: 'carrier',
       },
       {
@@ -1239,7 +1242,8 @@ export const CONFIG_COVERAGE_MAP = {
       },
       {
         spec: PRODUCT_TABS,
-        title: 'renders a VideoURL parameter as an embedded video, not a spec row',
+        title:
+          'renders a VideoURL parameter as an embedded video, not a spec row',
         kind: 'consumer',
         drives: 'field',
       },
@@ -1406,7 +1410,8 @@ export const CONFIG_COVERAGE_MAP = {
           },
           {
             spec: THEME_UTIL,
-            title: 'preserves tenant-provided semantic success and warning colors',
+            title:
+              'preserves tenant-provided semantic success and warning colors',
             kind: 'carrier',
           },
           {
@@ -1831,6 +1836,106 @@ export const CONFIG_COVERAGE_MAP = {
 
   // --- Layout --------------------------------------------------------------
   layout: {
+    vatDisplay: {
+      ex: {
+        status: 'has-test',
+        test: {
+          spec: VAT_DISPLAY,
+          title:
+            'forces the tenant value when locked, ignoring a stored choice',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note: 'Odelco: every buyer sees ex-VAT and cannot change it.',
+      },
+      inc: {
+        status: 'has-test',
+        test: {
+          spec: VAT_DISPLAY,
+          title:
+            'shows inc-VAT before any choice when the tenant defaults to inc',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note:
+          'Only reachable because the cookie carries no default — with one, an ' +
+          'unset cookie looked like a deliberate ex-VAT choice and outranked ' +
+          'the tenant.',
+      },
+      absent: {
+        status: 'has-test',
+        test: {
+          spec: VAT_DISPLAY,
+          title: 'defaults to ex-VAT (showIncVat false) when no cookie is set',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note: 'The state every tenant predating this key is in.',
+      },
+    },
+    vatDisplayLocked: {
+      status: 'has-test',
+      test: {
+        spec: VAT_SWITCHER,
+        title: 'renders nothing when the tenant has locked the VAT display',
+        kind: 'consumer',
+        drives: 'field',
+      },
+      note:
+        'Independent of vatDisplay: a tenant can default to ex-VAT and still ' +
+        'allow switching. Referenced against the switcher because the control ' +
+        'disappearing is the visible half; the price half is covered by ' +
+        '"forces the tenant value when locked, ignoring a stored choice" and ' +
+        '"writes no cookie while locked" in ' +
+        'tests/unit/composables/useVatDisplay.test.ts.',
+    },
+    showCompanyName: {
+      status: 'has-test',
+      test: {
+        spec: HEADER_TOPBAR,
+        title: 'shows the company when the tenant asked for it',
+        kind: 'consumer',
+        drives: 'field',
+      },
+      note:
+        'Off for every tenant that has not set it, which is the state the ' +
+        'other two cases cover: "hides it when the tenant set the flag ' +
+        'false" and "hides it when the tenant never set the key". Removing ' +
+        'the flag check from the computed fails both.',
+    },
+    storefrontStyle: {
+      classic: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'keeps the classic layout and omits the price notice when storefrontStyle is classic',
+          kind: 'consumer',
+          drives: 'field',
+        },
+      },
+      editorial: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'enables the editorial layout and mounts the price notice when storefrontStyle is editorial',
+          kind: 'consumer',
+          drives: 'field',
+        },
+        note: 'Asserts the layout opt-in and price notice mount; responsive CSS and the branded footer require separate visual review.',
+      },
+      absent: {
+        status: 'has-test',
+        test: {
+          spec: 'tests/components/layout/StorefrontStyle.test.ts',
+          title:
+            'keeps the classic layout and omits the price notice when storefrontStyle is absent',
+          kind: 'consumer',
+          drives: 'field',
+        },
+      },
+    },
     headerNavVariant: {
       grey: {
         status: 'has-test',

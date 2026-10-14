@@ -1,3 +1,4 @@
+import { protectProductPrices } from '../../utils/price-response';
 import { z } from 'zod';
 import { getProductsByAliases } from '../../services/products';
 
@@ -42,7 +43,7 @@ export default defineEventHandler(async (event) => {
         { aliases, userToken: auth?.authToken },
         event,
       );
-      return { products };
+      return protectProductPrices(event, auth, { products });
     },
     { operation: 'products.by-aliases' },
   );

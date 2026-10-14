@@ -164,8 +164,9 @@ async function addToCart() {
     v-if="variant === 'grid'"
     class="bg-card flex h-full flex-col overflow-hidden rounded-md border"
     data-testid="product-card"
+    data-slot="product-card-grid"
   >
-    <div class="relative p-3">
+    <div class="relative p-3" data-slot="product-card-media">
       <div
         class="bg-muted group relative aspect-square w-full overflow-hidden rounded-md"
       >
@@ -220,7 +221,10 @@ async function addToCart() {
       </div>
     </div>
 
-    <div class="flex flex-1 flex-col gap-2 px-4 pb-4">
+    <div
+      class="flex flex-1 flex-col gap-2 px-4 pb-4"
+      data-slot="product-card-body"
+    >
       <div class="flex items-start justify-between gap-2">
         <p
           v-if="product?.articleNumber"
@@ -249,6 +253,14 @@ async function addToCart() {
           <Star class="size-4" :fill="isFavorited ? 'currentColor' : 'none'" />
         </Button>
       </div>
+
+      <p
+        v-if="isFullProduct(product) && product.brand?.name"
+        data-slot="product-card-brand"
+        class="text-muted-foreground hidden font-mono text-[10px] tracking-wide uppercase"
+      >
+        {{ product.brand.name }}
+      </p>
 
       <NuxtLink v-if="productUrl" :to="productUrl" class="hover:underline">
         <h3 class="line-clamp-2 text-base leading-tight font-medium">

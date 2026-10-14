@@ -72,3 +72,7 @@ infra/modules/*.json
 # Stryker mutation testing (sandbox and report output)
 .stryker-tmp
 reports/mutation/
+
+# Python operation checks
+__pycache__/
+*.py[cod]

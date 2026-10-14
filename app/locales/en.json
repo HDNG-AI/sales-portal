@@ -453,9 +453,12 @@
     "active_campaigns": "Active campaigns"
   },
   "cookies": {
-    "banner_text": "We use cookies to analyze site usage and improve your experience.",
     "accept": "Accept cookies",
-    "decline": "Decline"
+    "banner_text": "We'd like to set analytics cookies to see how this site is used — which pages people visit and where they get stuck — so we can fix what doesn't work. They're not needed to shop: signing in, your cart and your language settings work either way.",
+    "decline": "Decline",
+    "privacy_policy": "Read our privacy policy",
+    "settings": "Cookie settings",
+    "withdraw_note": "You can change your mind at any time — see Cookie settings at the bottom of any page."
   },
   "errors": {
     "section_failed": "This section could not be loaded.",
@@ -968,12 +971,13 @@
     "exit": "Exit"
   },
   "form": {
-    "submit": "Send",
+    "checkbox_checked": "Yes",
+    "country_placeholder": "Select country",
     "default_subject": "Website form submission",
     "fallback_email": "If nothing opens, email us at {recipient}",
     "field_required": "This field is required.",
     "invalid_email": "Please enter a valid email address.",
-    "country_placeholder": "Select country",
-    "checkbox_checked": "Yes"
+    "select_placeholder": "Select...",
+    "submit": "Send"
   }
 }

@@ -78,7 +78,7 @@ const COLOR_CSS_MAP: Record<keyof FullThemeColors, string> = {
   sidebarBorder: '--sidebar-border',
   sidebarRing: '--sidebar-ring',
   // Surface colors. Hex passes through verbatim; OKLCH passes through
-  // via the same path as the strict 32 colors above. When the tenant
+  // via the same path as the strict 34 colors above. When the tenant
   // value is empty the emitter substitutes a fallback chain (see
   // SURFACE_FALLBACKS below) so every surface var is always defined.
   topBarBackground: '--top-bar-background',

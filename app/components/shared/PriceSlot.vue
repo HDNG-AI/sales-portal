@@ -23,6 +23,13 @@ const props = withDefaults(
   {
     showDiscount: true,
     fromPrice: false,
+    // Vue casts an absent Boolean prop to `false`, so without this an omitted
+    // `showVat` arrived as `false` and was forwarded as an explicit choice.
+    // PriceDisplay honours an explicit `false` (`props.showVat ?? preference`),
+    // so every price rendered through this slot — the PDP and every product
+    // card — was pinned to ex-VAT and the topbar switcher did nothing.
+    // PriceDisplay carries the same `undefined` for the same reason.
+    showVat: undefined,
   },
 );
 
@@ -32,6 +39,8 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const { localePath } = useLocaleMarket();
+// Fail closed even when a parent still holds a price from an old session.
+const { showPrice, canUnlockByAuth } = usePriceVisibility();
 
 const returnTarget = computed(() => props.returnTo || route.fullPath);
 const loginTarget = computed(() => ({
@@ -52,7 +61,7 @@ const loginTarget = computed(() => ({
     data-testid="price-slot"
   >
     <PriceDisplay
-      v-if="mode === 'contract' || mode === 'list'"
+      v-if="(mode === 'contract' || mode === 'list') && showPrice"
       :price="price"
       :show-vat="showVat"
       :show-discount="showDiscount"
@@ -63,7 +72,7 @@ const loginTarget = computed(() => ({
     />
 
     <NuxtLink
-      v-else-if="mode === 'hidden'"
+      v-else-if="mode === 'hidden' || canUnlockByAuth"
       :to="loginTarget"
       class="text-primary inline-flex items-center font-semibold hover:underline"
       data-testid="price-login"
@@ -72,7 +81,7 @@ const loginTarget = computed(() => ({
     </NuxtLink>
 
     <button
-      v-else
+      v-else-if="mode === 'quote'"
       type="button"
       class="text-primary inline-flex items-center font-semibold hover:underline"
       data-testid="price-quote"

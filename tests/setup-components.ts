@@ -244,6 +244,17 @@ vi.mock('../app/composables/useTenant', () => {
       imageBaseUrl: computed(() => 'https://monitor.commerce.services'),
       features: computed(() => tenant.value?.features),
       contact: computed(() => null),
+      // Derived like the real composable: component specs drive this by
+      // writing tenant.features and tenant.seo, so a constant here would make
+      // the consent prompt's gate untestable.
+      analyticsConfigured: computed(
+        () =>
+          tenant.value?.features?.analytics?.enabled === true &&
+          !!(
+            tenant.value?.seo?.googleAnalyticsId ||
+            tenant.value?.seo?.googleTagManagerId
+          ),
+      ),
       hasFeature: (name: string) => {
         const f = tenant.value?.features?.[name];
         return f ? f.enabled : false;

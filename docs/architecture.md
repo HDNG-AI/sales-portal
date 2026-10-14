@@ -392,17 +392,17 @@ Each tenant defines a theme validated by a Zod schema (see [ADR-007](adr/007-ten
 interface ThemeConfig {
   name: string; // Theme identifier
   displayName?: string | null; // Human-readable name
-  colors: ThemeColors; // 6 required + 34 optional OKLCH colors
+  colors: ThemeColors; // 6 required + 36 optional OKLCH colors
   radius?: string | null; // Base border radius (e.g., "0.625rem")
   typography?: ThemeTypography | null;
 }
 ```
 
-The 6 required colors are: `primary`, `primaryForeground`, `secondary`, `secondaryForeground`, `background`, `foreground`. The remaining 34 optional colors are 26 derived palette colors (card, muted, accent, destructive, border, input, ring, chart1-5, sidebar\*, etc.), derived server-side from the 6 core colors when null/omitted, plus 8 surface keys (top bar, footer, nav bar, site, button backgrounds and top-bar/footer text).
+The 6 required colors are: `primary`, `primaryForeground`, `secondary`, `secondaryForeground`, `background`, `foreground`. The remaining 36 optional colors are 28 derived palette colors (card, muted, accent, destructive, border, input, ring, chart1-5, sidebar\*, etc.), derived server-side from the 6 core colors when null/omitted, plus 8 surface keys (top bar, footer, nav bar, site, button backgrounds and top-bar/footer text).
 
 ### Color Derivation
 
-The `deriveThemeColors()` function in `server/utils/theme.ts` fills in all 26 derived palette colors from the 6 core colors using OKLCH color space manipulation. The 8 surface keys are resolved separately by the CSS emitter via `SURFACE_FALLBACKS`, so every surface variable is always defined. API-provided non-null values are preserved.
+The `deriveThemeColors()` function in `server/utils/theme.ts` fills in all 28 derived palette colors from the 6 core colors using OKLCH color space manipulation. The 8 surface keys are resolved separately by the CSS emitter via `SURFACE_FALLBACKS`, so every surface variable is always defined. API-provided non-null values are preserved.
 
 ### Dynamic CSS Generation
 
@@ -410,11 +410,11 @@ The `generateTenantCss()` function in `server/utils/tenant-css.ts` creates CSS f
 
 ```typescript
 // Input: 6 core OKLCH colors
-// Output: CSS with all 40 color variables + base radius
+// Output: CSS with all 42 color variables + base radius
 [data-theme='acme'] {
   --primary: oklch(0.47 0.13 195.71);
   --primary-foreground: oklch(0.985 0 0);
-  /* ... all 40 colors */
+  /* ... all 42 colors */
   --radius: 0.625rem;
 }
 // Radius variants (sm/md/lg/xl) are defined in tailwind.css @theme inline

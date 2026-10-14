@@ -60,6 +60,7 @@ function linkAttrs(item: MenuItemType): Record<string, string | undefined> {
 <template>
   <nav
     v-if="visibleItems.length"
+    data-slot="header-nav"
     class="bg-nav-bar-background relative hidden h-12 items-center border-b lg:flex"
     :aria-label="$t('layout.main_navigation')"
   >

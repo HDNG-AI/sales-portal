@@ -1,18 +1,23 @@
 import type { DetailProduct } from '#shared/types/commerce';
+import { buildGeinsRawUrl } from '#shared/utils/image';
+import { firstMetaDescription } from '#shared/utils/meta-description';
 
 /**
  * The head every product page publishes: canonical and hreflang, the meta
  * description and og tags, and the Schema.org Product + BreadcrumbList.
  *
  * One implementation for every product type, because a second one drifts: the
- * canonical is built from the URL alias rather than the product's own, which is
- * the kind of detail a copy loses. `offers` is the one part that is not
+ * canonical is the address the page answers at, category segments included,
+ * which is the kind of detail a copy loses. `offers` is the one part that is not
  * universal — a configured product has no single price until it is committed,
  * so the configurator page publishes the product without one.
  */
 export interface ProductSeoOptions {
   product: () => DetailProduct;
-  /** Locale-free page path, e.g. `/p/<alias>` built from the URL alias. */
+  /**
+   * Locale-free path the page answers at, e.g. `/p/<category>/<alias>`. A bare
+   * `/p/<alias>` answers 301, so it cannot be the canonical.
+   */
   path: () => string;
   breadcrumbs: () => { label: string; href?: string }[];
   localeAlternates: MaybeRefOrGetter<Record<string, string>>;
@@ -30,19 +35,31 @@ export function useProductSeo(options: ProductSeoOptions): void {
   const { product, path, breadcrumbs, localeAlternates, sku, withOffers } =
     options;
 
-  const plainDescription = computed(
-    () =>
-      product()
-        .texts?.text1?.replace(/<[^>]*>/g, '')
-        .slice(0, 160) ?? '',
+  const { imageBaseUrl } = useTenant();
+
+  // The short text when there is one, otherwise the long one: most catalogues
+  // fill only one of them, and a missing description tag is the worse outcome.
+  const plainDescription = computed(() =>
+    firstMetaDescription(product().texts?.text1, product().texts?.text2),
   );
 
-  const primaryImageUrl = computed(
-    () =>
-      product().productImages?.find((i) => i.isPrimary)?.url ??
-      product().productImages?.[0]?.url ??
-      '',
+  // The product queries return images by `fileName`; `url` is only present
+  // when a query asks for it. Search engines need an absolute address either way.
+  function imageUrl(image: { url?: string | null; fileName?: string | null }) {
+    if (image.url) return image.url;
+    if (!image.fileName || !imageBaseUrl.value) return '';
+    return buildGeinsRawUrl(imageBaseUrl.value, 'product', image.fileName);
+  }
+
+  const imageUrls = computed(() =>
+    (product().productImages ?? []).map(imageUrl).filter(Boolean),
   );
+
+  const primaryImageUrl = computed(() => {
+    const images = product().productImages ?? [];
+    const primary = images.find((i) => i.isPrimary) ?? images[0];
+    return primary ? imageUrl(primary) : '';
+  });
 
   const { seoLinks } = useSeoLinks(path, localeAlternates);
 
@@ -62,10 +79,7 @@ export function useProductSeo(options: ProductSeoOptions): void {
     defineProduct({
       name: () => product().name ?? '',
       description: () => plainDescription.value,
-      image: () =>
-        product()
-          .productImages?.map((img) => img.url)
-          .filter(Boolean) ?? [],
+      image: () => imageUrls.value,
       brand: () =>
         product().brand?.name
           ? { '@type': 'Brand', name: product().brand!.name }

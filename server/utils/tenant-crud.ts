@@ -11,11 +11,13 @@ import {
   tenantIdKey,
   tenantConfigKey,
   collectAllHostnames,
+  hostnamesToInvalidate,
   writeHostnameMappings,
   resolveTenant,
   DEFAULT_GEINS_SETTINGS,
   invalidateTenantCaches,
   tenantOverrideKey,
+  tenantRefreshStateKey,
   type TenantPortalOverrides,
 } from './tenant';
 import { withoutUndefined } from './object';
@@ -176,21 +178,28 @@ export async function createTenant(
       hostname: existingConfig.hostname,
     });
     await storage.setItem(tenantConfigKey(finalTenantId), updatedConfig);
+    await storage.setItem(tenantRefreshStateKey(finalTenantId), {
+      checkedAt: Date.now(),
+      source: 'local',
+    });
     await persistCmsOverride(storage, finalTenantId, partialConfig.cms);
-    // Independent writes to unrelated storage — hostname mappings live in
-    // `kv`, cache invalidation touches the `cache` namespace/in-memory
-    // maps — neither depends on the other completing first.
-    await Promise.all([
-      writeHostnameMappings(storage, updatedConfig),
-      invalidateTenantCaches(finalTenantId, hostname, cacheStorage),
-    ]);
+    // Sequenced, not Promise.all: clearing the negative cache before
+    // tenantIdKey(<alias>) is durable leaves a window where a request for
+    // that alias still misses KV and writes the negative entry straight
+    // back, undoing the invalidation that just ran.
+    await writeHostnameMappings(storage, updatedConfig);
+    await invalidateTenantCaches(
+      finalTenantId,
+      hostnamesToInvalidate(hostname, updatedConfig),
+      cacheStorage,
+    );
     return updatedConfig;
   }
 
   // theme/css/themeHash are placeholders here — mergeTenantConfig below is
   // the only place that actually derives them (mergeThemes(baseConfig.theme,
   // partialConfig?.theme) followed by buildDerivedTheme), so deriving them
-  // again here would just repeat the same 32-color computation, CSS
+  // again here would just repeat the same 42-color computation, CSS
   // generation, and hash for no reason.
   const baseConfig: TenantConfig = {
     ...identity,
@@ -213,14 +222,20 @@ export async function createTenant(
   const finalConfig = mergeTenantConfig(baseConfig, partialConfig, identity);
 
   await storage.setItem(tenantConfigKey(finalTenantId), finalConfig);
+  await storage.setItem(tenantRefreshStateKey(finalTenantId), {
+    checkedAt: Date.now(),
+    source: 'local',
+  });
   await persistCmsOverride(storage, finalTenantId, partialConfig?.cms);
-  await Promise.all([
-    writeHostnameMappings(storage, finalConfig),
-    // Clears any negative-cache entry from a lookup that happened before
-    // this hostname was onboarded, so it resolves immediately rather than
-    // waiting out the 5-minute TTL.
-    invalidateTenantCaches(finalTenantId, hostname, cacheStorage),
-  ]);
+  await writeHostnameMappings(storage, finalConfig);
+  // Clears any negative-cache entry from a lookup that happened before this
+  // hostname was onboarded, so it resolves immediately rather than waiting
+  // out the 5-minute TTL. After the mappings, never beside them — see above.
+  await invalidateTenantCaches(
+    finalTenantId,
+    hostnamesToInvalidate(hostname, finalConfig),
+    cacheStorage,
+  );
   return finalConfig;
 }
 
@@ -246,11 +261,21 @@ export async function updateTenant(
   });
 
   await storage.setItem(tenantConfigKey(tid), updatedConfig);
+  await storage.setItem(tenantRefreshStateKey(tid), {
+    checkedAt: Date.now(),
+    source: 'local',
+  });
   await persistCmsOverride(storage, tid, updates.cms);
-  await Promise.all([
-    writeHostnameMappings(storage, updatedConfig),
-    invalidateTenantCaches(tid, existing.hostname, useStorage('cache')),
-  ]);
+  await writeHostnameMappings(storage, updatedConfig);
+  await invalidateTenantCaches(
+    tid,
+    // The hostname the caller named, not existing.hostname: updatedConfig
+    // already carries the canonical one, so passing it again added nothing
+    // while dropping the alias a request may have arrived through — which is
+    // precisely the entry that survives when that alias is being removed.
+    hostnamesToInvalidate(hostname, updatedConfig),
+    useStorage('cache'),
+  );
   return updatedConfig;
 }
 
@@ -277,8 +302,13 @@ export async function deleteTenant(hostname: string): Promise<boolean> {
 
     await Promise.all([
       storage.removeItem(tenantConfigKey(tid)),
+      storage.removeItem(tenantRefreshStateKey(tid)),
       storage.removeItem(tenantOverrideKey(tid)),
-      invalidateTenantCaches(tid, hostname, useStorage('cache')),
+      invalidateTenantCaches(
+        tid,
+        hostnamesToInvalidate(hostname, config),
+        useStorage('cache'),
+      ),
     ]);
     return true;
   } catch {

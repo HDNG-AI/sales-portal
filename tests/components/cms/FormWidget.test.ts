@@ -116,6 +116,59 @@ describe('FormWidget', () => {
     expect(emailInput.attributes('type')).toBe('email');
   });
 
+  // The placeholder used to be the country prompt for every select, so an
+  // "Ärende" or "Typ av ärende" dropdown invited the buyer to pick a country.
+  it('prompts with the neutral placeholder when the select brings its own options', () => {
+    const wrapper = mountWidget({
+      fields: [
+        {
+          label: 'Typ av ärende',
+          name: 'arendetyp',
+          required: true,
+          type: 'select',
+          options: [{ value: 'teknisk', label: 'Teknisk fråga' }],
+        },
+      ],
+    });
+
+    const trigger = wrapper.find('[data-testid="form-field-arendetyp"]');
+    expect(trigger.text()).toContain('form.select_placeholder');
+    expect(trigger.text()).not.toContain('form.country_placeholder');
+  });
+
+  it('keeps the country prompt when the select falls back to the country list', () => {
+    // No options of its own, so selectOptionsFor serves countries — and the
+    // country prompt is the honest one for exactly that case.
+    const wrapper = mountWidget({
+      fields: [
+        { label: 'Country', name: 'country', required: true, type: 'select' },
+      ],
+    });
+
+    expect(wrapper.find('[data-testid="form-field-country"]').text()).toContain(
+      'form.country_placeholder',
+    );
+  });
+
+  it('lets the CMS override the placeholder per field', () => {
+    const wrapper = mountWidget({
+      fields: [
+        {
+          label: 'Typ av ärende',
+          name: 'arendetyp',
+          required: true,
+          type: 'select',
+          placeholder: 'Välj ärendetyp',
+          options: [{ value: 'teknisk', label: 'Teknisk fråga' }],
+        },
+      ],
+    });
+
+    expect(
+      wrapper.find('[data-testid="form-field-arendetyp"]').text(),
+    ).toContain('Välj ärendetyp');
+  });
+
   // B3: select branch is exercised — deleting the v-if="field.type==='select'" block would fail this.
   it('renders a SelectTrigger (not a bare input) for type select', () => {
     const wrapper = mountWidget();

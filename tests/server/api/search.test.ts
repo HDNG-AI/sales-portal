@@ -88,6 +88,27 @@ describe('GET /api/search/products', () => {
     expect(result).toEqual({ products: [], count: 0 });
   });
 
+  it('strips prices from public Odelco search results', async () => {
+    vi.mocked(getQuery).mockReturnValue({ query: 'battery' });
+    mockGraphqlQuery.mockResolvedValue({
+      searchProducts: {
+        products: [{ productId: 8, name: 'Battery', unitPrice: { sellingPriceExVat: 300 } }],
+        count: 1,
+      },
+    });
+    const event = {
+      context: { tenant: { config: {
+        features: { priceVisibility: { enabled: true, access: 'authenticated' } },
+      } } },
+    } as unknown as import('h3').H3Event;
+    const response = (await handler(event)) as {
+      products: Array<Record<string, unknown>>; count: number;
+    };
+    expect(response.products).toHaveLength(1);
+    expect(response.products[0]).toMatchObject({ name: 'Battery' });
+    expect(response.products[0]).not.toHaveProperty('unitPrice');
+  });
+
   it('includes skip and take in SDK query when provided', async () => {
     vi.mocked(getQuery).mockReturnValue({
       query: 'jackets',

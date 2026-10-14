@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import './transitions.css';
 @import './print.css';
+@import './storefront-editorial.css';
 
 /* App is light-only (no .dark class is ever applied). Tailwind v4 defaults the
    dark: variant to @media (prefers-color-scheme: dark), which makes shadcn base

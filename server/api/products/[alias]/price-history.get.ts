@@ -1,3 +1,4 @@
+import { protectProductPrices } from '../../../utils/price-response';
 import { ProductAliasSchema } from '../../../schemas/api-input';
 import { getPriceHistory } from '../../../services/products';
 
@@ -8,10 +9,11 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      return getPriceHistory(
+      const history = await getPriceHistory(
         { alias: validatedAlias, userToken: auth?.authToken },
         event,
       );
+      return protectProductPrices(event, auth, history);
     },
     { operation: 'products.priceHistory.get' },
   );

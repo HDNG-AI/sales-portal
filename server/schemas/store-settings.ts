@@ -151,6 +151,17 @@ export const TimezoneSchema = z.string().refine(
   },
 );
 
+export const LayoutConfigSchema = z
+  .object({
+    headerNavVariant: z.enum(['grey', 'white']).nullable().optional(),
+    storefrontStyle: z.enum(['classic', 'editorial']).nullable().optional(),
+    showCompanyName: z.boolean().nullable().optional(),
+    vatDisplay: z.enum(['ex', 'inc']).nullable().optional(),
+    vatDisplayLocked: z.boolean().nullable().optional(),
+  })
+  .nullable()
+  .optional();
+
 export const BrandingConfigSchema = z.object({
   name: z.string(),
   watermark: z.enum(['full', 'minimal', 'none']),
@@ -335,6 +346,7 @@ export const StoreSettingsSchema = z.object({
   timezone: TimezoneSchema.optional(),
   theme: ThemeConfigSchema,
   branding: BrandingConfigSchema,
+  layout: LayoutConfigSchema,
   features: z.record(z.string(), FeatureConfigInputSchema).default({}),
   seo: SeoConfigSchema.nullable().optional(),
   contact: ContactConfigSchema.nullable().optional(),

@@ -156,7 +156,7 @@ const lowestPriceFormatted = computed(() => {
     <button
       v-else-if="!showPrice && canUnlockByAuth"
       type="button"
-      class="text-primary inline-flex min-h-6 items-center text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      class="text-primary focus-visible:ring-ring inline-flex min-h-6 items-center text-sm font-semibold hover:underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       data-testid="login-for-price"
       @click="openLoginForPrice"
     >

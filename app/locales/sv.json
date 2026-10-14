@@ -453,9 +453,12 @@
     "active_campaigns": "Aktiva kampanjer"
   },
   "cookies": {
-    "banner_text": "Vi använder cookies för att analysera webbplatsens användning och förbättra din upplevelse.",
     "accept": "Acceptera cookies",
-    "decline": "Avvisa"
+    "banner_text": "Vi vill gärna använda analyscookies för att se hur webbplatsen används — vilka sidor besökarna tittar på och var de fastnar — så att vi kan åtgärda det som inte fungerar. De behövs inte för att handla: inloggning, varukorg och språkval fungerar ändå.",
+    "decline": "Avvisa",
+    "privacy_policy": "Läs vår integritetspolicy",
+    "settings": "Cookie-inställningar",
+    "withdraw_note": "Du kan ändra dig när som helst — se Cookie-inställningar längst ner på sidan."
   },
   "errors": {
     "section_failed": "Det gick inte att läsa in det här avsnittet.",
@@ -968,12 +971,13 @@
     "exit": "Avsluta"
   },
   "form": {
-    "submit": "Skicka",
+    "checkbox_checked": "Ja",
+    "country_placeholder": "Välj land",
     "default_subject": "Formulärinlämning",
     "fallback_email": "Om inget öppnas, maila oss på {recipient}",
     "field_required": "Detta fält är obligatoriskt.",
     "invalid_email": "Ange en giltig e-postadress.",
-    "country_placeholder": "Välj land",
-    "checkbox_checked": "Ja"
+    "select_placeholder": "Välj...",
+    "submit": "Skicka"
   }
 }

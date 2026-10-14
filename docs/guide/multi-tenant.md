@@ -340,3 +340,25 @@ curl -X POST "https://<host>/api/admin/tenants" \
 - [Theming System](/guide/theming) — How to customize tenant appearance
 - [API Reference](/guide/api-reference) — Tenant-related API endpoints
 - [Architecture Overview](/architecture) — Full system architecture
+
+
+## Approved Odelco operating timezone (2026-10-14)
+
+Odelco explicitly selected `Europe/Stockholm` for record timestamps (orders,
+offers/invoices). This is a **tenant-specific, code-owned policy** in
+`server/utils/tenant.ts` (`APPROVED_TENANT_TIMEZONES`), not a global
+market-based timezone default. Geins Studio remains the source of truth for
+its themes, typography, branding, channel hostnames and aliases.
+
+The effective Odelco timezone is reapplied after every published Geins
+StoreSettings refresh and in StoreSettings preview. Unlike temporary
+`tenant:config:odelco` cache content, it cannot disappear when the Geins
+webhook invalidates the cache or the 60-second resilience refresh runs.
+Other tenants keep their explicitly configured zone or remain unset.
+
+**Release verification:** after an approved `odelco-staging` deployment,
+check `/api/config` and `/api/config?preview=1` for
+`timezone: "Europe/Stockholm"`. Do not change the live Geins account,
+`hostname`, DNS or CMS settings to achieve this. Editing the approved
+operating timezone later requires an intentional configuration-policy review.
+See sales-portal issue #44 and ADR-024.

@@ -9,7 +9,7 @@ import {
 import {
   tenantIdKey,
   tenantConfigKey,
-  collectAllHostnames,
+  hostnamesToInvalidate,
   clearNegativeCache,
   type TenantCacheStorage,
 } from './tenant';
@@ -165,10 +165,7 @@ export async function processConfigRefresh(
   // from the tenant, KV can still map it while the stored config no longer
   // claims it. That hostname is precisely the one whose mapping and negative
   // entry need clearing, so it is included unconditionally.
-  const hostnames = new Set([
-    hostname,
-    ...(config ? collectAllHostnames(config) : []),
-  ]);
+  const hostnames = hostnamesToInvalidate(hostname, config);
   await Promise.all(
     [...hostnames].map((h) => kvStorage.removeItem(tenantIdKey(h))),
   );

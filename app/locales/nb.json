@@ -453,9 +453,12 @@
     "active_campaigns": "Aktive kampanjer"
   },
   "cookies": {
-    "banner_text": "Vi bruker informasjonskapsler for å analysere bruken av nettstedet og forbedre opplevelsen din.",
     "accept": "Godta informasjonskapsler",
-    "decline": "Avslå"
+    "banner_text": "Vi vil gjerne bruke analysekapsler for å se hvordan nettstedet brukes — hvilke sider folk besøker og hvor de stopper opp — slik at vi kan rette det som ikke virker. De trengs ikke for å handle: innlogging, handlekurv og språkvalg fungerer uansett.",
+    "decline": "Avslå",
+    "privacy_policy": "Les personvernerklæringen vår",
+    "settings": "Innstillinger for informasjonskapsler",
+    "withdraw_note": "Du kan ombestemme deg når som helst — se Innstillinger for informasjonskapsler nederst på siden."
   },
   "errors": {
     "section_failed": "Denne delen kunne ikke lastes.",
@@ -968,12 +971,13 @@
     "exit": "Avslutt"
   },
   "form": {
-    "submit": "Send",
+    "checkbox_checked": "Ja",
+    "country_placeholder": "Velg land",
     "default_subject": "Skjemainnsending fra nettstedet",
     "fallback_email": "Hvis ingenting åpnes, send oss e-post på {recipient}",
     "field_required": "Dette feltet er obligatorisk.",
     "invalid_email": "Oppgi en gyldig e-postadresse.",
-    "country_placeholder": "Velg land",
-    "checkbox_checked": "Ja"
+    "select_placeholder": "Velg...",
+    "submit": "Send"
   }
 }

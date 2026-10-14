@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { shallowMountComponent } from '../../utils/component';
 import LayoutHeaderTopbar from '../../../app/components/layout/header/LayoutHeaderTopbar.vue';
 
@@ -21,11 +21,54 @@ const enabledFeatures = new Set<string>([
   'applyForAccount',
 ]);
 
+// Drives tenant.layout.showCompanyName per test. `undefined` is the absent
+// case — a tenant that never set the key at all.
+const showCompanyNameRef = ref<boolean | undefined>(undefined);
+
 vi.mock('../../../app/composables/useTenant', () => ({
   useTenant: () => ({
     hasFeature: (name: string) => enabledFeatures.has(name),
+    tenant: computed(() => ({
+      layout: { showCompanyName: showCompanyNameRef.value },
+    })),
   }),
 }));
+
+// The topbar asks for the buyer's company only when the tenant opted in, so
+// the stub records whether it was called at all — a tenant with the flag off
+// must not pay for the request.
+// Hoisted: vi.mock is lifted above ordinary consts, so the factory below can
+// only close over values created this way.
+const { companyNameRef, companyData, executeSpy, useFetchMock } = vi.hoisted(
+  () => {
+    const name = { value: 'Odelco AB' as string | null };
+    // Starts empty and fills only when execute() runs, which is what
+    // `immediate: false` means. A mock that pre-populated `data` would render
+    // the chip whether or not the component ever asked for it, so removing
+    // the fetch would go unnoticed.
+    const data = {
+      value: null as { company: { name: string | null } } | null,
+    };
+    const spy = vi.fn(() => {
+      data.value = { company: { name: name.value } };
+    });
+    return {
+      companyNameRef: name,
+      companyData: data,
+      executeSpy: spy,
+      useFetchMock: () => ({ data, execute: spy }),
+    };
+  },
+);
+
+// Mocked at the module Nuxt auto-imports resolve to, not only as a global:
+// the component's own `useFetch` call goes through the module.
+vi.mock('#app/composables/fetch', () => ({
+  useFetch: useFetchMock,
+  $fetch: vi.fn(),
+}));
+
+vi.stubGlobal('useFetch', useFetchMock);
 
 // Controllable refs driven per-test via the helper below
 const contactToRef = ref<string | null>('/se/sv/kontakt');
@@ -52,6 +95,69 @@ describe('LayoutHeaderTopbar', () => {
     contactResolvedRef.value = true;
     applyToRef.value = '/se/sv/ansok-om-konto';
     applyResolvedRef.value = true;
+    showCompanyNameRef.value = undefined;
+    companyNameRef.value = 'Odelco AB';
+    companyData.value = null;
+    executeSpy.mockClear();
+  });
+
+  describe('company name', () => {
+    const COMPANY = '[data-testid="topbar-company-name"]';
+
+    it('shows the company when the tenant asked for it', () => {
+      authStoreState.isAuthenticated = true;
+      showCompanyNameRef.value = true;
+
+      const wrapper = shallowMountComponent(LayoutHeaderTopbar);
+
+      // The request has to actually be made: the name is not there to render
+      // until the deferred fetch runs.
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      expect(wrapper.find(COMPANY).exists()).toBe(true);
+      expect(wrapper.find(COMPANY).text()).toContain('Odelco AB');
+    });
+
+    it('hides it when the tenant set the flag false', () => {
+      authStoreState.isAuthenticated = true;
+      showCompanyNameRef.value = false;
+
+      expect(
+        shallowMountComponent(LayoutHeaderTopbar).find(COMPANY).exists(),
+      ).toBe(false);
+    });
+
+    it('hides it when the tenant never set the key', () => {
+      // The default. Every tenant that predates this flag lands here, so it
+      // has to be the quiet one.
+      authStoreState.isAuthenticated = true;
+      showCompanyNameRef.value = undefined;
+
+      expect(
+        shallowMountComponent(LayoutHeaderTopbar).find(COMPANY).exists(),
+      ).toBe(false);
+    });
+
+    it('does not fetch the company for an anonymous visitor', () => {
+      // /api/portal/company requires auth, so asking before login is a
+      // guaranteed 401 on every page view.
+      authStoreState.isAuthenticated = false;
+      showCompanyNameRef.value = true;
+
+      shallowMountComponent(LayoutHeaderTopbar);
+
+      expect(executeSpy).not.toHaveBeenCalled();
+    });
+
+    it('hides the block when the buyer has no company on file', () => {
+      // Normal for a private customer; an empty chip would be worse than none.
+      authStoreState.isAuthenticated = true;
+      showCompanyNameRef.value = true;
+      companyNameRef.value = null;
+
+      expect(
+        shallowMountComponent(LayoutHeaderTopbar).find(COMPANY).exists(),
+      ).toBe(false);
+    });
   });
 
   it('does not render anonymous login or account-application actions', () => {
@@ -121,6 +227,8 @@ describe('LayoutHeaderTopbar', () => {
     applyToRef.value = '/se/sv/ansok-om-konto';
     applyResolvedRef.value = true;
     const wrapper = shallowMountComponent(LayoutHeaderTopbar);
-    expect(wrapper.find('a[href="/se/sv/ansok-om-konto"]').exists()).toBe(false);
+    expect(wrapper.find('a[href="/se/sv/ansok-om-konto"]').exists()).toBe(
+      false,
+    );
   });
 });

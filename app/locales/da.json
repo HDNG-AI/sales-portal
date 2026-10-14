@@ -453,9 +453,12 @@
     "active_campaigns": "Aktive kampagner"
   },
   "cookies": {
-    "banner_text": "Vi bruger cookies til at analysere brugen af webstedet og forbedre din oplevelse.",
     "accept": "Accepter cookies",
-    "decline": "Afvis"
+    "banner_text": "Vi vil gerne bruge analysecookies for at se, hvordan siden bruges — hvilke sider folk besøger, og hvor de går i stå — så vi kan rette det, der ikke virker. De er ikke nødvendige for at handle: login, kurv og sprogvalg fungerer alligevel.",
+    "decline": "Afvis",
+    "privacy_policy": "Læs vores privatlivspolitik",
+    "settings": "Cookieindstillinger",
+    "withdraw_note": "Du kan altid ombestemme dig — se Cookieindstillinger nederst på siden."
   },
   "errors": {
     "section_failed": "Dette afsnit kunne ikke indlæses.",
@@ -968,12 +971,13 @@
     "exit": "Afslut"
   },
   "form": {
-    "submit": "Send",
+    "checkbox_checked": "Ja",
+    "country_placeholder": "Vælg land",
     "default_subject": "Formularindsendelse fra webstedet",
     "fallback_email": "Hvis der ikke åbnes noget, så send os en e-mail på {recipient}",
     "field_required": "Dette felt er obligatorisk.",
     "invalid_email": "Angiv en gyldig e-mailadresse.",
-    "country_placeholder": "Vælg land",
-    "checkbox_checked": "Ja"
+    "select_placeholder": "Vælg...",
+    "submit": "Send"
   }
 }
