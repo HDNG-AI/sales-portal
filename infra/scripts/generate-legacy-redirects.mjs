@@ -5,7 +5,7 @@
  * Standalone: Node >= 18, no dependencies, no repo imports.
  *
  *   GEINS_API_KEY=... GEINS_CHANNEL_ID='1|se' \
- *     node generate-redirects.mjs --out redirects.json \
+ *     node infra/scripts/generate-legacy-redirects.mjs --out redirects.json \
  *       [--overrides overrides.json] [--inventory data/crawl.json]
  *
  * Env:
@@ -322,7 +322,7 @@ export async function main() {
   }
 
   // --- categories: the old taxonomy does not survive slug normalisation
-  //     (see PROPOSAL.md §Mapping rules), so every row is curated.
+  //     (see docs/migration/odelco-legacy-redirects.md §4), so every row is curated.
   //     overrides.category: old path -> Geins category alias.
   //     A row ALSO becomes an ancestor-fallback entry for its descendants.
   for (const [oldPath, geinsAlias] of Object.entries(overrides.category || {})) {
@@ -411,7 +411,7 @@ export async function main() {
 
 // ---------------------------------------------------------------------------
 // Self-check: the transforms are the only non-trivial logic here.
-//   node generate-redirects.mjs --selfcheck
+//   node infra/scripts/generate-legacy-redirects.mjs --selfcheck
 // ---------------------------------------------------------------------------
 function selfcheck() {
   const eq = (got, want, label) => {
