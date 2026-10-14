@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { H3Event } from 'h3';
-import { requireVerifiedCheckoutBuyer, requiresVerifiedCheckoutBuyer } from '../../server/utils/checkout-access';
+import { requireOdelcoSummaryOwnership, requireVerifiedCheckoutBuyer, requiresVerifiedCheckoutBuyer } from '../../server/utils/checkout-access';
 
-const { optionalAuth, decodeJwtPayload, getUser } = vi.hoisted(() => ({
+const { optionalAuth, decodeJwtPayload, getUser, getCompany } = vi.hoisted(() => ({
   optionalAuth: vi.fn(),
   decodeJwtPayload: vi.fn(),
   getUser: vi.fn(),
+  getCompany: vi.fn(),
 }));
 vi.mock('../../server/utils/auth', () => ({ optionalAuth, decodeJwtPayload }));
 vi.mock('../../server/services/user', () => ({ getUser }));
+vi.mock('../../server/services/company', () => ({ getCompany }));
 
 function tenantEvent(id: string, features: Record<string, unknown> = {}): H3Event {
   return { context: { tenant: { tenantId: id, config: { tenantId: id, features } } } } as unknown as H3Event;
@@ -19,6 +21,7 @@ beforeEach(() => {
   optionalAuth.mockResolvedValue(null);
   decodeJwtPayload.mockReturnValue({ exp: Math.floor(Date.now() / 1000) + 3600 });
   getUser.mockResolvedValue({ id: 12, email: 'buyer@example.test' });
+  getCompany.mockResolvedValue({ id: 'company-a', buyers: [{ internalId: '77', active: true }] });
 });
 
 describe('checkout buyer policy', () => {
@@ -68,5 +71,39 @@ describe('requireVerifiedCheckoutBuyer', () => {
     await requireVerifiedCheckoutBuyer(event());
     await requireVerifiedCheckoutBuyer(event());
     expect(getUser).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Odelco order ownership authorization', () => {
+  const order = (customerId?: number) => ({ order: { customerId } });
+  const tokens = { authToken: 'valid-token', refreshToken: 'valid-refresh' };
+  it('permits an order belonging to an active buyer in the authenticated company', async () => {
+    await requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(77));
+    expect(getCompany).toHaveBeenCalledWith(expect.anything(), 'valid-token');
+  });
+  it('denies a different company buyer ID without revealing their order', async () => {
+    await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(9900)))
+      .rejects.toMatchObject({ statusCode: 403 });
+  });
+  it('denies inactive members of the buyer roster', async () => {
+    getCompany.mockResolvedValue({ id: 'company-a', buyers: [{ internalId: '77', active: false }] });
+    await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(77)))
+      .rejects.toMatchObject({ statusCode: 403 });
+  });
+  it('denies a missing or invalid customer ID', async () => {
+    await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order()))
+      .rejects.toMatchObject({ statusCode: 403 });
+    await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(0)))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(getCompany).not.toHaveBeenCalled();
+  });
+  it('fails closed when company retrieval is unavailable', async () => {
+    getCompany.mockRejectedValue(new Error('unavailable'));
+    await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(77)))
+      .rejects.toMatchObject({ statusCode: 403 });
+  });
+  it('does not impose Odelco-only company roster semantics on other tenants', async () => {
+    await requireOdelcoSummaryOwnership(tenantEvent('public'), tokens, order());
+    expect(getCompany).not.toHaveBeenCalled();
   });
 });
