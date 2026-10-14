@@ -1,9 +1,9 @@
 {
   "_README": [
-    "Hand-curated input to generate-redirects.mjs for the odelco tenant.",
+    "Hand-curated input to generate-legacy-redirects.mjs for the odelco tenant.",
     "Everything here is a HUMAN JUDGEMENT the Geins API cannot supply: the old",
     "VirtueMart taxonomy was reorganised during migration, so old and new slugs",
-    "do not correspond by any string rule (7% auto-match — see PROPOSAL.md).",
+    "do not correspond by any string rule (7% auto-match — see docs/migration/odelco-legacy-redirects.md).",
     "",
     "category: old VirtueMart path -> Geins category ALIAS. Each row also becomes",
     "          an ancestor-fallback for every descendant of that path, which is",
