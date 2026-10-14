@@ -66,30 +66,44 @@ export async function requireVerifiedCheckoutBuyer(event: H3Event): Promise<Auth
  * Fail closed on absent identity/roster, inactive buyer, or CRM failure.
  * Do not log order IDs, customer IDs, addresses or monetary fields.
  */
-export async function requireOdelcoSummaryOwnership(
+export async function requireOdelcoOrderOwnership(
   event: H3Event,
   tokens: AuthTokens,
-  summary: CheckoutSummaryType,
+  customerId: unknown,
 ): Promise<void> {
   const tenant = event.context.tenant;
   if ((tenant?.tenantId ?? tenant?.config?.tenantId) !== 'odelco') return;
 
-  const id = summary.order?.customerId;
-  if (!Number.isSafeInteger(id) || (id ?? 0) <= 0) {
-    throw createAppError(ErrorCode.FORBIDDEN, 'Order access not verified');
+  // Checkout summaries carry numbers; order-detail SDK results carry strings.
+  const raw = typeof customerId === 'number' || typeof customerId === 'string'
+    ? String(customerId)
+    : '';
+  const id = /^\\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
   }
 
   try {
     const company = await getCompany(event, tokens.authToken);
-    // The roster is returned for the verified requester's company only;
-    // numeric customer IDs must match exactly, not by name/email.
+    // Only buyers from the authenticated company's Geins roster may read
+    // the order. Never trust a supplied order/public ID as authorization.
     const permitted = company?.buyers?.some(
       (buyer) => buyer.active && buyer.internalId === String(id),
     );
     if (permitted) return;
   } catch {
-    // Upstream company/CRM unavailable: no private order data is released.
+    // Company service unavailable -> deny without releasing order metadata.
   }
 
-  throw createAppError(ErrorCode.FORBIDDEN, 'Order access not verified');
+  // 404 matches the not-found response for nonexistent order IDs so that
+  // callers cannot distinguish someone else's order by status code.
+  throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
+}
+
+export async function requireOdelcoSummaryOwnership(
+  event: H3Event,
+  tokens: AuthTokens,
+  summary: CheckoutSummaryType,
+): Promise<void> {
+  return requireOdelcoOrderOwnership(event, tokens, summary.order?.customerId);
 }
