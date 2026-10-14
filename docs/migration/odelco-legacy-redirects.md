@@ -9,6 +9,16 @@ tags: [routing, urls, seo, redirects, migration]
 
 Keeping bookmarks and inbound links working when odelco.se moves to sales-portal.
 
+**Implementation status (2026-10-14): proposal only; redirects are not installed or enabled.**
+The 3,573-row count and 95.6% coverage below describe the 2026-09-21 crawl and
+Geins snapshot, **not a freshly regenerated or merchant-approved mapping**. The
+standalone generator has since been hardened for market-specific permitted languages,
+BCP-47-to-short route codes and strict catalog page integrity, with mocked GraphQL
+regression tests. Regenerate against the approved staging Geins channel, review all
+curated `_review` decisions and validate with current SEO inventory before any KV
+write or DNS/redirect activation.
+
+
 ## Recommendation in three sentences
 
 Put the map behind a new `server/middleware/00.legacy-redirects.ts` that runs **before**
@@ -105,7 +115,7 @@ body under an HTTP 200). The URL inventory here is therefore **link-reachable on
 
 ## 3. What sales-portal serves
 
-Per [ADR-015](../../adr/015-type-prefixed-routing.md), every entity URL is
+Per [ADR-015](../adr/015-type-prefixed-routing.md), every entity URL is
 `/{market}/{locale}/{type-prefix}/{slug…}`. For this channel the prefix is `/se/sv`
 (market alias `se` from `SE|SEK`, locale `sv` from `sv-SE`).
 
@@ -122,7 +132,7 @@ step exists:
 **Geins uses `/l/` for both categories and brands.** The entity type must come from the query
 that produced the URL, never inferred from the URL — the same trap `stripGeinsPrefix(path, itemType)`
 in `shared/utils/menu.ts` documents, and the one that caused Failure A in
-[ADR-019](../../adr/019-bulletproof-routing.md). `toAppPath(canonicalUrl, type)` in the
+[ADR-019](../adr/019-bulletproof-routing.md). `toAppPath(canonicalUrl, type)` in the
 generator takes the type as a required argument for exactly this reason.
 
 ## 4. Mapping rules
@@ -245,7 +255,7 @@ KV key  legacy:redirects:{tenantId}          same mount as tenant:config:
   preserved exactly: `00.locale-market` → catch-all → ADR-019 resolver → 404.
 
 The matcher is ~25 lines. `resolveLegacyPath()` in
-[`infra/scripts/generate-legacy-redirects.mjs`](./generate-redirects.mjs) is that function, with its assertions
+[`infra/scripts/generate-legacy-redirects.mjs`](../../infra/scripts/generate-legacy-redirects.mjs) is that function, with its assertions
 already written — port it to `server/utils/` and keep the two in lockstep.
 
 ### Redirect semantics
