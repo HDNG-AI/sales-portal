@@ -41,6 +41,7 @@ vi.mock('../../../server/utils/rate-limiter', () => ({
 
 // Stub Nitro auto-imports
 vi.stubGlobal('withErrorHandling', async (fn: () => Promise<unknown>) => fn());
+vi.stubGlobal('setResponseHeader', vi.fn());
 vi.stubGlobal(
   'createError',
   ({
