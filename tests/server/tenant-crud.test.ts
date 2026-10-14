@@ -112,6 +112,12 @@ const GEINS_SETTINGS = {
 };
 
 beforeEach(() => {
+  // Preview tests use vi.unstubAllGlobals() to restore fetch. That also
+  // removes this suite's global Nuxt storage/error shims; reinstall them
+  // for each subsequent test to prevent order-dependent failures.
+  vi.stubGlobal('useStorage', mockUseStorage);
+  vi.stubGlobal('createAppError', errorsModule.createAppError);
+  vi.stubGlobal('ErrorCode', errorsModule.ErrorCode);
   kvStore.clear();
   cacheStore.clear();
   // mockUseStorage.mockClear() only clears calls to useStorage() itself —
