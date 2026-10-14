@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-// Standalone Node ESM utility; it is intentionally not compiled by TypeScript.
-// @ts-expect-error No .d.ts for the independent .mjs command-line generator.
+// Import the standalone Node ESM generator as a regular test module.
 import { fetchAllProducts, main, shortLocaleCode, toAppPath } from '../../infra/scripts/generate-legacy-redirects.mjs';
 
 const channel = {
