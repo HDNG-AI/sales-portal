@@ -81,6 +81,12 @@ export function resolveLegacyRedirect(map: LegacyRedirectMap, rawPath: string): 
     return null;
   }
   const path = normalizeLegacyPath(rawPath);
+  // Deny traversal/ambiguous decoded paths before evaluating ancestor rules.
+  // Encoded slashes and backslashes must not become a second URL grammar.
+  if (path.startsWith('//') || path.includes('\\') ||
+      path.split('/').some((segment) => segment === '.' || segment === '..')) {
+    return null;
+  }
   const exact = ownValue(map.exact, path);
   if (exact) return exact;
 
