@@ -122,7 +122,7 @@ describe('GET /api/orders/[id]', () => {
     expect(mockVerifyBuyer).toHaveBeenCalledWith(event);
     expect(mockRequireAuth).not.toHaveBeenCalled();
     expect(mockOwner).toHaveBeenCalledWith(event,
-      { authToken: 'verified', refreshToken: 'refresh' }, '77');
+      { authToken: 'verified', refreshToken: 'refresh' }, 'opaque-id', 'public');
     expect(result).toEqual({ order });
     expect(setResponseHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'private, no-store');
   });
