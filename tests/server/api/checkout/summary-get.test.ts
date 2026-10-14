@@ -1,16 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getSummary, optionalAuth, requiresVerifiedCheckoutBuyer, requireVerifiedCheckoutBuyer } = vi.hoisted(() => ({
+const { getSummary, optionalAuth, requiresVerifiedCheckoutBuyer, requireVerifiedCheckoutBuyer, requireOdelcoSummaryOwnership } = vi.hoisted(() => ({
   getSummary: vi.fn(),
   optionalAuth: vi.fn(),
   requiresVerifiedCheckoutBuyer: vi.fn(),
   requireVerifiedCheckoutBuyer: vi.fn(),
+  requireOdelcoSummaryOwnership: vi.fn(),
 }));
 vi.mock('../../../../server/services/checkout', () => ({ getSummary }));
 vi.mock('../../../../server/utils/auth', () => ({ optionalAuth }));
 vi.mock('../../../../server/utils/checkout-access', () => ({
   requiresVerifiedCheckoutBuyer,
   requireVerifiedCheckoutBuyer,
+  requireOdelcoSummaryOwnership,
 }));
 
 vi.stubGlobal('defineEventHandler', (fn: (...args: unknown[]) => unknown) => fn);
@@ -27,9 +29,10 @@ const event = { context: { tenant: { tenantId: 'odelco' } } } as unknown as impo
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getSummary.mockResolvedValue({ order: { id: 'known-test-order' } });
+  getSummary.mockResolvedValue({ order: { id: 'known-test-order', customerId: 77 } });
   optionalAuth.mockResolvedValue(null);
-  requireVerifiedCheckoutBuyer.mockResolvedValue(undefined);
+  requireVerifiedCheckoutBuyer.mockResolvedValue({ authToken: 'verified', refreshToken: 'refresh' });
+  requireOdelcoSummaryOwnership.mockResolvedValue(undefined);
   requiresVerifiedCheckoutBuyer.mockReturnValue(true);
 });
 
@@ -42,7 +45,10 @@ describe('GET /api/checkout/summary', () => {
     expect(getSummary).toHaveBeenCalledWith({
       orderId: 'known-test-order', paymentMethod: 'invoice',
     }, event);
-    expect(result).toEqual({ order: { id: 'known-test-order' } });
+    expect(requireOdelcoSummaryOwnership).toHaveBeenCalledWith(event,
+      { authToken: 'verified', refreshToken: 'refresh' },
+      { order: { id: 'known-test-order', customerId: 77 } });
+    expect(result).toEqual({ order: { id: 'known-test-order', customerId: 77 } });
     expect(setResponseHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'private, no-store');
   });
 
@@ -53,12 +59,20 @@ describe('GET /api/checkout/summary', () => {
     expect(getSummary).not.toHaveBeenCalled();
   });
 
+  it('rejects a verified buyer trying to read another company order', async () => {
+    const { default: handler } = await import('../../../../server/api/checkout/summary.get');
+    requireOdelcoSummaryOwnership.mockRejectedValue(Object.assign(new Error('Forbidden'), { statusCode: 403 }));
+    await expect(handler(event)).rejects.toMatchObject({ statusCode: 403 });
+    expect(getSummary).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves legacy public-price post-payment guest summary', async () => {
     requiresVerifiedCheckoutBuyer.mockReturnValue(false);
     const { default: handler } = await import('../../../../server/api/checkout/summary.get');
     const result = await handler(event);
     expect(optionalAuth).toHaveBeenCalledWith(event);
     expect(requireVerifiedCheckoutBuyer).not.toHaveBeenCalled();
-    expect(result).toEqual({ order: { id: 'known-test-order' } });
+    expect(requireOdelcoSummaryOwnership).not.toHaveBeenCalled();
+    expect(result).toEqual({ order: { id: 'known-test-order', customerId: 77 } });
   });
 });
