@@ -125,6 +125,7 @@ const privatePricedCart = {
   items: [{ skuId: 101, quantity: 2, unitPrice: { sellingPriceIncVat: 250 },
     itemValueIncVatFormatted: '500 SEK' }],
   shipping: { feeIncVatFormatted: '45 SEK' },
+  totalIncVat: 570, totalExVat: 456, totalQuantity: 2,
   summary: { total: { sellingPriceIncVat: 500 } },
 };
 
@@ -141,7 +142,7 @@ describe('Cart API Routes', () => {
       const result = await handler(restrictedCartEvent);
       expect(result?.items?.[0]).toMatchObject({ skuId: 101, quantity: 2 });
       const response = JSON.stringify(result);
-      for (const field of ['unitPrice', 'sellingPrice', 'itemValue', 'feeIncVat', '500 SEK', '45 SEK']) {
+      for (const field of ['unitPrice', 'sellingPrice', 'itemValue', 'feeIncVat', 'totalIncVat', 'totalExVat', '500 SEK', '45 SEK']) {
         expect(response).not.toContain(field);
       }
       expect(setResponseHeader).toHaveBeenCalledWith(
