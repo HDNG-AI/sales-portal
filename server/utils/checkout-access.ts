@@ -78,7 +78,7 @@ export async function requireOdelcoOrderOwnership(
   const raw = typeof customerId === 'number' || typeof customerId === 'string'
     ? String(customerId)
     : '';
-  const id = /^\\d+$/.test(raw) ? Number(raw) : NaN;
+  const id = /^\d+$/.test(raw) ? Number(raw) : NaN;
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
   }
