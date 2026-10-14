@@ -83,7 +83,7 @@ export async function requireOdelcoOrderOwnership(
     throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
   }
   const id = String(orderId).trim();
-  if (!id || (idType === 'internal' && !/^\\d+$/.test(id))) {
+  if (!id || (idType === 'internal' && !/^\d+$/.test(id))) {
     throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
   }
 
