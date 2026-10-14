@@ -3,6 +3,7 @@ import { CheckoutTokenSchema } from '../../schemas/api-input';
 import { createToken, getCheckout } from '../../services/checkout';
 import { HOSTED_CHECKOUT_BASE_URL } from '#shared/constants/checkout';
 import { COOKIE_NAMES } from '#shared/constants/storage';
+import { requireVerifiedCheckoutBuyer, requiresVerifiedCheckoutBuyer } from '../../utils/checkout-access';
 
 const TWO_LETTER = /^[a-z]{2}$/;
 
@@ -14,11 +15,20 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // A custom-checkout tenant must never mint a hosted-checkout token.
+  const tenantConfig = event.context.tenant?.config;
+  if (tenantConfig?.checkoutMode !== 'hosted') {
+    throw createAppError(ErrorCode.FORBIDDEN, 'Hosted checkout is not enabled');
+  }
+  if (requiresVerifiedCheckoutBuyer(event)) {
+    await requireVerifiedCheckoutBuyer(event);
+  }
+  setResponseHeader(event, 'Cache-Control', 'private, no-store');
+
   const { cartId } = await readValidatedBody(event, CheckoutTokenSchema.parse);
 
   return withErrorHandling(
     async () => {
-      const tenantConfig = event.context.tenant?.config;
       const colors = tenantConfig?.theme?.colors;
       const branding = tenantConfig?.branding;
       const requestUrl = getRequestURL(event);
