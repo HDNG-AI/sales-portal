@@ -33,8 +33,12 @@ export function normalizeLegacyPath(rawPath: string): string {
 }
 
 function isSafeTarget(path: string, prefix: string): boolean {
+  const hasControl = [...path].some((char) => {
+    const code = char.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
   if (!path.startsWith(`${prefix}/`) || path.includes('//') ||
-      /[\\?#%\u0000-\u001f\u007f]/.test(path)) return false;
+      /[\\?#%]/.test(path) || hasControl) return false;
   const segments = path.split('/');
   return !segments.some((seg) => seg === '..' || seg === '.');
 }
