@@ -117,7 +117,7 @@ describe('GET /api/orders/[id]', () => {
     mockedGetRouterParam.mockReturnValueOnce('opaque-id');
     const order = { publicId: 'opaque-id', customerId: '77', status: 'Placed' };
     mockGetOrder.mockResolvedValueOnce(order);
-    const event = { context: { tenant: { tenantId: 'odelco' } } } as H3Event;
+    const event = { context: { tenant: { tenantId: 'odelco' } } } as unknown as H3Event;
     const result = await handler(event);
     expect(mockVerifyBuyer).toHaveBeenCalledWith(event);
     expect(mockRequireAuth).not.toHaveBeenCalled();
@@ -132,14 +132,14 @@ describe('GET /api/orders/[id]', () => {
     mockedGetRouterParam.mockReturnValueOnce('other-company-id');
     mockGetOrder.mockResolvedValueOnce({ publicId: 'other-company-id', customerId: '9000' });
     mockOwner.mockRejectedValueOnce(Object.assign(new Error('Order not found'), { statusCode: 404 }));
-    await expect(handler({ context: { tenant: { tenantId: 'odelco' } } } as H3Event))
+    await expect(handler({ context: { tenant: { tenantId: 'odelco' } } } as unknown as H3Event))
       .rejects.toMatchObject({ statusCode: 404 });
   });
 
   it('does not fetch order data when CRM buyer validation fails', async () => {
     mockRequiresPrivateBuyer.mockReturnValue(true);
     mockVerifyBuyer.mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { statusCode: 401 }));
-    await expect(handler({ context: { tenant: { tenantId: 'odelco' } } } as H3Event))
+    await expect(handler({ context: { tenant: { tenantId: 'odelco' } } } as unknown as H3Event))
       .rejects.toMatchObject({ statusCode: 401 });
     expect(mockGetOrder).not.toHaveBeenCalled();
   });
