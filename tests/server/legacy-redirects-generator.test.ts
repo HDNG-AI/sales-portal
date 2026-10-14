@@ -40,7 +40,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   process.argv = [...originalArgv];
   for (const k of envNames) {
-    if (originalEnv[k] === undefined) delete process.env[k];
+    if (originalEnv[k] === undefined) Reflect.deleteProperty(process.env, k);
     else process.env[k] = originalEnv[k];
   }
   rmSync(folder, { recursive: true, force: true });
