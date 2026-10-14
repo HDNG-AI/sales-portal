@@ -82,7 +82,8 @@ describe('protectProductPrices: server-side response boundary', () => {
 
   it('redacts nested CartType money fields without hiding stock/count', async () => {
     const cart = {
-      id: 'opaque-cart-id', totalStock: 7,
+      id: 'opaque-cart-id', totalStock: 7, totalQuantity: 2,
+      totalIncVat: 570, totalExVat: 456, totalVatFormatted: '114 SEK',
       items: [{
         skuId: 50, quantity: 2,
         unitPrice: { sellingPriceIncVat: 250 },
@@ -100,11 +101,11 @@ describe('protectProductPrices: server-side response boundary', () => {
     const source = JSON.parse(JSON.stringify(cart));
     const result = await protectProductPrices(event(restricted), null, cart);
     const serialized = JSON.stringify(result);
-    for (const secret of ['sellingPrice', 'unitPrice', 'itemValue', 'lineTotal', 'feeIncVat', 'paymentFee', 'discountTotal', '500 SEK', '45 SEK']) {
+    for (const secret of ['sellingPrice', 'unitPrice', 'itemValue', 'lineTotal', 'feeIncVat', 'paymentFee', 'discountTotal', 'totalIncVat', 'totalExVat', 'totalVatFormatted', '500 SEK', '45 SEK', '114 SEK']) {
       expect(serialized).not.toContain(secret);
     }
     expect(result).toMatchObject({
-      id: 'opaque-cart-id', totalStock: 7, items: [{ skuId: 50, quantity: 2 }],
+      id: 'opaque-cart-id', totalStock: 7, totalQuantity: 2, items: [{ skuId: 50, quantity: 2 }],
     });
     expect(cart).toEqual(source);
   });
