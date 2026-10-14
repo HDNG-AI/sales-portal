@@ -4,7 +4,7 @@ import type { AuthTokens } from './auth';
 import { decodeJwtPayload, optionalAuth } from './auth';
 import { ErrorCode, createAppError } from './errors';
 import * as userService from '../services/user';
-import { getCompany } from '../services/company';
+import { listOrders } from '../services/orders';
 
 /**
  * The checkout endpoints are shared across many Geins tenants. Odelco is
@@ -58,45 +58,47 @@ export async function requireVerifiedCheckoutBuyer(event: H3Event): Promise<Auth
 }
 
 /**
- * Odelco B2B order IDs are NOT permission grants. The checkout summary's
- * customerId identifies the order-placing buyer; the Geins getCompany API
- * returns that same numeric ID as CompanyBuyer.internalId for the current
- * authenticated company's buyer roster (see services/orders.ts).
+ * Geins getCompanyOrders is the company-scoped order listing already used by
+ * Odelco's order list. Treat *membership in that listing* as the access rule,
+ * not the placing employee's active flag: historical orders remain accessible
+ * when a colleague leaves and orders without customerId still work.
  *
- * Fail closed on absent identity/roster, inactive buyer, or CRM failure.
- * Do not log order IDs, customer IDs, addresses or monetary fields.
+ * Match only the server-returned ID of the order retrieved from Geins:
+ * - checkout summary -> internal orderId (getCompanyOrders.id)
+ * - order detail -> publicId (getCompanyOrders.publicId)
+ *
+ * Fail closed on absent IDs, unavailable scoped listing and any other error.
+ * No order identifiers or personally identifiable fields are logged here.
  */
 export async function requireOdelcoOrderOwnership(
   event: H3Event,
-  tokens: AuthTokens,
-  customerId: unknown,
+  _tokens: AuthTokens,
+  orderId: unknown,
+  idType: 'internal' | 'public' = 'internal',
 ): Promise<void> {
   const tenant = event.context.tenant;
   if ((tenant?.tenantId ?? tenant?.config?.tenantId) !== 'odelco') return;
 
-  // Checkout summaries carry numbers; order-detail SDK results carry strings.
-  const raw = typeof customerId === 'number' || typeof customerId === 'string'
-    ? String(customerId)
-    : '';
-  const id = /^\d+$/.test(raw) ? Number(raw) : NaN;
-  if (!Number.isSafeInteger(id) || id <= 0) {
+  if (typeof orderId !== 'number' && typeof orderId !== 'string') {
+    throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
+  }
+  const id = String(orderId).trim();
+  if (!id || (idType === 'internal' && !/^\\d+$/.test(id))) {
     throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
   }
 
   try {
-    const company = await getCompany(event, tokens.authToken);
-    // Only buyers from the authenticated company's Geins roster may read
-    // the order. Never trust a supplied order/public ID as authorization.
-    const permitted = company?.buyers?.some(
-      (buyer) => buyer.active && buyer.internalId === String(id),
-    );
+    // This service runs getCompanyOrders with this request's Geins user token.
+    // Unlike getOrderPublic, it returns only the authenticated company's orders.
+    const { orders } = await listOrders(event);
+    const permitted = orders.some((order) => {
+      const value = idType === 'public' ? order.publicId : order.id;
+      return value !== undefined && value !== null && String(value) === id;
+    });
     if (permitted) return;
   } catch {
-    // Company service unavailable -> deny without releasing order metadata.
+    // Geins list failure, invalid company context, etc. -> deny.
   }
-
-  // 404 matches the not-found response for nonexistent order IDs so that
-  // callers cannot distinguish someone else's order by status code.
   throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
 }
 
@@ -105,5 +107,5 @@ export async function requireOdelcoSummaryOwnership(
   tokens: AuthTokens,
   summary: CheckoutSummaryType,
 ): Promise<void> {
-  return requireOdelcoOrderOwnership(event, tokens, summary.order?.customerId);
+  return requireOdelcoOrderOwnership(event, tokens, summary.order?.orderId, 'internal');
 }
