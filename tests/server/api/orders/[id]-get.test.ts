@@ -1,6 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { H3Event } from 'h3';
 
+const { mockRequiresPrivateBuyer, mockVerifyBuyer, mockOwner } = vi.hoisted(() => ({
+  mockRequiresPrivateBuyer: vi.fn(),
+  mockVerifyBuyer: vi.fn(),
+  mockOwner: vi.fn(),
+}));
+vi.mock('../../../../server/utils/checkout-access', () => ({
+  requiresVerifiedCheckoutBuyer: mockRequiresPrivateBuyer,
+  requireVerifiedCheckoutBuyer: mockVerifyBuyer,
+  requireOdelcoOrderOwnership: mockOwner,
+}));
+
 // Mock auth
 const mockRequireAuth = vi.fn();
 vi.mock('../../../../server/utils/auth', () => ({
@@ -58,6 +69,9 @@ describe('GET /api/orders/[id]', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockRequiresPrivateBuyer.mockReturnValue(false);
+    mockVerifyBuyer.mockResolvedValue({ authToken: 'verified', refreshToken: 'refresh' });
+    mockOwner.mockResolvedValue(undefined);
     handler = (await import('../../../../server/api/orders/[id].get'))
       .default as unknown as (event: H3Event) => Promise<unknown>;
   });
@@ -96,6 +110,38 @@ describe('GET /api/orders/[id]', () => {
       mockEvent,
     );
     expect(result).toEqual({ order: orderData });
+  });
+
+  it('verifies Odelco buyer and checks company order ownership before returning order', async () => {
+    mockRequiresPrivateBuyer.mockReturnValue(true);
+    mockedGetRouterParam.mockReturnValueOnce('opaque-id');
+    const order = { publicId: 'opaque-id', customerId: '77', status: 'Placed' };
+    mockGetOrder.mockResolvedValueOnce(order);
+    const event = { context: { tenant: { tenantId: 'odelco' } } } as H3Event;
+    const result = await handler(event);
+    expect(mockVerifyBuyer).toHaveBeenCalledWith(event);
+    expect(mockRequireAuth).not.toHaveBeenCalled();
+    expect(mockOwner).toHaveBeenCalledWith(event,
+      { authToken: 'verified', refreshToken: 'refresh' }, '77');
+    expect(result).toEqual({ order });
+    expect(setResponseHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'private, no-store');
+  });
+
+  it('never returns a different company order even when Geins returns it', async () => {
+    mockRequiresPrivateBuyer.mockReturnValue(true);
+    mockedGetRouterParam.mockReturnValueOnce('other-company-id');
+    mockGetOrder.mockResolvedValueOnce({ publicId: 'other-company-id', customerId: '9000' });
+    mockOwner.mockRejectedValueOnce(Object.assign(new Error('Order not found'), { statusCode: 404 }));
+    await expect(handler({ context: { tenant: { tenantId: 'odelco' } } } as H3Event))
+      .rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('does not fetch order data when CRM buyer validation fails', async () => {
+    mockRequiresPrivateBuyer.mockReturnValue(true);
+    mockVerifyBuyer.mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { statusCode: 401 }));
+    await expect(handler({ context: { tenant: { tenantId: 'odelco' } } } as H3Event))
+      .rejects.toMatchObject({ statusCode: 401 });
+    expect(mockGetOrder).not.toHaveBeenCalled();
   });
 
   it('returns 404 when order not found', async () => {
