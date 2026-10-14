@@ -83,24 +83,24 @@ describe('Odelco order ownership authorization', () => {
   });
   it('denies a different company buyer ID without revealing their order', async () => {
     await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(9900)))
-      .rejects.toMatchObject({ statusCode: 403 });
+      .rejects.toMatchObject({ statusCode: 404 });
   });
   it('denies inactive members of the buyer roster', async () => {
     getCompany.mockResolvedValue({ id: 'company-a', buyers: [{ internalId: '77', active: false }] });
     await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(77)))
-      .rejects.toMatchObject({ statusCode: 403 });
+      .rejects.toMatchObject({ statusCode: 404 });
   });
   it('denies a missing or invalid customer ID', async () => {
     await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order()))
-      .rejects.toMatchObject({ statusCode: 403 });
+      .rejects.toMatchObject({ statusCode: 404 });
     await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(0)))
-      .rejects.toMatchObject({ statusCode: 403 });
+      .rejects.toMatchObject({ statusCode: 404 });
     expect(getCompany).not.toHaveBeenCalled();
   });
   it('fails closed when company retrieval is unavailable', async () => {
     getCompany.mockRejectedValue(new Error('unavailable'));
     await expect(requireOdelcoSummaryOwnership(tenantEvent('odelco'), tokens, order(77)))
-      .rejects.toMatchObject({ statusCode: 403 });
+      .rejects.toMatchObject({ statusCode: 404 });
   });
   it('does not impose Odelco-only company roster semantics on other tenants', async () => {
     await requireOdelcoSummaryOwnership(tenantEvent('public'), tokens, order());
