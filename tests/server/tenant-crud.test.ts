@@ -18,6 +18,8 @@ import {
   isTenantRefreshFresh,
   hostnamesToInvalidate,
   DEFAULT_GEINS_SETTINGS,
+  mergeTenantPortalOverrides,
+  resolvePreviewTenant,
 } from '../../server/utils/tenant';
 
 // Use the REAL createAppError / ErrorCode so the ownership-check test below
@@ -845,7 +847,9 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
     const result = await resolveTenant(hostname);
 
     expect(result?.theme.typography?.fontFamily).toBe('Geist');
+    expect(result?.timezone).toBe('Europe/Stockholm');
     expect(kvStore.get(tenantConfigKey(tenantId))).toMatchObject({
+      timezone: 'Europe/Stockholm',
       theme: { typography: { fontFamily: 'Geist' } },
     });
     expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(false);
@@ -907,5 +911,77 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
       checkedAt: 0,
       source: 'local',
     })).toBe(true);
+  });
+});
+
+describe('approved Odelco operating timezone', () => {
+  it('uses Europe/Stockholm even when Geins omits timezone or previously sent UTC', () => {
+    const base = {
+      tenantId: 'odelco',
+      hostname: 'staging-odelco.hdng.ai',
+      aliases: ['odelco.litium.store'],
+      timezone: 'UTC',
+      theme: { typography: { fontFamily: 'Inter' } },
+      cms: {
+        menus: { header_main: { menuLocationId: 'main-desktop' } },
+      },
+    } as TenantConfig;
+
+    const actual = mergeTenantPortalOverrides(base, undefined);
+    expect(actual.timezone).toBe('Europe/Stockholm');
+    expect(actual.hostname).toBe(base.hostname);
+    expect(actual.aliases).toBe(base.aliases);
+    expect(actual.theme).toBe(base.theme);
+    expect(actual.cms).toBe(base.cms);
+    expect(base.timezone).toBe('UTC'); // No mutation of Geins data
+  });
+
+  it('preserves CMS per-key overrides while protecting the approved timezone', () => {
+    const base = {
+      tenantId: 'odelco',
+      hostname: 'staging-odelco.hdng.ai',
+      cms: {
+        slots: { frontpage_content: { family: 'Frontpage', areaName: 'Content' } },
+        menus: { header_main: { menuLocationId: 'main' } },
+      },
+    } as TenantConfig;
+    const result = mergeTenantPortalOverrides(base, {
+      cms: { menus: { header_main: { menuLocationId: 'main-desktop' } } },
+    });
+    expect(result.timezone).toBe('Europe/Stockholm');
+    expect(result.cms?.slots).toEqual(base.cms?.slots);
+    expect(result.cms?.menus?.header_main).toEqual({ menuLocationId: 'main-desktop' });
+  });
+
+  it('does not assign a timezone to any other tenant', () => {
+    const base = {
+      tenantId: 'another-merchant',
+      hostname: 'another.example',
+      timezone: undefined,
+    } as TenantConfig;
+    expect(mergeTenantPortalOverrides(base, null)).toBe(base);
+    expect(mergeTenantPortalOverrides({ ...base, timezone: 'UTC' }, undefined).timezone).toBe('UTC');
+  });
+
+  it('applies the same approved timezone to the Geins preview lookup without writing KV', async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(JSON.stringify({
+        ...partialPayloadFixture,
+        tenantId: 'odelco',
+        geinsSettings: {
+          ...partialPayloadFixture.geinsSettings,
+          defaultHostName: 'staging-odelco.example.com',
+        },
+        appSettings: partialPayloadFixture.appSettings,
+      }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    try {
+      const result = await resolvePreviewTenant('staging-odelco.example.com');
+      expect(result?.timezone).toBe('Europe/Stockholm');
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
