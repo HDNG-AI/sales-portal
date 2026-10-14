@@ -29,7 +29,7 @@ const event = { context: { tenant: { tenantId: 'odelco' } } } as unknown as impo
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getSummary.mockResolvedValue({ order: { id: 'known-test-order', customerId: 77 } });
+  getSummary.mockResolvedValue({ order: { orderId: '104', customerId: 77 } });
   optionalAuth.mockResolvedValue(null);
   requireVerifiedCheckoutBuyer.mockResolvedValue({ authToken: 'verified', refreshToken: 'refresh' });
   requireOdelcoSummaryOwnership.mockResolvedValue(undefined);
@@ -47,8 +47,8 @@ describe('GET /api/checkout/summary', () => {
     }, event);
     expect(requireOdelcoSummaryOwnership).toHaveBeenCalledWith(event,
       { authToken: 'verified', refreshToken: 'refresh' },
-      { order: { id: 'known-test-order', customerId: 77 } });
-    expect(result).toEqual({ order: { id: 'known-test-order', customerId: 77 } });
+      { order: { orderId: '104', customerId: 77 } });
+    expect(result).toEqual({ order: { orderId: '104', customerId: 77 } });
     expect(setResponseHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'private, no-store');
   });
 
@@ -73,6 +73,6 @@ describe('GET /api/checkout/summary', () => {
     expect(optionalAuth).toHaveBeenCalledWith(event);
     expect(requireVerifiedCheckoutBuyer).not.toHaveBeenCalled();
     expect(requireOdelcoSummaryOwnership).not.toHaveBeenCalled();
-    expect(result).toEqual({ order: { id: 'known-test-order', customerId: 77 } });
+    expect(result).toEqual({ order: { orderId: '104', customerId: 77 } });
   });
 });
