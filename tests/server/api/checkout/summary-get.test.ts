@@ -61,8 +61,8 @@ describe('GET /api/checkout/summary', () => {
 
   it('rejects a verified buyer trying to read another company order', async () => {
     const { default: handler } = await import('../../../../server/api/checkout/summary.get');
-    requireOdelcoSummaryOwnership.mockRejectedValue(Object.assign(new Error('Forbidden'), { statusCode: 403 }));
-    await expect(handler(event)).rejects.toMatchObject({ statusCode: 403 });
+    requireOdelcoSummaryOwnership.mockRejectedValue(Object.assign(new Error('Forbidden'), { statusCode: 404 }));
+    await expect(handler(event)).rejects.toMatchObject({ statusCode: 404 });
     expect(getSummary).toHaveBeenCalledTimes(1);
   });
 
