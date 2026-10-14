@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import type { FormEndpoint } from '#shared/utils/form-post';
 import type {
   ContentConfigType,
   FormWidgetData,
@@ -18,6 +19,11 @@ import type {
 import type { SupportedLocale } from '#shared/utils/locale-market';
 import { getCountryOptions } from '~/utils/country-options';
 import { buildMailto } from '~/utils/mailto';
+import {
+  HONEYPOT_FIELDS,
+  FORM_STARTED_AT_FIELD,
+  FORM_DURATION_FIELD,
+} from '#shared/utils/form-post';
 import { safeLocationRedirect } from '~/utils/client-helpers';
 
 const props = defineProps<{
@@ -34,6 +40,18 @@ const countryOptions = computed(() =>
 );
 
 const formValues = reactive<Record<string, string>>({});
+const honeypotValues = reactive<Record<string, string>>(
+  Object.fromEntries(HONEYPOT_FIELDS.map((name) => [name, ''])),
+);
+// Client-side only: on the server there is no session to time, and a value
+// rendered into HTML would be the same for every visitor anyway.
+const startedAt = ref(0);
+const submitting = ref(false);
+const submitError = ref('');
+const submitted = ref(false);
+onMounted(() => {
+  startedAt.value = Date.now();
+});
 // Checkboxes are kept apart from the text map: a group shares one name and
 // holds several values at once, which a flat string map cannot express.
 const checkedValues = reactive<Record<string, boolean>>({});
@@ -221,8 +239,44 @@ function buildMailtoFields(
   return lines;
 }
 
-function handleSubmit() {
+/**
+ * The values to submit, including the fields the receiver checks for spam.
+ *
+ * Checkboxes carry `value` and share a `name`, so a group arrives as an array
+ * under one key rather than as several keys — the shape a receiver can map,
+ * where the mailto body is prose it would have to parse back.
+ */
+function collectSubmission(): Record<string, string | string[]> {
+  const payload: Record<string, string | string[]> = {};
+
+  for (const field of props.data?.fields ?? []) {
+    if (field.type === 'checkbox') {
+      if (!checkedValues[checkboxKey(field)]) continue;
+      const value = field.value ?? 'on';
+      const existing = payload[field.name];
+      if (Array.isArray(existing)) existing.push(value);
+      else if (typeof existing === 'string')
+        payload[field.name] = [existing, value];
+      else payload[field.name] = value;
+      continue;
+    }
+    payload[field.name] = formValues[field.name] ?? '';
+  }
+
+  for (const name of HONEYPOT_FIELDS)
+    payload[name] = honeypotValues[name] ?? '';
+  payload[FORM_STARTED_AT_FIELD] = String(startedAt.value);
+  payload[FORM_DURATION_FIELD] = String(Date.now() - startedAt.value);
+
+  return payload;
+}
+
+async function handleSubmit() {
+  if (submitting.value) return;
   if (!validateAll()) return;
+
+  const endpoint = props.data?.formEndpoint;
+  if (endpoint) return submitOverHttp(endpoint);
 
   const fields = props.data?.fields ?? [];
 
@@ -235,6 +289,27 @@ function handleSubmit() {
   });
 
   safeLocationRedirect(url);
+}
+
+async function submitOverHttp(endpoint: FormEndpoint) {
+  // Do not mark a submission successful locally. Only the server can
+  // acknowledge provider acceptance. A silently discarded form is a lost lead.
+
+  submitting.value = true;
+  submitError.value = '';
+  try {
+    // The same-origin Nitro route owns recipient, tenant scope and credentials.
+    // CMS content can select an allowed intent but never a destination URL.
+    await $fetch('/api/forms/submit', {
+      method: 'POST',
+      body: { kind: endpoint, fields: collectSubmission() },
+    });
+    submitted.value = true;
+  } catch {
+    submitError.value = 'form.submit_failed';
+  } finally {
+    submitting.value = false;
+  }
 }
 
 // Derive the options for a select field: prefer CMS-supplied options when
@@ -261,7 +336,12 @@ function selectPlaceholderFor(field: FormWidgetField): string {
 </script>
 
 <template>
+  <p v-if="submitted" class="text-sm" role="status" data-testid="form-success">
+    {{ t('form.submit_success') }}
+  </p>
+
   <form
+    v-else
     class="max-w-lg space-y-4"
     data-testid="form-widget"
     @submit.prevent="handleSubmit"
@@ -407,8 +487,31 @@ function selectPlaceholderFor(field: FormWidgetField): string {
       </p>
     </div>
 
+    <!-- Never shown and never focusable: anything in these came from
+         something filling inputs indiscriminately. Checked by the receiver. -->
+    <div class="hidden" aria-hidden="true">
+      <input
+        v-for="name in HONEYPOT_FIELDS"
+        :key="name"
+        v-model="honeypotValues[name]"
+        :name="name"
+        type="text"
+        tabindex="-1"
+        autocomplete="off"
+      />
+    </div>
+
+    <p
+      v-if="submitError"
+      class="text-destructive text-sm"
+      role="alert"
+      data-testid="form-error"
+    >
+      {{ t(submitError) }}
+    </p>
+
     <div class="border-border flex flex-col items-start gap-3 border-t pt-4">
-      <Button type="submit" data-testid="form-submit">
+      <Button type="submit" :disabled="submitting" data-testid="form-submit">
         {{ data?.submitLabel?.trim() || t('form.submit') }}
       </Button>
 

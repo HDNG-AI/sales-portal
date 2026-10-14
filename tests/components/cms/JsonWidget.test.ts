@@ -113,6 +113,19 @@ describe('JsonWidget routing', () => {
     );
   });
 
+  it('renders form widget for a named server endpoint without mailto fallback', () => {
+    const wrapper = mountJson({
+      formEndpoint: 'contact',
+      fields: [{ label: 'Email', name: 'email', required: true, type: 'email' }],
+    });
+    expect(wrapper.find('[data-testid="form-widget-stub"]').exists()).toBe(true);
+  });
+
+  it('does not render form widget for an arbitrary server destination', () => {
+    const wrapper = mountJson({ formEndpoint: 'https://attacker.example/send', fields: [] });
+    expect(wrapper.find('[data-testid="form-widget-stub"]').exists()).toBe(false);
+  });
+
   // W10: data with fields but no sendFormToEmail does not pass isFormWidgetData guard.
   it('does NOT render FormWidget when sendFormToEmail is missing', () => {
     const wrapper = mountJson({

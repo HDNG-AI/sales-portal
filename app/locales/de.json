@@ -978,6 +978,8 @@
     "field_required": "Dieses Feld ist erforderlich.",
     "invalid_email": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
     "select_placeholder": "Auswählen...",
-    "submit": "Senden"
+    "submit": "Senden",
+    "submit_success": "Danke — Ihre Nachricht wurde gesendet.",
+    "submit_failed": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut oder kontaktieren Sie uns telefonisch."
   }
 }
