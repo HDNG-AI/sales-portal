@@ -14,8 +14,9 @@
     "exact:    old path -> full new path, verbatim. Used for the VirtueMart",
     "          /produkter/manufacturer/<brand> listing shape.",
     "",
-    "UNREVIEWED ROWS ARE MARKED _review. A merchant must confirm these before",
-    "this map goes live; several are 'closest surviving parent', not equivalents."
+    "this map goes live; several are 'closest surviving parent', not equivalents.",
+    "Approved merchant decisions are included as overrides; remaining _review rows require Jorgen's sign-off.",
+    "ancestor: old path prefix -> approved explicit destination for old descendants (not arbitrary category catch-alls)."
   ],
   "category": {
     "/produkter/digital-switching": "digital-switching",
@@ -39,30 +40,24 @@
     "/produkter/stroemfoersoerjning": "stromforsorjning-1",
     "/produkter/stroemfoersoerjning/batterier-och-tillbehoer": "batterier-tillbehor",
     "/produkter/stroemfoersoerjning/distribution-av-el": "eldistribution",
-    "/produkter/stroemfoersoerjning/generering-av-stroem": "generatorer",
+    "/produkter/stroemfoersoerjning/generering-av-stroem": "stromforsorjning-1",
     "/produkter/stroemfoersoerjning/installationsmaterial": "installation-kabel",
-    "/produkter/stroemfoersoerjning/laddare-och-omvandlare": "batteriladdare",
+    "/produkter/stroemfoersoerjning/laddare-och-omvandlare": "stromforsorjning-1",
     "/produkter/stroemfoersoerjning/landstroem": "landstrom",
     "/kontroll-och-overvakning": "kontroll-overvakning",
     "/sakerhet": "sakerhet-1",
     "/stromforsorjning": "stromforsorjning-1",
     "_review": {
-      "/produkter/digital-switching/kontakter-och-hus": "no 1:1 target; nearest is installation-kabel/kontaktdon",
-      "/produkter/kontroll-ochovervakning/elektricitet-ac-dc": "split across several new categories; sent to the parent",
-      "/produkter/stroemfoersoerjning/generering-av-stroem": "old node covered generators AND solar; new 'generatorer' is narrower",
-      "/produkter/stroemfoersoerjning/laddare-och-omvandlare": "old node covered chargers AND inverters; new 'batteriladdare' is narrower",
-      "/produkter/utbildningar": "UNMAPPED — training pages have no catalog equivalent in Geins"
+      "/produkter/utbildningar": "PENDING Jorgen: training category has no verified new landing page. No redirect until reviewed."
     }
   },
   "brand": {
     "egis-mobile": "egis",
     "odelco": "odelco-diverse",
     "_review": {
-      "nelco": "UNMAPPED — no Geins brand",
-      "star": "UNMAPPED — no Geins brand",
-      "arco-marine": "verify: Geins alias is arco-marine, derived automatically",
-      "sol-go": "verify: Geins alias is sol-go, derived automatically"
-    }
+      "nelco": "PENDING Jorgen: brand exists in Geins but reportedly has no products; confirm whether to retain its empty brand landing page or define a replacement."
+    },
+    "star": "safiery"
   },
   "cms": {
     "/kontakt/kontakta-oss": "contact",
@@ -74,10 +69,7 @@
     "/feedback": "support-formular",
     "/service-support-och-reklamationer": "support-formular",
     "_review": {
-      "/blog": "UNMAPPED — no blog in Geins CMS; decide: rebuild, or 410",
-      "/in-english": "UNMAPPED — channel serves sv-SE only; no English locale exists yet",
-      "/det-har-ar-nmea-2000": "UNMAPPED — editorial article, no Geins page",
-      "/cookies -> integritetspolicy": "cookie policy folded into the privacy page; confirm with legal"
+      "/det-har-ar-nmea-2000": "PENDING Jorgen: NMEA 2000 article; Jonas proposes NMEA 2000 nätverk category, confirm editorial/SEO decision."
     }
   },
   "exact": {
@@ -89,9 +81,12 @@
     "/produkter/manufacturer/victron-energy": "/se/sv/b/victron-energy",
     "/produkter/manufacturer/yacht-devices": "/se/sv/b/yacht-devices",
     "/produkter": "/se/sv/products",
-    "_review": {
-      "/produkter": "all-products page (app/pages/products/index.vue). EXACT only, never an ancestor row — the ~30 discontinued root-level product URLs must 404/410 rather than soft-404 into a 3470-item list.",
-      "/varumarken": "UNMAPPED — sales-portal has no brand index page (no app/pages/b/index.vue). Build one, or accept the 404."
-    }
+    "_review": {},
+    "/varumarken": "/se/sv/varumarken",
+    "/in-english": "/se/sv/",
+    "/blog": "/se/sv/"
+  },
+  "ancestor": {
+    "/blog": "/se/sv/"
   }
 }
