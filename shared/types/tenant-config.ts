@@ -117,6 +117,8 @@ export interface TenantConfig {
      * independent — a tenant can default to ex-VAT and still allow switching.
      */
     vatDisplayLocked?: boolean | null;
+    /** Opt into semantic short/long/technical product copy placement. */
+    productTextPlacement?: 'legacy' | 'semantic' | null;
   } | null;
 
   // Features — keyed by feature name

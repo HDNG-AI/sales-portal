@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mountComponent } from '../../utils/component';
 import ProductTabs from '../../../app/components/product/ProductTabs.vue';
 import { makeListProduct } from '../../fixtures/product';
+import { useTenant } from '../../../app/composables/useTenant';
 
 const stubs = {
   Tabs: {
@@ -84,6 +85,43 @@ function makeProduct(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe('Tenant semantic product text placement', () => {
+  it('shows technical HTML under Specifications only when tenant opts into semantic placement', () => {
+    const { tenant } = useTenant();
+    const previous = tenant.value?.layout;
+    tenant.value = {
+      ...tenant.value!,
+      layout: { ...(previous ?? {}), productTextPlacement: 'semantic' },
+    };
+    try {
+      const wrapper = mountComponent(ProductTabs, {
+        props: {
+          product: makeProduct({
+            weight: 0,
+            parameterGroups: [],
+            texts: {
+              text1: '<p>Kort text</p>',
+              text2: '<p>Lång beskrivning</p>',
+              text3: '<ul><li>Tekniska data</li></ul>',
+            },
+          }),
+          related: [],
+        },
+        global: { stubs },
+      });
+      const labels = wrapper.findAll('.tabs-trigger').map((t) => t.text());
+      expect(labels).toContain('product.specifications');
+      const description = wrapper.find('.tabs-content[data-value="description"]');
+      expect(description.html()).toContain('Lång beskrivning');
+      expect(description.html()).not.toContain('Tekniska data');
+      const specs = wrapper.find('.tabs-content[data-value="specifications"]');
+      expect(specs.find('[data-testid="product-technical-text"]').text()).toContain('Tekniska data');
+    } finally {
+      tenant.value = { ...tenant.value!, layout: previous };
+    }
+  });
+});
 
 describe('ProductTabs', () => {
   it('renders details, specifications, documents triggers (no reviews)', () => {

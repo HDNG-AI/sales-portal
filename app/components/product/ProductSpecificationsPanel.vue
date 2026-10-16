@@ -2,13 +2,22 @@
 import type { ParameterGroupType } from '#shared/types/commerce';
 
 /** The specifications tab's body, shared by every product page's tab row. */
-defineProps<{ groups: ParameterGroupType[] }>();
+defineProps<{ groups: ParameterGroupType[]; technicalHtml?: string }>();
 </script>
 
 <template>
   <h3 class="font-heading mb-6 text-2xl font-bold">
     {{ $t('product.specifications') }}
   </h3>
+  <!-- The product API sanitizes all text fields before rendering. -->
+  <!-- eslint-disable vue/no-v-html -->
+  <div
+    v-if="technicalHtml"
+    class="prose mb-6 max-w-none"
+    data-testid="product-technical-text"
+    v-html="technicalHtml"
+  />
+  <!-- eslint-enable vue/no-v-html -->
   <div class="grid gap-8 md:grid-cols-2">
     <div
       v-for="group in groups"
