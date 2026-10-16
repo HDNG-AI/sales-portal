@@ -233,6 +233,9 @@ vi.mock('../app/composables/useTenant', () => {
       isCatalogMode: computed(() => mockIsCatalogMode.value),
       timezone: computed(() => tenant.value?.timezone),
       watermark: computed(() => tenant.value?.branding?.watermark ?? 'full'),
+      productTextPlacement: computed(
+        () => tenant.value?.layout?.productTextPlacement ?? 'legacy',
+      ),
       productMediaParameters: computed(
         () =>
           tenant.value?.productMediaParameters ??
