@@ -103,3 +103,8 @@ export type CreateTenantInput = z.infer<typeof CreateTenantSchema>;
 export const UpdateTenantTimezoneSchema = z
   .object({ timezone: TimezoneSchema })
   .strict();
+
+/** Portal-owned copy presentation mode (not a Geins PIM mutation). */
+export const UpdateTenantProductTextPlacementSchema = z
+  .object({ productTextPlacement: z.enum(['legacy', 'semantic']) })
+  .strict();

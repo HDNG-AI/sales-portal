@@ -158,6 +158,56 @@ export async function setTenantOperatingTimezone(
 }
 
 /**
+ * Narrow portal-owned presentation opt-in. Keep the Geins-managed tenant's
+ * source provenance intact and preserve existing CMS/timezone overrides.
+ * Neither generic onboarding nor ad-hoc edits to tenant:config are safe for
+ * remote tenants because Geins refresh overwrites the disposable cache.
+ */
+export async function setTenantProductTextPlacement(
+  hostname: string,
+  placement: 'legacy' | 'semantic',
+  event?: import('h3').H3Event,
+): Promise<{ tenantId: string; productTextPlacement: 'legacy' | 'semantic' } | null> {
+  if (placement !== 'legacy' && placement !== 'semantic') {
+    throw createAppError(ErrorCode.VALIDATION_ERROR, 'Invalid product text placement');
+  }
+  const existing = await resolveTenant(hostname, event);
+  if (!existing) return null;
+
+  const storage = useStorage('kv');
+  const key = tenantOverrideKey(existing.tenantId);
+  const previous = await storage.getItem<TenantPortalOverrides>(key);
+  await storage.setItem(key, {
+    ...(previous ?? {}),
+    layout: {
+      ...(previous?.layout ?? {}),
+      productTextPlacement: placement,
+    },
+  } satisfies TenantPortalOverrides);
+
+  const refreshKey = tenantRefreshStateKey(existing.tenantId);
+  const state = await storage.getItem<TenantRefreshState>(refreshKey);
+  if (state?.source === 'local') {
+    await storage.setItem(tenantConfigKey(existing.tenantId), {
+      ...existing,
+      layout: { ...(existing.layout ?? {}), productTextPlacement: placement },
+    });
+  } else {
+    await storage.setItem(refreshKey, {
+      checkedAt: 0,
+      source: state?.source ?? 'unknown',
+    } satisfies TenantRefreshState);
+  }
+
+  await invalidateTenantCaches(
+    existing.tenantId,
+    hostnamesToInvalidate(hostname, existing),
+    useStorage('cache'),
+  );
+  return { tenantId: existing.tenantId, productTextPlacement: placement };
+}
+
+/**
  * Applies a partial update onto a base tenant config: strips explicit
  * `undefined` keys (see withoutUndefined in ./object) before spreading so a
  * caller that omits a field can never blank out an existing/default value,

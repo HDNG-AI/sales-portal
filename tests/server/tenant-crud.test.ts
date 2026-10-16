@@ -9,6 +9,7 @@ import {
   deleteTenant,
   mergeCmsConfig,
   setTenantOperatingTimezone,
+  setTenantProductTextPlacement,
 } from '../../server/utils/tenant-crud';
 import {
   tenantConfigKey,
@@ -1182,5 +1183,92 @@ describe('persistent operating timezone overrides', () => {
     expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
       source: 'remote',
     });
+  });
+});
+
+describe('portal-owned product text placement (Odelco Victron)', () => {
+  it('overrides semantic placement without losing other tenant layout settings', () => {
+    const base = {
+      tenantId: 'odelco',
+      layout: { vatDisplay: 'ex', productTextPlacement: 'legacy' },
+      timezone: 'Europe/Stockholm',
+    } as TenantConfig;
+    const overridden = mergeTenantPortalOverrides(base, {
+      layout: { productTextPlacement: 'semantic' },
+    });
+    expect(overridden.layout).toMatchObject({
+      vatDisplay: 'ex',
+      productTextPlacement: 'semantic',
+    });
+    expect(base.layout?.productTextPlacement).toBe('legacy');
+    expect(mergeTenantPortalOverrides(base, null).layout?.productTextPlacement).toBe('legacy');
+  });
+
+  it('ignores malformed saved KV opt-ins, keeping the legacy mode', () => {
+    const base = {
+      tenantId: 'odelco',
+      layout: { productTextPlacement: 'legacy' },
+      timezone: 'Europe/Stockholm',
+    } as TenantConfig;
+    expect(mergeTenantPortalOverrides(base, {
+      layout: { productTextPlacement: 'bogus' as 'semantic' },
+    }).layout?.productTextPlacement).toBe('legacy');
+  });
+
+  it('persists the admin opt-in separately for a remote Geins tenant', async () => {
+    await createTenant({
+      hostname: 'staging-odelco.example.com',
+      tenantId: 'odelco',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+    kvStore.set(tenantRefreshStateKey('odelco'), {
+      checkedAt: Date.now(),
+      source: 'remote',
+    });
+    kvStore.set(tenantOverrideKey('odelco'), {
+      timezone: 'Europe/Stockholm',
+      cms: { menus: { header_main: { menuLocationId: 'primary' } } },
+    });
+
+    const result = await setTenantProductTextPlacement(
+      'staging-odelco.example.com',
+      'semantic',
+    );
+    expect(result).toEqual({
+      tenantId: 'odelco',
+      productTextPlacement: 'semantic',
+    });
+    expect(kvStore.get(tenantOverrideKey('odelco'))).toEqual({
+      timezone: 'Europe/Stockholm',
+      cms: { menus: { header_main: { menuLocationId: 'primary' } } },
+      layout: { productTextPlacement: 'semantic' },
+    });
+    expect(kvStore.get(tenantRefreshStateKey('odelco'))).toMatchObject({
+      source: 'remote', checkedAt: 0,
+    });
+    const merged = mergeTenantPortalOverrides(
+      kvStore.get(tenantConfigKey('odelco')) as TenantConfig,
+      kvStore.get(tenantOverrideKey('odelco')) as never,
+    );
+    expect(merged.layout?.productTextPlacement).toBe('semantic');
+    expect(merged.timezone).toBe('Europe/Stockholm');
+
+    await setTenantProductTextPlacement('staging-odelco.example.com', 'legacy');
+    expect(kvStore.get(tenantOverrideKey('odelco'))).toMatchObject({
+      layout: { productTextPlacement: 'legacy' },
+    });
+  });
+
+  it('rejects invalid placement values without a KV write', async () => {
+    await createTenant({
+      hostname: 'staging-odelco.example.com',
+      tenantId: 'odelco',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+    await expect(setTenantProductTextPlacement(
+      'staging-odelco.example.com',
+      'unsupported' as 'semantic',
+    )).rejects.toThrow();
+    expect(kvStore.has(tenantOverrideKey('odelco'))).toBe(false);
   });
 });
