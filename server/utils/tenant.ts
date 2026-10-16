@@ -319,6 +319,8 @@ export interface TenantPortalOverrides {
   cms?: TenantConfig['cms'];
   /** Per-tenant operating timezone retained independently of Geins cache. */
   timezone?: string;
+  /** A portal-owned PDP presentation override; does not mutate Geins. */
+  layout?: { productTextPlacement?: 'legacy' | 'semantic' };
 }
 
 /**
@@ -345,11 +347,20 @@ export function mergeTenantPortalOverrides(
     base.timezone && base.timezone !== 'UTC'
       ? base.timezone
       : (portalZone ?? APPROVED_TENANT_TIMEZONES[base.tenantId] ?? base.timezone);
-  if (!overrides?.cms && timezone === base.timezone) return base;
+  // Fail closed on malformed KV values. A tenant without the explicit
+  // override retains Geins's placement (or the storefront's legacy default).
+  const rawPlacement = overrides?.layout?.productTextPlacement;
+  const placement = rawPlacement === 'semantic' || rawPlacement === 'legacy'
+    ? rawPlacement
+    : undefined;
+  if (!overrides?.cms && timezone === base.timezone && !placement) return base;
 
   return {
     ...base,
     ...(timezone !== undefined ? { timezone } : {}),
+    ...(placement
+      ? { layout: { ...(base.layout ?? {}), productTextPlacement: placement } }
+      : {}),
     ...(overrides?.cms
       ? {
           cms: {
