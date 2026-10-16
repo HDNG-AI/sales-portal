@@ -9,7 +9,7 @@ tags: [routing, urls, seo, redirects, migration]
 
 Keeping bookmarks and inbound links working when odelco.se moves to sales-portal.
 
-**Implementation status (2026-10-14): proposal only; redirects are not installed or enabled.**
+**Updated status (2026-10-16): generator PR #16 and disabled-by-default middleware PR #48 are merged into `odelco-staging`; no redirect map has been activated.** See [Jonas's approved and Jörgen-pending decisions](./odelco-merchant-redirect-decisions-20261016.md). This is still a proposal for a future **controlled URL rollout**, not an activated migration.
 The 3,573-row count and 95.6% coverage below describe the 2026-09-21 crawl and
 Geins snapshot, **not a freshly regenerated or merchant-approved mapping**. The
 standalone generator has since been hardened for market-specific permitted languages,
