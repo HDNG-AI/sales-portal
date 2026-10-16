@@ -172,7 +172,7 @@ describe('merchant approved ancestors and Jorgen missing-product export', () => 
     expect(generated.articleNumber.a1).toBe('/se/sv/p/example-1');
 
     const csv = readFileSync(join(folder, 'map.missing-products.csv'), 'utf8');
-    const records = csv.trim().split('\\n');
+    const records = csv.trim().split('\n');
     expect(records).toHaveLength(3); // header + 2 unmatched product URLs
     expect(csv).toContain('https://example.test/produkter/oldsku-info');
     expect(csv).toContain('"oldsku","no"');
