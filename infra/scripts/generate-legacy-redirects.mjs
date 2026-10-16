@@ -286,6 +286,7 @@ export async function main() {
     brand: rows(rawOverrides.brand),
     cms: rows(rawOverrides.cms),
     exact: rows(rawOverrides.exact),
+    ancestor: rows(rawOverrides.ancestor),
   };
 
   const catByAlias = new Map(categories.map((x) => [x.alias.toLowerCase(), x]));
@@ -336,6 +337,14 @@ export async function main() {
     const key = normalizeLegacyPath(oldPath);
     map.exact[key] = to;
     map.ancestor[key] = to;
+  }
+
+  // Explicitly approved parent-path redirects (e.g. /blog and its posts).
+  // Do not turn the entire /produkter tree into a soft-404 fallback.
+  for (const [oldPath, target] of Object.entries(overrides.ancestor)) {
+    const from = normalizeLegacyPath(oldPath);
+    if (from === '/' || from === '/produkter') fail(`Unsafe broad ancestor redirect: ${from}`);
+    map.ancestor[from] = target;
   }
 
   // --- CMS: a Geins page alias that the old site also served at /<alias>
@@ -403,8 +412,33 @@ export async function main() {
     report,
     `${JSON.stringify({ total, covered, pct: +((covered / total) * 100).toFixed(1), byRule: { exact: cover.exact, articleNumber: cover.articleNumber, ancestor: cover.ancestor }, skipped, unmapped: cover.unmapped.sort() }, null, 1)}\n`,
   );
+  // The ordinary coverage report marks a child URL as covered when it falls
+  // back to a broad category. This separate report exposes every old -info
+  // leaf without an exact Geins article-number match, even under a mapped
+  // category, so the merchant can decide successor vs 404/410 for each SKU.
+  const missingProductPaths = [...seen].filter((path) => {
+    const leaf = path.slice(path.lastIndexOf('/') + 1);
+    return leaf.endsWith('-info') &&
+      !Object.prototype.hasOwnProperty.call(map.articleNumber, leaf.slice(0, -5));
+  }).sort();
+  const oldOrigin = (() => {
+    try { return new URL(channel.url).origin; } catch { return ''; }
+  })();
+  const missingCsv = `${out.replace(/\\.json$/, '')}.missing-products.csv`;
+  const csvCell = (value) => `"${String(value).replaceAll('"', '""')}"`;
+  const productRows = missingProductPaths.map((path) => {
+    const leaf = path.slice(path.lastIndexOf('/') + 1);
+    return [oldOrigin ? `${oldOrigin}${path}` : path, path, leaf.slice(0, -5),
+      resolveLegacyPath(map, path)?.via === 'ancestor' ? 'yes' : 'no'];
+  });
+  writeFileSync(missingCsv, [
+    'old_url,old_path,legacy_article_number_or_slug,ancestor_fallback',
+    ...productRows.map((row) => row.map(csvCell).join(',')),
+  ].join('\\n') + '\\n');
+  console.error(`[generate-redirects] old product URLs missing direct article match: ${productRows.length} -> ${missingCsv}`);
+
   console.error(
-    `[generate-redirects] coverage ${covered}/${total} (${((covered / total) * 100).toFixed(1)}%) ` +
+    `[generate-redirects] coverage ${covered}/${total}` (${((covered / total) * 100).toFixed(1)}%) ` +
       `exact=${cover.exact} articleNumber=${cover.articleNumber} ancestor=${cover.ancestor} -> ${report}`,
   );
 }
