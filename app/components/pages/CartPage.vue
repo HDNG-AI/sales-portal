@@ -3,6 +3,7 @@ import { ShoppingCart, Tag, X } from 'lucide-vue-next';
 import { Button } from '~/components/ui/button';
 import { useCartStore } from '~/stores/cart';
 import { formatPrice } from '#shared/types/commerce';
+import { formatCartSummaryAmount } from '#shared/utils/cart-summary-price';
 
 const cartStore = useCartStore();
 const router = useRouter();
@@ -18,25 +19,22 @@ onMounted(() => {
   }
 });
 
-// Summary price computeds: pick incl-VAT or excl-VAT based on user preference.
-// sellingPriceExVatFormatted is optional on PriceType, so fall back to IncVat when absent.
-const subTotalFormatted = computed(() => {
-  const s = cartStore.cart?.summary?.subTotal;
-  return (
-    (showIncVat.value
-      ? s?.sellingPriceIncVatFormatted
-      : (s?.sellingPriceExVatFormatted ?? s?.sellingPriceIncVatFormatted)) ?? ''
-  );
-});
+// Use exactly the same VAT basis as the product card and each cart line.
+const subTotalFormatted = computed(() =>
+  formatCartSummaryAmount(
+    cartStore.cart?.summary?.subTotal,
+    showIncVat.value,
+    formatLocale.value,
+  ),
+);
 
-const totalFormatted = computed(() => {
-  const t = cartStore.cart?.summary?.total;
-  return (
-    (showIncVat.value
-      ? t?.sellingPriceIncVatFormatted
-      : (t?.sellingPriceExVatFormatted ?? t?.sellingPriceIncVatFormatted)) ?? ''
-  );
-});
+const totalFormatted = computed(() =>
+  formatCartSummaryAmount(
+    cartStore.cart?.summary?.total,
+    showIncVat.value,
+    formatLocale.value,
+  ),
+);
 
 const shippingFee = computed(
   () => cartStore.cart?.summary?.shipping?.feeIncVatFormatted ?? null,
