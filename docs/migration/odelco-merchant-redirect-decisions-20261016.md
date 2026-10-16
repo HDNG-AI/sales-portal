@@ -23,7 +23,7 @@ acceptance, and release approval are required.
 | `/varumarken/star` | Brand `safiery` — STAR is a Safiery product series, not a standalone brand |
 | `/produkter/digital-switching/kontakter-och-hus` | Keep closest `kontaktdon` category |
 | `/produkter/kontroll-ochovervakning/elektricitet-ac-dc` | Keep `kontroll-overvakning` parent |
-| `/produkter/stroemfoersoerjning/generering-av-stroem` | Change from narrower `generatorer` to broader `stromforsorjning-1` category |
+| `/produkter/stroemfoersoerjning/generering-av-stroem` | Change from narrower `generatorer` to broader `stromforsorjning` category |
 | `/produkter/stroemfoersoerjning/laddare-och-omvandlare` | Change from narrower `batteriladdare` to broader `stromforsorjning-1` |
 | `/produkter` | Keep existing exact `/se/sv/products`; never a catch-all ancestor for missing products |
 
@@ -34,6 +34,16 @@ Search Console shows high-value posts with more relevant replacement content.
 Avoid preserving old VirtueMart `clearCart`, `layout`, etc. query parameters at
 rollout: the middleware currently preserves the query and needs a separate
 sanitization/attribution decision before activation.
+
+### Current category alias check (staging, 16 October)
+
+Read-only category API checks confirmed that `stromforsorjning-1` now resolves
+to the canonical published alias `stromforsorjning` and `sakerhet-1` resolves
+to `sakerhet`. All 21 distinct category aliases referenced by our overrides
+were checked: these were the only two stale aliases. The override file now
+uses the current published aliases, so fresh Geins regeneration will not
+silently skip those rows. This check is not equivalent to a successful map
+regeneration and does not authorize redirect activation.
 
 ## Still awaiting Jörgen (do not guess)
 
