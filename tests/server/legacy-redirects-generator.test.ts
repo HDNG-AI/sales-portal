@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // Import the standalone Node ESM generator as a regular test module.
@@ -140,6 +140,59 @@ describe('legacy redirect generator: stable complete paging before writes', () =
       ? { count: 201, products: first }
       : { count: 202, products: [product(201), product(202)] });
     await expect(main()).rejects.toThrow(/count changed during paging/);
+    expect(existsSync(join(folder, 'map.json'))).toBe(false);
+  });
+});
+
+
+describe('merchant approved ancestors and Jorgen missing-product export', () => {
+  it('maps /blog and descendants to home while listing each old product without direct Geins article match', async () => {
+    const overrides = join(folder, 'overrides.json');
+    const inventory = join(folder, 'crawl.json');
+    writeFileSync(overrides, JSON.stringify({
+      exact: { '/blog': '/se/sv/', '/in-english': '/se/sv/' },
+      ancestor: {
+        '/blog': '/se/sv/',
+        '/produkter/digital-switching': '/se/sv/c/digital-switching',
+      },
+    }));
+    writeFileSync(inventory, JSON.stringify({ all_discovered: [
+      '/blog', '/blog/tips/old-news',
+      '/produkter/A1-info',
+      '/produkter/OLDSKU-info',
+      '/produkter/digital-switching/ANOTHER-info',
+    ] }));
+    process.argv.push('--overrides', overrides, '--inventory', inventory);
+    mockApi(() => ({ count: 1, products: [product(1)] }));
+    await main();
+
+    const generated = JSON.parse(readFileSync(join(folder, 'map.json'), 'utf8'));
+    expect(generated.exact['/blog']).toBe('/se/sv/');
+    expect(generated.ancestor['/blog']).toBe('/se/sv/');
+    expect(generated.articleNumber.a1).toBe('/se/sv/p/example-1');
+
+    const csv = readFileSync(join(folder, 'map.missing-products.csv'), 'utf8');
+    const records = csv.trim().split('\\n');
+    expect(records).toHaveLength(3); // header + 2 unmatched product URLs
+    expect(csv).toContain('https://example.test/produkter/oldsku-info');
+    expect(csv).toContain('"oldsku","no"');
+    expect(csv).toContain('https://example.test/produkter/digital-switching/another-info');
+    expect(csv).toContain('"another","yes"');
+    expect(csv).not.toContain('/produkter/a1-info');
+
+    const coverage = JSON.parse(readFileSync(join(folder, 'map.coverage.json'), 'utf8'));
+    expect(coverage.byRule.ancestor).toBe(2); // blog post + unmatched category descendant
+    expect(coverage.unmapped).toContain('/produkter/oldsku-info');
+  });
+
+  it('refuses an accidental /produkter ancestor redirect that would hide product 404s', async () => {
+    const overrides = join(folder, 'overrides.json');
+    writeFileSync(overrides, JSON.stringify({
+      ancestor: { '/produkter': '/se/sv/products' },
+    }));
+    process.argv.push('--overrides', overrides);
+    mockApi(() => ({ count: 1, products: [product(1)] }));
+    await expect(main()).rejects.toThrow(/Unsafe broad ancestor redirect/);
     expect(existsSync(join(folder, 'map.json'))).toBe(false);
   });
 });
