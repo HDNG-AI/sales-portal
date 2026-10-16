@@ -196,6 +196,34 @@ describe('ProductCard', () => {
     expect(wrapper.find('.geins-image').exists()).toBe(true);
   });
 
+  it.each(['grid', 'list'] as const)(
+    'keeps product images in %s cards when anonymous pricing removes unitPrice',
+    (variant) => {
+      // Matches the real /api/product-lists/products redacted response:
+      // productId + productImages are present, but unitPrice is removed.
+      const redacted = makeProduct();
+      delete (redacted as { unitPrice?: unknown }).unitPrice;
+      mockIsAuthenticated.value = false;
+      setFeatures({
+        priceVisibility: { enabled: true, access: 'authenticated' },
+        orderPlacement: { enabled: true, access: 'authenticated' },
+      });
+      mockCanAccess.mockReturnValue(false);
+
+      const wrapper = mountComponent(ProductCard, {
+        props: { product: redacted, variant },
+        global: { stubs },
+      });
+
+      expect(wrapper.find('.geins-image').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="image-fallback"]').exists()).toBe(false);
+      expect(wrapper.find('.price-display').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="price"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="add-to-cart-button"]').exists()).toBe(false);
+      expect(wrapper.find('.stock-badge').exists()).toBe(true);
+    },
+  );
+
   it('renders PriceDisplay with unitPrice', () => {
     const wrapper = mountComponent(ProductCard, {
       props: { product: makeProduct() },

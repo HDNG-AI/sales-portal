@@ -1,0 +1,92 @@
+{
+  "_README": [
+    "Hand-curated input to generate-legacy-redirects.mjs for the odelco tenant.",
+    "Everything here is a HUMAN JUDGEMENT the Geins API cannot supply: the old",
+    "VirtueMart taxonomy was reorganised during migration, so old and new slugs",
+    "do not correspond by any string rule (7% auto-match — see docs/migration/odelco-legacy-redirects.md).",
+    "",
+    "category: old VirtueMart path -> Geins category ALIAS. Each row also becomes",
+    "          an ancestor-fallback for every descendant of that path, which is",
+    "          how ~32 curated rows cover 217 crawled category paths.",
+    "brand:    old /varumarken/<slug> -> Geins brand ALIAS (only where they differ;",
+    "          identical aliases are derived automatically).",
+    "cms:      old path -> Geins CMS page ALIAS.",
+    "exact:    old path -> full new path, verbatim. Used for the VirtueMart",
+    "          /produkter/manufacturer/<brand> listing shape.",
+    "",
+    "this map goes live; several are 'closest surviving parent', not equivalents.",
+    "Approved merchant decisions are included as overrides; remaining _review rows require Jorgen's sign-off.",
+    "ancestor: old path prefix -> approved explicit destination for old descendants (not arbitrary category catch-alls)."
+  ],
+  "category": {
+    "/produkter/digital-switching": "digital-switching",
+    "/produkter/digital-switching/knappar-och-paneler": "knappar-paneler",
+    "/produkter/digital-switching/stroem-och-styrmoduler": "styrmoduler",
+    "/produkter/digital-switching/nmea-2000-naetverk": "nmea-2000-natverk",
+    "/produkter/digital-switching/kontakter-och-hus": "kontaktdon",
+    "/produkter/kontroll-ochovervakning": "kontroll-overvakning",
+    "/produkter/kontroll-ochovervakning/batterioevervakning": "batteriovervakning",
+    "/produkter/kontroll-ochovervakning/larm-och-kommunikation": "larm-kommunikation",
+    "/produkter/kontroll-ochovervakning/motordata": "motorovervakning",
+    "/produkter/kontroll-ochovervakning/nmea-2000-naetverk": "nmea-2000-natverk",
+    "/produkter/kontroll-ochovervakning/signalomvandlare": "gateways-omvandlare",
+    "/produkter/kontroll-ochovervakning/skaermar-datorer-och-program": "skarmar-displayer",
+    "/produkter/kontroll-ochovervakning/tankmaetning": "tank-nivamatning",
+    "/produkter/kontroll-ochovervakning/elektricitet-ac-dc": "kontroll-overvakning",
+    "/produkter/saekerhet": "sakerhet",
+    "/produkter/saekerhet/ais-produkter": "ais-produkter",
+    "/produkter/saekerhet/noedsaendare-ljus-och-vhf": "nodsandare-epirb",
+    "/produkter/saekerhet/vaermekameror": "varmekameror",
+    "/produkter/stroemfoersoerjning": "stromforsorjning",
+    "/produkter/stroemfoersoerjning/batterier-och-tillbehoer": "batterier-tillbehor",
+    "/produkter/stroemfoersoerjning/distribution-av-el": "eldistribution",
+    "/produkter/stroemfoersoerjning/generering-av-stroem": "stromforsorjning",
+    "/produkter/stroemfoersoerjning/installationsmaterial": "installation-kabel",
+    "/produkter/stroemfoersoerjning/laddare-och-omvandlare": "stromforsorjning",
+    "/produkter/stroemfoersoerjning/landstroem": "landstrom",
+    "/kontroll-och-overvakning": "kontroll-overvakning",
+    "/sakerhet": "sakerhet",
+    "/stromforsorjning": "stromforsorjning",
+    "_review": {
+      "/produkter/utbildningar": "PENDING Jorgen: training category has no verified new landing page. No redirect until reviewed."
+    }
+  },
+  "brand": {
+    "egis-mobile": "egis",
+    "odelco": "odelco-diverse",
+    "_review": {
+      "nelco": "PENDING Jorgen: brand exists in Geins but reportedly has no products; confirm whether to retain its empty brand landing page or define a replacement."
+    },
+    "star": "safiery"
+  },
+  "cms": {
+    "/kontakt/kontakta-oss": "contact",
+    "/kontakt/contact-us": "contact",
+    "/kontakt/bli-kund": "bli-kund",
+    "/login/begaer-inloggningsuppgifter": "bli-kund",
+    "/allmanna-forsaljningsvillkor": "allmanna-villkor",
+    "/cookies": "integritetspolicy",
+    "/feedback": "support-formular",
+    "/service-support-och-reklamationer": "support-formular",
+    "_review": {
+      "/det-har-ar-nmea-2000": "PENDING Jorgen: NMEA 2000 article; Jonas proposes NMEA 2000 nätverk category, confirm editorial/SEO decision."
+    }
+  },
+  "exact": {
+    "/produkter/manufacturer/actisense": "/se/sv/b/actisense",
+    "/produkter/manufacturer/blue-sea-systems": "/se/sv/b/blue-sea-systems",
+    "/produkter/manufacturer/maretron": "/se/sv/b/maretron",
+    "/produkter/manufacturer/murphy": "/se/sv/b/murphy",
+    "/produkter/manufacturer/veratron": "/se/sv/b/veratron",
+    "/produkter/manufacturer/victron-energy": "/se/sv/b/victron-energy",
+    "/produkter/manufacturer/yacht-devices": "/se/sv/b/yacht-devices",
+    "/produkter": "/se/sv/products",
+    "_review": {},
+    "/varumarken": "/se/sv/varumarken",
+    "/in-english": "/se/sv/",
+    "/blog": "/se/sv/"
+  },
+  "ancestor": {
+    "/blog": "/se/sv/"
+  }
+}
