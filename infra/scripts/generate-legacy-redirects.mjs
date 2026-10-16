@@ -424,7 +424,7 @@ export async function main() {
   const oldOrigin = (() => {
     try { return new URL(channel.url).origin; } catch { return ''; }
   })();
-  const missingCsv = `${out.replace(/\\.json$/, '')}.missing-products.csv`;
+  const missingCsv = `${out.replace(/\.json$/, '')}.missing-products.csv`;
   const csvCell = (value) => `"${String(value).replaceAll('"', '""')}"`;
   const productRows = missingProductPaths.map((path) => {
     const leaf = path.slice(path.lastIndexOf('/') + 1);
@@ -434,11 +434,11 @@ export async function main() {
   writeFileSync(missingCsv, [
     'old_url,old_path,legacy_article_number_or_slug,ancestor_fallback',
     ...productRows.map((row) => row.map(csvCell).join(',')),
-  ].join('\\n') + '\\n');
+  ].join('\n') + '\n');
   console.error(`[generate-redirects] old product URLs missing direct article match: ${productRows.length} -> ${missingCsv}`);
 
   console.error(
-    `[generate-redirects] coverage ${covered}/${total}` (${((covered / total) * 100).toFixed(1)}%) ` +
+    `[generate-redirects] coverage ${covered}/${total} (${((covered / total) * 100).toFixed(1)}%) ` +
       `exact=${cover.exact} articleNumber=${cover.articleNumber} ancestor=${cover.ancestor} -> ${report}`,
   );
 }
