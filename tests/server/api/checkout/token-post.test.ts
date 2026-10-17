@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 type AnyFn = (...args: unknown[]) => unknown;
+const { mockRequiresBuyer, mockVerifyBuyer } = vi.hoisted(() => ({
+  mockRequiresBuyer: vi.fn(),
+  mockVerifyBuyer: vi.fn(),
+}));
+vi.mock('../../../../server/utils/checkout-access', () => ({
+  requiresVerifiedCheckoutBuyer: mockRequiresBuyer,
+  requireVerifiedCheckoutBuyer: mockVerifyBuyer,
+}));
 
 // Mock checkout service
 const mockCreateToken = vi.fn();
@@ -12,6 +20,7 @@ vi.mock('../../../../server/services/checkout', () => ({
 
 // Stub Nitro / h3 auto-imports
 vi.stubGlobal('defineEventHandler', (fn: AnyFn) => fn);
+vi.stubGlobal('setResponseHeader', vi.fn());
 vi.stubGlobal(
   'readValidatedBody',
   vi.fn(async (_event: unknown, parseFn: (input: unknown) => unknown) => {
@@ -33,13 +42,14 @@ vi.stubGlobal(
   vi.fn((code: string, msg: string) => {
     const err = new Error(msg) as Error & { statusCode: number; code: string };
     err.statusCode =
-      code === 'UNAUTHORIZED' ? 401 : code === 'BAD_REQUEST' ? 400 : 500;
+      code === 'UNAUTHORIZED' ? 401 : code === 'BAD_REQUEST' ? 400 : code === 'FORBIDDEN' ? 403 : 500;
     err.code = code;
     return err;
   }),
 );
 vi.stubGlobal('ErrorCode', {
   UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
   BAD_REQUEST: 'BAD_REQUEST',
   NOT_FOUND: 'NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
@@ -90,6 +100,8 @@ function makeMockEvent(
 describe('POST /api/checkout/token', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRequiresBuyer.mockReturnValue(false);
+    mockVerifyBuyer.mockResolvedValue(undefined);
     for (const k of Object.keys(mockCookies)) mockCookies[k] = undefined;
     mockCookies.market = 'se';
     mockCookies.locale = 'sv';
@@ -110,6 +122,34 @@ describe('POST /api/checkout/token', () => {
         return parseFn(event.__body ?? {});
       },
     );
+  });
+
+  it('denies hosted-token creation for custom-checkout tenants', async () => {
+    const event = makeMockEvent({
+      body: { cartId: 'cart-custom' },
+      tenantConfig: { tenantId: 'odelco', checkoutMode: 'custom' },
+    });
+    const { default: handler } = await import('../../../../server/api/checkout/token.post');
+    await expect(handler(event)).rejects.toMatchObject({ statusCode: 403 });
+    expect(mockGetCheckout).not.toHaveBeenCalled();
+    expect(mockCreateToken).not.toHaveBeenCalled();
+  });
+
+  it('requires a verified buyer for private hosted checkout', async () => {
+    mockRequiresBuyer.mockReturnValue(true);
+    mockVerifyBuyer.mockRejectedValue(Object.assign(new Error('Unauthorized'), { statusCode: 401 }));
+    const event = makeMockEvent({ body: { cartId: 'cart-private-hosted' } });
+    const { default: handler } = await import('../../../../server/api/checkout/token.post');
+    await expect(handler(event)).rejects.toMatchObject({ statusCode: 401 });
+    expect(mockCreateToken).not.toHaveBeenCalled();
+  });
+
+  it('preserves public hosted guest checkout and no-store token response', async () => {
+    const event = makeMockEvent({ body: { cartId: 'cart-public-hosted' } });
+    const { default: handler } = await import('../../../../server/api/checkout/token.post');
+    await handler(event);
+    expect(mockVerifyBuyer).not.toHaveBeenCalled();
+    expect(setResponseHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'private, no-store');
   });
 
   it('returns token and checkoutUrl on success', async () => {
