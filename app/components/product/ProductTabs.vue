@@ -256,6 +256,25 @@ onMounted(() => {
 
 <template>
   <div data-testid="product-tabs">
+    <!-- Feature the first product film without requiring the Documents tab. -->
+    <section
+      v-if="videoItems[0]?.embedUrl"
+      class="bg-card mb-6 rounded-lg border p-4 md:p-6"
+      data-testid="product-featured-video"
+    >
+      <h2 class="font-heading mb-4 text-xl font-semibold">
+        {{ locale === 'sv' ? 'Film' : 'Video' }}
+      </h2>
+      <iframe
+        :src="videoItems[0].embedUrl"
+        :title="product.name + ' – video'"
+        loading="lazy"
+        allow="fullscreen; picture-in-picture"
+        allowfullscreen
+        referrerpolicy="strict-origin-when-cross-origin"
+        class="aspect-video w-full rounded-lg border-0"
+      />
+    </section>
     <!-- Desktop: Tabs (hidden below md via CSS to avoid SSR/client flash) -->
     <Tabs class="hidden md:block" :default-value="defaultTab">
       <TabsList variant="underline">
