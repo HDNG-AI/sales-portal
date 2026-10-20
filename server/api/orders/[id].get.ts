@@ -13,6 +13,12 @@ export default defineEventHandler(async (event) => {
   const { id: validatedId } = OrderIdSchema.parse({ id });
   return withErrorHandling(
     async () => {
+      // Verify visibility in the authenticated company's order list before
+      // reading details via Geins getOrderPublic(publicOrderId).
+      const visible = await ordersService.listOrders(event);
+      if (!visible.orders.some((item) => item.publicId === validatedId)) {
+        throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
+      }
       const order = await ordersService.getOrder(
         { publicOrderId: validatedId },
         event,

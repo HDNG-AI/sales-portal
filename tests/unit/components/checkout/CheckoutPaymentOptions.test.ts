@@ -16,6 +16,19 @@ vi.stubGlobal('useI18n', () => ({
   locale: ref('en'),
 }));
 
+vi.mock('../../../../app/composables/useVatDisplay', () => ({
+  useVatDisplay: () => ({
+    showIncVat: ref(false),
+  }),
+}));
+
+vi.mock('../../../../app/composables/useFormatLocale', () => ({
+  useFormatLocale: () => ({
+    formatLocale: ref('sv-SE'),
+  }),
+}));
+
+
 const CheckoutPaymentOptions =
   await import('../../../../app/components/checkout/CheckoutPaymentOptions.vue');
 

@@ -211,3 +211,8 @@ export interface CommittedConfiguration {
   unitPrice: Money;
   summary: ConfigurationSummaryLine[];
 }
+
+export interface ConfigurationChoices {
+  variables: { id: string; value: ConfigurationValue }[];
+  options: { id: string; instanceId: string; quantity: number }[];
+}

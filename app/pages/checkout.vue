@@ -19,6 +19,7 @@ import { Label } from '~/components/ui/label';
 import { Checkbox } from '~/components/ui/checkbox';
 import { Card, CardContent } from '~/components/ui/card';
 import CheckoutCardHeader from '~/components/checkout/CheckoutCardHeader.vue';
+import { formatCartSummaryAmount } from '#shared/utils/cart-summary-price';
 
 definePageMeta({
   layout: 'checkout',
@@ -124,25 +125,52 @@ if (isCompanyUser.value && companyData.value) {
   checkoutStore.prefillFromCompany(companyData.value);
 }
 
-// Cart summary computeds (read from cart store — do NOT duplicate)
-const subtotal = computed(
-  () => cartStore.cart?.summary?.subTotal?.sellingPriceIncVatFormatted ?? '',
+// Cart summary computeds — always respect the buyer's VAT selection.
+const { showIncVat } = useVatDisplay();
+const cartSummary = computed(() => cartStore.cart?.summary);
+
+const subtotal = computed(() =>
+  formatCartSummaryAmount(
+    cartSummary.value?.subTotal,
+    showIncVat.value,
+    formatLocale.value,
+  ),
 );
-const shippingFee = computed(
-  () => cartStore.cart?.summary?.shipping?.feeIncVatFormatted || null,
+
+const shippingFee = computed(() =>
+  (showIncVat.value
+    ? cartSummary.value?.shipping?.feeIncVatFormatted
+    : cartSummary.value?.shipping?.feeExVatFormatted) || null,
 );
+
 const tax = computed(
-  () => cartStore.cart?.summary?.total?.vatFormatted || null,
+  () => cartSummary.value?.total?.vatFormatted || null,
 );
-const total = computed(
-  () => cartStore.cart?.summary?.total?.sellingPriceIncVatFormatted ?? '',
+
+const total = computed(() =>
+  formatCartSummaryAmount(
+    cartSummary.value?.total,
+    showIncVat.value,
+    formatLocale.value,
+  ),
+);
+
+const toPayIncVat = computed(() =>
+  (cartSummary.value?.total?.sellingPriceIncVat ?? 0) > 0
+    ? cartSummary.value?.total?.sellingPriceIncVatFormatted || undefined
+    : undefined,
 );
 const discountFormatted = computed(() => {
-  if (!cartStore.discountAmount) return '';
-  const currency = cartStore.cart?.summary?.total?.currency;
+  const amount = showIncVat.value
+    ? cartSummary.value?.fixedAmountDiscountIncVat
+    : cartSummary.value?.fixedAmountDiscountExVat;
+
+  if (amount == null || !Number.isFinite(amount) || amount === 0)
+    return '';
+
   return formatPrice(
-    cartStore.discountAmount,
-    currency?.code,
+    amount,
+    cartSummary.value?.total?.currency?.code,
     formatLocale.value,
   );
 });
@@ -407,6 +435,7 @@ async function handlePlaceOrder() {
               <CardContent class="px-6">
                 <CheckoutPaymentOptions
                   :options="checkoutStore.paymentOptions"
+                  :currency-code="cartSummary?.total?.currency?.code"
                   :model-value="checkoutStore.selectedPaymentId"
                   :disabled="checkoutStore.isPlacingOrder"
                   @update:model-value="checkoutStore.selectedPaymentId = $event"
@@ -464,6 +493,7 @@ async function handlePlaceOrder() {
               :shipping-fee="shippingFee"
               :tax="tax"
               :total="total"
+              :to-pay-inc-vat="toPayIncVat"
               :discount="discountFormatted || undefined"
               :can-place-order="
                 checkoutStore.canPlaceOrder && !checkoutStore.isBlacklisted

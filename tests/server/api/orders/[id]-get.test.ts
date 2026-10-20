@@ -9,9 +9,10 @@ vi.mock('../../../../server/utils/auth', () => ({
 
 // Mock orders service
 const mockGetOrder = vi.fn();
+const mockListOrders = vi.fn();
 vi.mock('../../../../server/services/orders', () => ({
   getOrder: (...args: unknown[]) => mockGetOrder(...args),
-  listOrders: vi.fn(),
+  listOrders: (...args: unknown[]) => mockListOrders(...args),
 }));
 
 // Stub auto-imports
@@ -58,6 +59,7 @@ describe('GET /api/orders/[id]', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockListOrders.mockResolvedValue({ orders: [{ publicId: 'abc-123' }], total: 1 });
     handler = (await import('../../../../server/api/orders/[id].get'))
       .default as unknown as (event: H3Event) => Promise<unknown>;
   });
@@ -70,6 +72,29 @@ describe('GET /api/orders/[id]', () => {
     mockRequireAuth.mockRejectedValueOnce(authError);
 
     await expect(handler(mockEvent)).rejects.toThrow('Authentication required');
+    expect(mockGetOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects a foreign order before fetching any public order detail', async () => {
+    mockRequireAuth.mockResolvedValueOnce({ authToken: 'token', refreshToken: 'refresh' });
+    mockedGetRouterParam.mockReturnValueOnce('foreign-order');
+    await expect(handler(mockEvent)).rejects.toThrow('Order not found');
+    expect(mockGetOrder).not.toHaveBeenCalled();
+  });
+
+  it('denies detail access when the current company has no visible orders', async () => {
+    mockRequireAuth.mockResolvedValueOnce({ authToken: 'token', refreshToken: 'refresh' });
+    mockedGetRouterParam.mockReturnValueOnce('abc-123');
+    mockListOrders.mockResolvedValueOnce({ orders: [], total: 0 });
+    await expect(handler(mockEvent)).rejects.toThrow('Order not found');
+    expect(mockGetOrder).not.toHaveBeenCalled();
+  });
+
+  it('fails closed if the company order list is unavailable', async () => {
+    mockRequireAuth.mockResolvedValueOnce({ authToken: 'token', refreshToken: 'refresh' });
+    mockedGetRouterParam.mockReturnValueOnce('abc-123');
+    mockListOrders.mockRejectedValueOnce(new Error('company lookup unavailable'));
+    await expect(handler(mockEvent)).rejects.toThrow('company lookup unavailable');
     expect(mockGetOrder).not.toHaveBeenCalled();
   });
 
@@ -104,6 +129,7 @@ describe('GET /api/orders/[id]', () => {
       refreshToken: 'refresh',
     });
     mockedGetRouterParam.mockReturnValueOnce('nonexistent');
+    mockListOrders.mockResolvedValueOnce({ orders: [{ publicId: 'nonexistent' }], total: 1 });
     mockGetOrder.mockResolvedValueOnce(undefined);
 
     await expect(handler(mockEvent)).rejects.toThrow('Order not found');

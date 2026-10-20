@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { mountComponent } from '../../utils/component';
+import { mockShowIncVat } from '../../setup-components';
+import { nextTick } from 'vue';
 import CheckoutOrderSummary from '../../../app/components/checkout/CheckoutOrderSummary.vue';
 import CheckoutPaymentOptions from '../../../app/components/checkout/CheckoutPaymentOptions.vue';
 import CheckoutShippingOptions from '../../../app/components/checkout/CheckoutShippingOptions.vue';
@@ -210,14 +212,13 @@ describe('CheckoutOrderSummary', () => {
     ).toBe(false);
   });
 
-  // The cart API sends an empty fee string until a shipping option is selected,
-  // and nothing at all when it has no value. Both mean "no number yet", and
-  // both render as an empty cell — no placeholder, and nothing that reads as a
-  // number. Subtotal and total keep theirs; they always have a value.
+  // A missing shipping fee means it may be added later.
+  // Never imply free shipping when no fee has been determined.
+  // Missing tax values must still remain empty.
   it.each([
     ['empty strings', '' as string | null],
     ['null', null],
-  ])('leaves the shipping and tax cells empty for %s', (_label, value) => {
+  ])('shows pending shipping and empty tax for %s', (_label, value) => {
     const wrapper = mountComponent(CheckoutOrderSummary, {
       props: {
         itemCount: 3,
@@ -234,7 +235,7 @@ describe('CheckoutOrderSummary', () => {
 
     expect(
       wrapper.find('[data-testid="checkout-summary-shipping"]').text(),
-    ).toBe('');
+    ).toBe('common.shipping_may_apply');
     expect(wrapper.find('[data-testid="checkout-summary-tax"]').text()).toBe(
       '',
     );
@@ -268,7 +269,7 @@ describe('CheckoutOrderSummary', () => {
     );
   });
 
-  it('shows the placeholder for a missing subtotal and total only', () => {
+  it('shows placeholders for missing totals and pending shipping', () => {
     const wrapper = mountComponent(CheckoutOrderSummary, {
       props: {
         itemCount: 0,
@@ -296,7 +297,7 @@ describe('CheckoutOrderSummary', () => {
     // content, so nothing on screen claims to be a number.
     expect(
       wrapper.find('[data-testid="checkout-summary-shipping"]').text(),
-    ).toBe('');
+    ).toBe('common.shipping_may_apply');
     expect(wrapper.find('[data-testid="checkout-summary-tax"]').text()).toBe(
       '',
     );
@@ -473,6 +474,164 @@ describe('CheckoutShippingOptions', () => {
     });
 
     expect(wrapper.text()).toContain('checkout.no_shipping_methods');
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Checkout VAT fee regressions
+// ---------------------------------------------------------------------------
+describe('Checkout fee VAT regressions', () => {
+  it('shows the formatted shipping amount for the default VAT selection', () => {
+    const wrapper = mountComponent(CheckoutShippingOptions, {
+      props: {
+        options: mockShippingOptions,
+        modelValue: 10,
+        disabled: false,
+      },
+      global: { stubs },
+    });
+
+    expect(
+      wrapper.find('[data-testid="shipping-option-10"]').text(),
+    ).toContain('49,00 kr');
+  });
+
+  it('shows free shipping only for an explicit zero fee', () => {
+    const wrapper = mountComponent(CheckoutShippingOptions, {
+      props: {
+        options: mockShippingOptions,
+        modelValue: 11,
+        disabled: false,
+      },
+      global: { stubs },
+    });
+
+    expect(
+      wrapper.find('[data-testid="shipping-option-11"]').text(),
+    ).toContain('checkout.free_shipping');
+  });
+
+  it('does not invent a payment fee when currency is missing', () => {
+    const wrapper = mountComponent(CheckoutPaymentOptions, {
+      props: {
+        options: mockPaymentOptions,
+        modelValue: 2,
+        disabled: false,
+      },
+      global: { stubs },
+    });
+
+    expect(
+      wrapper.find('[data-testid="payment-option-2"]').text(),
+    ).not.toContain('SEK');
+  });
+
+  it('formats payment fees using the supplied order currency', () => {
+    const wrapper = mountComponent(CheckoutPaymentOptions, {
+      props: {
+        options: mockPaymentOptions,
+        currencyCode: 'EUR',
+        modelValue: 2,
+        disabled: false,
+      },
+      global: { stubs },
+    });
+
+    const text = wrapper.find('[data-testid="payment-option-2"]').text();
+    expect(text).toContain('€');
+    expect(text).not.toContain('SEK');
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// VAT selection regression tests
+// ---------------------------------------------------------------------------
+describe('Checkout VAT selection', () => {
+  afterEach(() => {
+    mockShowIncVat.value = true;
+  });
+
+  it('switches shipping between inc-VAT and ex-VAT without remount', async () => {
+    mockShowIncVat.value = true;
+
+    const options = mockShippingOptions.map((option) =>
+      option.id === 10
+        ? { ...option, feeExVatFormatted: '39,20 kr' }
+        : option,
+    );
+
+    const wrapper = mountComponent(CheckoutShippingOptions, {
+      props: { options, modelValue: 10, disabled: false },
+      global: { stubs },
+    });
+
+    const text = () =>
+      wrapper.find('[data-testid="shipping-option-10"]').text();
+
+    expect(text()).toContain('49,00 kr');
+
+    mockShowIncVat.value = false;
+    await nextTick();
+
+    expect(text()).toContain('39,20 kr');
+    expect(text()).not.toContain('49,00 kr');
+
+    wrapper.unmount();
+  });
+
+  it('switches payment fee between VAT bases and retains EUR', async () => {
+    mockShowIncVat.value = true;
+
+    const wrapper = mountComponent(CheckoutPaymentOptions, {
+      props: {
+        options: mockPaymentOptions,
+        currencyCode: 'EUR',
+        modelValue: 2,
+        disabled: false,
+      },
+      global: { stubs },
+    });
+
+    const text = () =>
+      wrapper.find('[data-testid="payment-option-2"]').text();
+
+    expect(text()).toContain('15');
+    expect(text()).toContain('€');
+
+    mockShowIncVat.value = false;
+    await nextTick();
+
+    expect(text()).toContain('12');
+    expect(text()).toContain('€');
+    expect(text()).not.toContain('15');
+
+    wrapper.unmount();
+  });
+
+  it('does not call an unknown shipping fee free', () => {
+    mockShowIncVat.value = true;
+
+    const unknown = {
+      ...mockShippingOptions[0],
+      feeIncVat: undefined,
+      feeExVat: undefined,
+      feeIncVatFormatted: undefined,
+      feeExVatFormatted: undefined,
+    } as unknown as ShippingOptionType;
+
+    const wrapper = mountComponent(CheckoutShippingOptions, {
+      props: { options: [unknown], modelValue: unknown.id, disabled: false },
+      global: { stubs },
+    });
+
+    const text = wrapper.find('[data-testid="shipping-option-10"]').text();
+
+    expect(text).toContain('common.shipping_may_apply');
+    expect(text).not.toContain('checkout.free_shipping');
+
+    wrapper.unmount();
   });
 });
 

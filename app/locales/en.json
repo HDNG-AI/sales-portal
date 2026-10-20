@@ -26,7 +26,11 @@
     "vat_display": "VAT display",
     "change_vat_display": "Change VAT display",
     "vat_incl": "Incl. VAT",
-    "vat_excl": "Excl. VAT"
+    "vat_excl": "Excl. VAT",
+    "to_pay_inc_vat": "To pay incl. VAT",
+    "vat": "VAT",
+    "vat_included": "Includes VAT",
+    "shipping_may_apply": "May apply"
   },
   "auth": {
     "already_have_account": "Already have an account?",
@@ -599,7 +603,13 @@
         "delivered": "Delivered",
         "processing": "Processing",
         "shipped": "Shipped",
-        "cancelled": "Cancelled"
+        "cancelled": "Cancelled",
+        "on_hold": "On hold",
+        "inactive": "Inactive",
+        "refunded": "Refunded",
+        "partial": "Partially delivered",
+        "backorder": "Backordered",
+        "completed": "Completed"
       },
       "view": "View",
       "type_web": "Web order",
