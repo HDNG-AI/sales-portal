@@ -231,7 +231,7 @@ export function resolveVideoEmbedUrl(url: string): string | null {
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]+)/,
   );
   if (youtubeMatch?.[1]) {
-    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+    return `https://www.youtube-nocookie.com/embed/${youtubeMatch[1]}`;
   }
   const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
   if (vimeoMatch?.[1]) {
