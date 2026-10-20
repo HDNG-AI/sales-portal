@@ -80,6 +80,15 @@ describe('nuxt-security configuration', () => {
       expect(styleSrc).not.toContain("'unsafe-hashes'");
     });
 
+    it('restricts product video frames to approved YouTube and Vimeo origins', () => {
+      expect(csp['frame-src']).toEqual([
+        "'self'",
+        'https://www.youtube-nocookie.com',
+        'https://www.youtube.com',
+        'https://player.vimeo.com',
+      ]);
+    });
+
     it('allows Google Fonts in font-src', () => {
       expect(csp['font-src']).toContain("'self'");
       expect(csp['font-src']).toContain('https://fonts.gstatic.com');
