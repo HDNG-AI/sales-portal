@@ -165,7 +165,12 @@ export default defineNuxtConfig({
                 'https://*.geins.io',
                 'https://*.litium.io',
               ],
-              'frame-src': ["'self'"],
+              'frame-src': [
+                "'self'",
+                'https://www.youtube-nocookie.com',
+                'https://www.youtube.com',
+                'https://player.vimeo.com',
+              ],
               'base-uri': ["'none'"],
               'form-action': ["'self'"],
               'object-src': ["'none'"],
