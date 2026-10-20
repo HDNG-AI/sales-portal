@@ -523,7 +523,7 @@ describe('ProductTabs', () => {
     const iframe = docsContent.find('[data-testid="product-videos"] iframe');
     expect(iframe.exists()).toBe(true);
     expect(iframe.attributes('src')).toBe(
-      'https://www.youtube.com/embed/abc123',
+      'https://www.youtube-nocookie.com/embed/abc123',
     );
 
     const specContent = wrapper.find(
