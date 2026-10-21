@@ -39,9 +39,9 @@ export function useAwaitedOrder<T>(options: {
   let inFlight = false;
 
   /**
-   * One request, with the browser cache bypassed: the order endpoint answers
-   * `private, max-age=30`, so an ordinary request would be served the cached
-   * 404 for up to thirty seconds and never reach the server.
+   * One request, with the browser cache bypassed. The order endpoint answers
+   * `private, no-store`, but the bypass keeps the poll from ever being served
+   * a cached 404 should that header change.
    */
   async function poll() {
     // The bound is checked before the in-flight guard, so a request that never

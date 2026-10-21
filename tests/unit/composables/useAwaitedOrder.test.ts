@@ -72,8 +72,8 @@ describe('useAwaitedOrder', () => {
     await vi.advanceTimersByTimeAsync(AWAITING_INTERVAL_MS);
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
-    // The order endpoint answers `private, max-age=30`: without the bypass the
-    // browser would hand back its cached 404 for half a minute.
+    // Every poll bypasses the browser cache, so a cached 404 can never stand
+    // in for the server's answer.
     for (const call of mockFetch.mock.calls) {
       expect(call).toEqual([URL, { cache: 'no-store' }]);
     }
