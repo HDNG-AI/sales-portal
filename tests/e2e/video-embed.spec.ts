@@ -55,22 +55,44 @@ async function overhang(page: Page): Promise<number> {
 
 /**
  * The outermost elements reaching past the right edge, so an overflow
- * failure names its cause instead of only its size.
+ * failure names its cause instead of only its size. Elements an ancestor
+ * clips (carousel slides waiting off-screen) cannot widen the page and are
+ * left out.
  */
 async function widestElements(page: Page): Promise<string> {
   return page.evaluate(() => {
     const limit = window.innerWidth + 1;
+    const clipped = (el: Element) => {
+      for (
+        let p = el.parentElement;
+        p && p !== document.body;
+        p = p.parentElement
+      ) {
+        const { overflowX } = getComputedStyle(p);
+        if (overflowX !== 'visible') return true;
+      }
+      return false;
+    };
     const describe = (el: Element) => {
-      const id = el.getAttribute('data-testid');
+      const rect = el.getBoundingClientRect();
       const cls = (el.getAttribute('class') ?? '')
         .trim()
         .split(/\s+/)
         .slice(0, 4)
         .join('.');
-      return `${el.tagName.toLowerCase()}${id ? `[data-testid=${id}]` : ''}${cls ? `.${cls}` : ''} right=${Math.round(el.getBoundingClientRect().right)}`;
+      const style = el.getAttribute('style');
+      const owner = el.closest('[data-testid]')?.getAttribute('data-testid');
+      return [
+        `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`,
+        `left=${Math.round(rect.left)} right=${Math.round(rect.right)}`,
+        style ? `style="${style.slice(0, 80)}"` : '',
+        owner ? `in [data-testid=${owner}]` : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
     };
     const wide = [...document.body.querySelectorAll('*')].filter(
-      (el) => el.getBoundingClientRect().right > limit,
+      (el) => el.getBoundingClientRect().right > limit && !clipped(el),
     );
     const outermost = wide.filter(
       (el) => !wide.some((other) => other !== el && other.contains(el)),
