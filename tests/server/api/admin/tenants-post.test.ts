@@ -24,8 +24,20 @@ vi.mock('../../../../server/utils/tenant', () => ({
 }));
 
 const mockCreateTenant = vi.fn();
-vi.mock('../../../../server/utils/tenant-crud', () => ({
+vi.mock('../../../../server/utils/tenant-crud', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   createTenant: (...args: unknown[]) => mockCreateTenant(...args),
+}));
+
+const mockLogger = vi.hoisted(() => ({
+  warn: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('../../../../server/utils/logger', () => ({ logger: mockLogger }));
+vi.mock('../../../../server/utils/rate-limiter', () => ({
+  getClientIp: () => '203.0.113.7',
 }));
 
 vi.mock('../../../../server/schemas/admin-input', () => ({
@@ -45,8 +57,9 @@ vi.stubGlobal('ErrorCode', {
 
 function mockBody(overrides: Record<string, unknown> = {}) {
   (
-    (globalThis as Record<string, unknown>)
-      .readValidatedBody as ReturnType<typeof vi.fn>
+    (globalThis as Record<string, unknown>).readValidatedBody as ReturnType<
+      typeof vi.fn
+    >
   ).mockResolvedValue({
     hostname: 'shop.example.com',
     ...overrides,
@@ -184,6 +197,75 @@ describe('POST /api/admin/tenants', () => {
       .default;
     await expect(handler(mockEvent)).rejects.toThrow('CONFLICT');
     expect(mockCreateTenant).not.toHaveBeenCalled();
+  });
+
+  it('writes an audit entry naming the critical fields an update changed, without their values', async () => {
+    mockRequireAdminAuth.mockResolvedValue({ scope: 'write' });
+    mockBody({ allowUpdate: true, checkoutMode: 'hosted' });
+    const previous = {
+      tenantId: 'existing-shop',
+      hostname: 'shop.example.com',
+      checkoutMode: 'custom',
+      geinsSettings: { apiKey: 'old-key', accountName: 'boattools' },
+    };
+    mockResolveTenant.mockResolvedValue(previous);
+    mockCreateTenant.mockResolvedValue({
+      ...previous,
+      checkoutMode: 'hosted',
+      geinsSettings: { apiKey: 'attacker-key', accountName: 'attacker' },
+      themeHash: 'abc123',
+    });
+    const handler = (await import('../../../../server/api/admin/tenants.post'))
+      .default;
+    await handler(mockEvent);
+
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    const [message, context] = mockLogger.warn.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(message).toContain('[admin-audit]');
+    expect(context).toMatchObject({
+      tenantId: 'existing-shop',
+      hostname: 'shop.example.com',
+      scope: 'write',
+      clientIp: '203.0.113.7',
+      created: false,
+      criticalFields: [
+        'checkoutMode',
+        'geinsSettings.accountName',
+        'geinsSettings.apiKey',
+      ],
+    });
+    const logged = JSON.stringify(mockLogger.warn.mock.calls);
+    expect(logged).not.toContain('attacker-key');
+    expect(logged).not.toContain('old-key');
+  });
+
+  it('logs a non-critical update at info level', async () => {
+    mockBody({ allowUpdate: true });
+    const previous = {
+      tenantId: 'existing-shop',
+      hostname: 'shop.example.com',
+      branding: { name: 'Old' },
+    };
+    mockResolveTenant.mockResolvedValue(previous);
+    mockCreateTenant.mockResolvedValue({
+      ...previous,
+      branding: { name: 'New' },
+    });
+    const handler = (await import('../../../../server/api/admin/tenants.post'))
+      .default;
+    await handler(mockEvent);
+
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('[admin-audit]'),
+      expect.objectContaining({
+        changedFields: ['branding'],
+        criticalFields: [],
+      }),
+    );
   });
 
   it('allows a matching explicit tenantId against an existing hostname when allowUpdate is true', async () => {
