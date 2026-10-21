@@ -115,8 +115,9 @@ const cachedResolver = defineCachedEventHandler(
     // absorbs crawler bursts while ensuring a newly published entity resolves
     // within a minute.
     maxAge: 60,
-    // staleMaxAge bounds the in-memory negative-cache entry lifetime so a path
-    // scanner cannot grow the heap unbounded with entries that never revalidate.
+    // staleMaxAge does not evict anything: with swr Nitro serves the stale
+    // entry and revalidates it. The bound on how many paths a scanner can
+    // leave in memory is the cache mount's LRU (server/utils/cache-storage.ts).
     staleMaxAge: 300,
     getKey: (event) => {
       // Parse path from the query so normalization matches what the handler sees.
