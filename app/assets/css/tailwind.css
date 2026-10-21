@@ -37,6 +37,7 @@
   --color-selected: var(--selected);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -106,6 +107,9 @@
     --selected: #0f766e;
     --success: #15803d;
     --warning: #b45309;
+    /* `info` marks a neutral state such as a backorder: not a warning and not
+       grey, which would read as unavailable. Unthemed, like `selected`. */
+    --info: #1d4ed8;
     --border: #e5e5e5;
     --input: #e5e5e5;
     --ring: #4497f7;
