@@ -153,6 +153,8 @@
     "discount": "Rabatt",
     "total": "Totalt",
     "free_shipping": "Gratis",
+    "shipping_by_agreement": "Frakt enligt avtal",
+    "shipping_invoiced_separately": "Faktureras separat",
     "no_payment_methods": "Inga betalningsmetoder tillgängliga.",
     "payment_types": {
       "invoice": "Faktura",

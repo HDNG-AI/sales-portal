@@ -702,6 +702,62 @@ describe('OrderDetail', () => {
       expect(summary.text()).toContain('699,00 kr');
     });
 
+    // On agreement terms a zero fee reads as invoiced separately, not "0 kr".
+    // Registered in tests/unit/config-coverage/map.ts.
+    describe('shippingTerms', () => {
+      function zeroShippingOrder() {
+        const data = makeOrder();
+        data.order.cart.summary.shipping = {
+          feeIncVat: 0,
+          feeIncVatFormatted: '0,00 kr',
+        };
+        return data;
+      }
+
+      function setShippingTerms(terms: 'standard' | 'agreement' | undefined) {
+        assert.isDefined(tenant.value);
+        tenant.value.layout = {
+          ...(tenant.value.layout ?? {}),
+          shippingTerms: terms,
+        };
+      }
+
+      afterEach(() => setShippingTerms(undefined));
+
+      it('shows the zero shipping fee as it is when shippingTerms is absent', () => {
+        mockData.value = zeroShippingOrder();
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(
+          wrapper.find('[data-testid="order-summary-shipping"]').text(),
+        ).toBe('0,00 kr');
+      });
+
+      it('says a zero shipping fee is invoiced separately when shippingTerms is agreement', () => {
+        setShippingTerms('agreement');
+        mockData.value = zeroShippingOrder();
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(
+          wrapper.find('[data-testid="order-summary-shipping"]').text(),
+        ).toBe('checkout.shipping_invoiced_separately');
+        expect(wrapper.html()).not.toContain('>0,00 kr<');
+      });
+
+      it('still shows a real shipping fee when shippingTerms is agreement', () => {
+        setShippingTerms('agreement');
+        mockData.value = makeOrder();
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(
+          wrapper.find('[data-testid="order-summary-shipping"]').text(),
+        ).toBe('49,00 kr');
+      });
+    });
+
     it('sidebar subtotal uses subtotal_with_count i18n key', () => {
       mockData.value = makeOrder();
 

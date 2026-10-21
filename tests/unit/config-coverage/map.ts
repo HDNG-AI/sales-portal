@@ -1840,11 +1840,23 @@ export const CONFIG_COVERAGE_MAP = {
       status: 'has-test',
       test: {
         spec: 'tests/components/product/ProductTabs.test.ts',
-        title: 'shows technical HTML under Specifications only when tenant opts into semantic placement',
+        title:
+          'shows technical HTML under Specifications only when tenant opts into semantic placement',
         kind: 'consumer',
         drives: 'field',
       },
       note: 'Absent and legacy retain the existing generic PIM text mapping; the flag is opt-in.',
+    },
+    shippingTerms: {
+      status: 'has-test',
+      test: {
+        spec: 'tests/components/checkout/CheckoutShippingOptions.test.ts',
+        title:
+          'names a zero-fee option by agreement, invoiced separately, when shippingTerms is agreement',
+        kind: 'consumer',
+        drives: 'field',
+      },
+      note: 'Absent and standard keep the option name and "free"; agreement is opt-in.',
     },
     vatDisplay: {
       ex: {
