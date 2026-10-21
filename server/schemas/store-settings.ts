@@ -156,12 +156,12 @@ export const LayoutConfigSchema = z
     headerNavVariant: z.enum(['grey', 'white']).nullable().optional(),
     storefrontStyle: z.enum(['classic', 'editorial']).nullable().optional(),
     showCompanyName: z.boolean().nullable().optional(),
+    // Optional tenant opt-in; absence keeps the standard shipping wording.
+    shippingTerms: z.enum(['standard', 'agreement']).nullable().optional(),
     vatDisplay: z.enum(['ex', 'inc']).nullable().optional(),
     vatDisplayLocked: z.boolean().nullable().optional(),
     // Optional tenant opt-in; absence preserves existing PDP text placement.
     productTextPlacement: z.enum(['legacy', 'semantic']).nullable().optional(),
-    // Optional tenant opt-in; absence keeps the standard shipping wording.
-    shippingTerms: z.enum(['standard', 'agreement']).nullable().optional(),
   })
   .nullable()
   .optional();

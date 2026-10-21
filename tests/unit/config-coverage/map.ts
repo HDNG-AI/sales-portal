@@ -1847,17 +1847,6 @@ export const CONFIG_COVERAGE_MAP = {
       },
       note: 'Absent and legacy retain the existing generic PIM text mapping; the flag is opt-in.',
     },
-    shippingTerms: {
-      status: 'has-test',
-      test: {
-        spec: 'tests/components/checkout/CheckoutShippingOptions.test.ts',
-        title:
-          'names a zero-fee option by agreement, invoiced separately, when shippingTerms is agreement',
-        kind: 'consumer',
-        drives: 'field',
-      },
-      note: 'Absent and standard keep the option name and "free"; agreement is opt-in.',
-    },
     vatDisplay: {
       ex: {
         status: 'has-test',
@@ -1992,6 +1981,17 @@ export const CONFIG_COVERAGE_MAP = {
         },
         note: "Resolves to 'grey' through `??`.",
       },
+    },
+    shippingTerms: {
+      status: 'has-test',
+      test: {
+        spec: 'tests/components/checkout/CheckoutShippingOptions.test.ts',
+        title:
+          'names a zero-fee option by agreement, invoiced separately, when shippingTerms is agreement',
+        kind: 'consumer',
+        drives: 'field',
+      },
+      note: 'Absent and standard keep the option name and "free"; agreement is opt-in.',
     },
   },
 

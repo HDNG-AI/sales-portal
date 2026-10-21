@@ -107,6 +107,14 @@ export interface TenantConfig {
      */
     showCompanyName?: boolean | null;
     /**
+     * How shipping is worded. Absent or `standard` shows the shipping
+     * option's own name and "free" for a zero fee. `agreement` is for a
+     * tenant that invoices shipping under each buyer's contract: a zero fee
+     * then reads as shipping by agreement, invoiced separately, everywhere
+     * the fee appears. See useShippingTerms.
+     */
+    shippingTerms?: 'standard' | 'agreement' | null;
+    /**
      * Prices shown inclusive or exclusive of VAT before the buyer chooses.
      * Absent means ex-VAT, the right floor for a B2B storefront.
      */
@@ -119,14 +127,6 @@ export interface TenantConfig {
     vatDisplayLocked?: boolean | null;
     /** Opt into semantic short/long/technical product copy placement. */
     productTextPlacement?: 'legacy' | 'semantic' | null;
-    /**
-     * How shipping is worded. Absent or `standard` shows the shipping
-     * option's own name and "free" for a zero fee. `agreement` is for a
-     * tenant that invoices shipping under each buyer's contract: a zero fee
-     * then reads as shipping by agreement, invoiced separately, everywhere
-     * the fee appears. See useShippingTerms.
-     */
-    shippingTerms?: 'standard' | 'agreement' | null;
   } | null;
 
   // Features — keyed by feature name
