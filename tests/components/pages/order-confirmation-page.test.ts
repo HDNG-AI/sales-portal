@@ -1,7 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  assert,
+} from 'vitest';
 import { ref, type Ref } from 'vue';
 import { mountComponent } from '../../utils/component';
 import { mockShowIncVat } from '../../setup-components';
+import { useTenant } from '../../../app/composables/useTenant';
 
 /**
  * The confirmation page, both ways a buyer lands on it.
@@ -283,6 +292,44 @@ describe('Order confirmation page — placed in the app', () => {
     expect(propsOf(mount(), OrderSummaryCardStub).amounts).toMatchObject({
       discount: 'SEK\u00a025.00',
     });
+  });
+
+  // Registered in tests/unit/config-coverage/map.ts with the other
+  // shippingTerms consumers.
+  it('has no shipping amount for an order without a fee when shippingTerms is absent', () => {
+    resultFor(ORDER_URL).data.value = makeOrder();
+
+    expect(
+      (propsOf(mount(), OrderSummaryCardStub).amounts as { shipping?: string })
+        .shipping,
+    ).toBeUndefined();
+  });
+
+  it('says shipping is invoiced separately for an order without a fee when shippingTerms is agreement', () => {
+    const { tenant } = useTenant();
+    assert.isDefined(tenant.value);
+    const layout = tenant.value.layout;
+    tenant.value.layout = { ...(layout ?? {}), shippingTerms: 'agreement' };
+    try {
+      resultFor(ORDER_URL).data.value = makeOrder();
+      const wrapper = mount();
+
+      expect(propsOf(wrapper, OrderSummaryCardStub).amounts).toMatchObject({
+        shipping: 'checkout.shipping_invoiced_separately',
+      });
+      const totals = propsOf(wrapper, SheetStub).totals as {
+        label: string;
+        value?: string;
+      }[];
+      expect(totals).toContainEqual(
+        expect.objectContaining({
+          label: 'portal.orders.detail.summary.shipping',
+          value: 'checkout.shipping_invoiced_separately',
+        }),
+      );
+    } finally {
+      tenant.value.layout = layout;
+    }
   });
 
   it('follows the VAT choice', () => {

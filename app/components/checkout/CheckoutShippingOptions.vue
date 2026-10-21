@@ -3,6 +3,7 @@ import type { ShippingOptionType } from '#shared/types/commerce';
 
 const { t } = useI18n();
 const { showIncVat } = useVatDisplay();
+const { byAgreement, optionName } = useShippingTerms();
 
 const props = defineProps<{
   options: ShippingOptionType[];
@@ -24,12 +25,10 @@ function fee(option: ShippingOptionType): number | undefined {
 
 function feeFormatted(option: ShippingOptionType): string {
   return (
-    (showIncVat.value
-      ? option.feeIncVatFormatted
-      : option.feeExVatFormatted) ?? ''
+    (showIncVat.value ? option.feeIncVatFormatted : option.feeExVatFormatted) ??
+    ''
   );
 }
-
 </script>
 
 <template>
@@ -62,10 +61,13 @@ function feeFormatted(option: ShippingOptionType): string {
         <div class="flex-1">
           <div class="flex items-center justify-between">
             <span class="text-sm font-medium">
-              {{ option.displayName ?? option.name }}
+              {{ optionName(option) }}
             </span>
             <span class="text-sm">
-              <template v-if="fee(option) === 0">
+              <template v-if="byAgreement && fee(option) === 0">
+                {{ t('checkout.shipping_invoiced_separately') }}
+              </template>
+              <template v-else-if="fee(option) === 0">
                 {{ t('checkout.free_shipping') }}
               </template>
               <template v-else>
@@ -75,6 +77,7 @@ function feeFormatted(option: ShippingOptionType): string {
           </div>
           <p
             v-if="
+              !byAgreement &&
               option.amountLeftToFreeShipping > 0 &&
               option.amountLeftToFreeShippingFormatted
             "

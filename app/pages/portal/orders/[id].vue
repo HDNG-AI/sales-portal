@@ -44,8 +44,11 @@ const reorder = computed(() => {
   }
   return { lines, skipped };
 });
-const canReorder = computed(() =>
-  canAccess('reorder') && !isCatalogMode.value && reorder.value.lines.length > 0,
+const canReorder = computed(
+  () =>
+    canAccess('reorder') &&
+    !isCatalogMode.value &&
+    reorder.value.lines.length > 0,
 );
 
 const isReordering = ref(false);
@@ -123,9 +126,14 @@ const itemCount = computed(() => order.value?.cart?.items?.length ?? 0);
 // Every amount is the side of the buyer's VAT choice; VAT itself is one number.
 const { showIncVat } = useVatDisplay();
 
-const amounts = computed(() =>
-  orderAmounts(order.value, showIncVat.value, formatLocale.value),
-);
+// A placed order has no shipping row for a zero fee; on agreement terms the
+// row stays, saying the shipping is invoiced separately.
+const { feeLabel: shippingFeeLabel } = useShippingTerms();
+const amounts = computed(() => {
+  const base = orderAmounts(order.value, showIncVat.value, formatLocale.value);
+  const agreed = shippingFeeLabel(0, undefined);
+  return base.shipping || !agreed ? base : { ...base, shipping: agreed };
+});
 
 useHead({
   title: computed(

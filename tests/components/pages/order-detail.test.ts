@@ -1115,6 +1115,69 @@ describe('OrderDetail', () => {
       expect(summary.text()).toContain('699,00 kr');
     });
 
+    // A zero fee gets no row on standard terms. On agreement terms shipping is
+    // invoiced separately, so the row stays and says so instead of "0 kr".
+    // Registered in tests/unit/config-coverage/map.ts.
+    describe('shippingTerms', () => {
+      function zeroShippingOrder() {
+        const data = makeOrder({
+          shippingFee: {
+            sellingPriceIncVat: 0,
+            sellingPriceIncVatFormatted: '0,00 kr',
+          },
+        });
+        data.order.cart.summary.shipping = {
+          feeIncVat: 0,
+          feeIncVatFormatted: '0,00 kr',
+          feeExVat: 0,
+          feeExVatFormatted: '0,00 kr',
+        };
+        return data;
+      }
+
+      function setShippingTerms(terms: 'standard' | 'agreement' | undefined) {
+        assert.isDefined(tenant.value);
+        tenant.value.layout = {
+          ...(tenant.value.layout ?? {}),
+          shippingTerms: terms,
+        };
+      }
+
+      afterEach(() => setShippingTerms(undefined));
+
+      it('omits a zero shipping fee when shippingTerms is absent', () => {
+        mockData.value = zeroShippingOrder();
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(
+          wrapper.find('[data-testid="order-summary-shipping"]').exists(),
+        ).toBe(false);
+      });
+
+      it('says a zero shipping fee is invoiced separately when shippingTerms is agreement', () => {
+        setShippingTerms('agreement');
+        mockData.value = zeroShippingOrder();
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(
+          wrapper.find('[data-testid="order-summary-shipping"]').text(),
+        ).toBe('checkout.shipping_invoiced_separately');
+      });
+
+      it('still shows a real shipping fee when shippingTerms is agreement', () => {
+        setShippingTerms('agreement');
+        mockData.value = makeOrder();
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(
+          wrapper.find('[data-testid="order-summary-shipping"]').text(),
+        ).toBe('49,00 kr');
+      });
+    });
+
     it('sidebar subtotal uses subtotal_with_count i18n key', () => {
       mockData.value = makeOrder();
 

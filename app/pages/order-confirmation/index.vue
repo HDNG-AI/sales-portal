@@ -71,9 +71,14 @@ const awaitingOrder = computed(
 
 // The order as the portal order page shows it, with the same parts.
 const itemCount = computed(() => order.value?.cart?.items?.length ?? 0);
-const amounts = computed(() =>
-  orderAmounts(order.value, showIncVat.value, formatLocale.value),
-);
+// A placed order has no shipping row for a zero fee; on agreement terms the
+// row stays, saying the shipping is invoiced separately.
+const { feeLabel: shippingFeeLabel } = useShippingTerms();
+const amounts = computed(() => {
+  const base = orderAmounts(order.value, showIncVat.value, formatLocale.value);
+  const agreed = shippingFeeLabel(0, undefined);
+  return base.shipping || !agreed ? base : { ...base, shipping: agreed };
+});
 
 /** A configured row's product page, with that row's choices replayed. */
 function replayHref(
