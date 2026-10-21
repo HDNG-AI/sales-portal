@@ -53,6 +53,32 @@ async function overhang(page: Page): Promise<number> {
   );
 }
 
+/**
+ * The outermost elements reaching past the right edge, so an overflow
+ * failure names its cause instead of only its size.
+ */
+async function widestElements(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const limit = window.innerWidth + 1;
+    const describe = (el: Element) => {
+      const id = el.getAttribute('data-testid');
+      const cls = (el.getAttribute('class') ?? '')
+        .trim()
+        .split(/\s+/)
+        .slice(0, 4)
+        .join('.');
+      return `${el.tagName.toLowerCase()}${id ? `[data-testid=${id}]` : ''}${cls ? `.${cls}` : ''} right=${Math.round(el.getBoundingClientRect().right)}`;
+    };
+    const wide = [...document.body.querySelectorAll('*')].filter(
+      (el) => el.getBoundingClientRect().right > limit,
+    );
+    const outermost = wide.filter(
+      (el) => !wide.some((other) => other !== el && other.contains(el)),
+    );
+    return outermost.slice(0, 5).map(describe).join(' | ') || 'none found';
+  });
+}
+
 test.describe('Embedded video', () => {
   for (const viewport of [
     { label: 'mobile', width: 375, height: 812 },
@@ -93,7 +119,7 @@ test.describe('Embedded video', () => {
       ).toEqual([]);
       expect(
         await overhang(page),
-        `${viewport.width}px: the page scrolls sideways`,
+        `${viewport.width}px: the page scrolls sideways; widest: ${await widestElements(page)}`,
       ).toBeLessThanOrEqual(1);
 
       await embed.scrollIntoViewIfNeeded();
@@ -109,7 +135,7 @@ test.describe('Embedded video', () => {
       expect(box!.width).toBeLessThanOrEqual(viewport.width);
       expect(
         await overhang(page),
-        `${viewport.width}px: the page scrolls sideways once the player loads`,
+        `${viewport.width}px: the page scrolls sideways once the player loads; widest: ${await widestElements(page)}`,
       ).toBeLessThanOrEqual(1);
 
       expect(cspViolations, 'the player was blocked by the CSP').toEqual([]);
