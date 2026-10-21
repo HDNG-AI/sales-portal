@@ -979,5 +979,9 @@
     "invalid_email": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
     "select_placeholder": "Auswählen...",
     "submit": "Senden"
+  },
+  "video": {
+    "play": "Video abspielen: {title}",
+    "consent": "Wird über {provider} abgespielt. Von {provider} wird erst etwas geladen, wenn Sie auf Abspielen klicken."
   }
 }

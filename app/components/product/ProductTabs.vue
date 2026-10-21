@@ -363,13 +363,9 @@ onMounted(() => {
               >
                 <!-- embedUrl is non-null exactly when display is 'embed';
                      keying the branch off it keeps the src type-safe. -->
-                <iframe
+                <VideoEmbed
                   v-if="video.embedUrl"
                   :src="video.embedUrl"
-                  class="h-full w-full"
-                  frameborder="0"
-                  allowfullscreen
-                  allow="autoplay; encrypted-media"
                   :title="video.label"
                 />
                 <video
@@ -513,13 +509,9 @@ onMounted(() => {
                 <div
                   class="border-border aspect-video w-full overflow-hidden rounded-lg border"
                 >
-                  <iframe
+                  <VideoEmbed
                     v-if="video.embedUrl"
                     :src="video.embedUrl"
-                    class="h-full w-full"
-                    frameborder="0"
-                    allowfullscreen
-                    allow="autoplay; encrypted-media"
                     :title="video.label"
                   />
                   <video

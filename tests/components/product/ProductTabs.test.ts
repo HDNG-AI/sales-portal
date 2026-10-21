@@ -454,7 +454,7 @@ describe('ProductTabs', () => {
     expect(specContent.text()).toContain('Ledarantal');
   });
 
-  it('renders a VideoURL parameter as an embedded video, not a spec row', () => {
+  it('renders a VideoURL parameter as an embedded video, not a spec row', async () => {
     const product = makeProduct({
       parameterGroups: [
         {
@@ -464,7 +464,7 @@ describe('ProductTabs', () => {
             {
               name: 'VideoURL',
               label: 'VideoURL',
-              value: 'https://www.youtube.com/watch?v=abc123',
+              value: 'https://www.youtube.com/watch?v=e5ei86oZFUw',
               show: true,
             },
           ],
@@ -482,10 +482,14 @@ describe('ProductTabs', () => {
       global: { stubs },
     });
     const docsContent = wrapper.find('.tabs-content[data-value="documents"]');
-    const iframe = docsContent.find('[data-testid="product-videos"] iframe');
+    const videos = docsContent.find('[data-testid="product-videos"]');
+    // Nothing is framed from the provider until the visitor presses play.
+    expect(videos.find('iframe').exists()).toBe(false);
+    await videos.find('[data-testid="video-embed-consent"]').trigger('click');
+    const iframe = videos.find('iframe');
     expect(iframe.exists()).toBe(true);
     expect(iframe.attributes('src')).toBe(
-      'https://www.youtube.com/embed/abc123',
+      'https://www.youtube-nocookie.com/embed/e5ei86oZFUw?autoplay=1',
     );
 
     const specContent = wrapper.find(
@@ -574,7 +578,7 @@ describe('ProductTabs', () => {
           parameters: [
             {
               name: 'VideoURL',
-              value: 'https://www.youtube.com/watch?v=abc123',
+              value: 'https://www.youtube.com/watch?v=e5ei86oZFUw',
               show: false,
             },
             {

@@ -979,5 +979,9 @@
     "invalid_email": "Ange en giltig e-postadress.",
     "select_placeholder": "Välj...",
     "submit": "Skicka"
+  },
+  "video": {
+    "play": "Spela upp film: {title}",
+    "consent": "Spelas upp från {provider}. Inget hämtas från {provider} förrän du trycker på spela upp."
   }
 }

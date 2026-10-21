@@ -9,7 +9,7 @@ describe('classifyMediaParameter', () => {
   it('classifies a known name against the default table when no table is passed', () => {
     const result = classifyMediaParameter({
       name: 'VideoURL',
-      value: 'https://www.youtube.com/watch?v=abc123',
+      value: 'https://www.youtube.com/watch?v=e5ei86oZFUw',
     });
     expect(result[0]?.kind).toBe('video');
   });
@@ -69,7 +69,10 @@ describe('classifyMediaParameter', () => {
     // itself doesn't quietly reintroduce the defaults if a caller ever did
     // pass one.
     const result = classifyMediaParameter(
-      { name: 'VideoURL', value: 'https://www.youtube.com/watch?v=abc123' },
+      {
+        name: 'VideoURL',
+        value: 'https://www.youtube.com/watch?v=e5ei86oZFUw',
+      },
       {},
     );
     expect(result).toEqual([]);
@@ -143,9 +146,11 @@ describe('classifyMediaParameter — multi-value parameters', () => {
     const result = classifyMediaParameter({
       name: 'VideoURL',
       value:
-        'https://www.youtube.com/watch?v=abc123|https://cdn.example.com/clip.mp4',
+        'https://www.youtube.com/watch?v=e5ei86oZFUw|https://cdn.example.com/clip.mp4',
     });
-    expect(result[0]?.embedUrl).toBe('https://www.youtube.com/embed/abc123');
+    expect(result[0]?.embedUrl).toBe(
+      'https://www.youtube-nocookie.com/embed/e5ei86oZFUw',
+    );
     // A direct file has no embed URL — callers render it with <video>.
     expect(result[1]?.embedUrl).toBeNull();
   });
@@ -166,18 +171,18 @@ describe('resolveVideoEmbedUrl', () => {
   it('embeds a YouTube Shorts URL', () => {
     expect(
       resolveVideoEmbedUrl('https://www.youtube.com/shorts/Xz4Taqin0Io'),
-    ).toBe('https://www.youtube.com/embed/Xz4Taqin0Io');
+    ).toBe('https://www.youtube-nocookie.com/embed/Xz4Taqin0Io');
   });
 
   it('embeds the other YouTube and Vimeo forms', () => {
-    expect(resolveVideoEmbedUrl('https://www.youtube.com/watch?v=abc123')).toBe(
-      'https://www.youtube.com/embed/abc123',
-    );
-    expect(resolveVideoEmbedUrl('https://youtu.be/abc123')).toBe(
-      'https://www.youtube.com/embed/abc123',
+    expect(
+      resolveVideoEmbedUrl('https://www.youtube.com/watch?v=e5ei86oZFUw'),
+    ).toBe('https://www.youtube-nocookie.com/embed/e5ei86oZFUw');
+    expect(resolveVideoEmbedUrl('https://youtu.be/e5ei86oZFUw')).toBe(
+      'https://www.youtube-nocookie.com/embed/e5ei86oZFUw',
     );
     expect(resolveVideoEmbedUrl('https://vimeo.com/123456')).toBe(
-      'https://player.vimeo.com/video/123456',
+      'https://player.vimeo.com/video/123456?dnt=1',
     );
   });
 
@@ -194,7 +199,9 @@ describe('classifyMediaParameter — how each entry should be displayed', () => 
       value: 'https://www.youtube.com/shorts/Xz4Taqin0Io',
     });
     expect(entry?.display).toBe('embed');
-    expect(entry?.embedUrl).toBe('https://www.youtube.com/embed/Xz4Taqin0Io');
+    expect(entry?.embedUrl).toBe(
+      'https://www.youtube-nocookie.com/embed/Xz4Taqin0Io',
+    );
   });
 
   it('marks a direct video file as playable in a video element', () => {
@@ -237,7 +244,7 @@ describe('classifyMediaParameter — how each entry should be displayed', () => 
     // mapped kind decides the tab it lands in; a link is always safe.
     const [page] = classifyMediaParameter({
       name: 'Manual',
-      value: 'https://www.youtube.com/watch?v=abc123',
+      value: 'https://www.youtube.com/watch?v=e5ei86oZFUw',
     });
     expect(page?.display).toBe('link');
   });
@@ -319,7 +326,7 @@ describe('classifyMediaParameter — file name', () => {
     expect(fileNameOf('https://x.example/downloads/12345')).toBeNull();
     expect(fileNameOf('https://x.example/')).toBeNull();
     expect(
-      fileNameOf('https://www.youtube.com/watch?v=abc123', 'VideoURL'),
+      fileNameOf('https://www.youtube.com/watch?v=e5ei86oZFUw', 'VideoURL'),
     ).toBeNull();
   });
 });

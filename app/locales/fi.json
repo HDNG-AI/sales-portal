@@ -979,5 +979,9 @@
     "invalid_email": "Anna kelvollinen sähköpostiosoite.",
     "select_placeholder": "Valitse...",
     "submit": "Lähetä"
+  },
+  "video": {
+    "play": "Toista video: {title}",
+    "consent": "Toistetaan palvelusta {provider}. Palvelusta {provider} ei ladata mitään ennen kuin painat toista."
   }
 }

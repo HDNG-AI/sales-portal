@@ -979,5 +979,9 @@
     "invalid_email": "Angiv en gyldig e-mailadresse.",
     "select_placeholder": "Vælg...",
     "submit": "Send"
+  },
+  "video": {
+    "play": "Afspil video: {title}",
+    "consent": "Afspilles fra {provider}. Intet hentes fra {provider}, før du trykker på afspil."
   }
 }

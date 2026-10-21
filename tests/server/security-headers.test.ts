@@ -107,6 +107,23 @@ describe('nuxt-security configuration', () => {
       expect(frameAncestors).toContain('https://*.litium.io');
     });
 
+    it('frames only self and the allowlisted video players', () => {
+      // Exact match: a new origin here has to be added on purpose, together
+      // with a player builder in shared/utils/video-embed.ts.
+      expect(csp['frame-src']).toEqual([
+        "'self'",
+        'https://www.youtube-nocookie.com',
+        'https://player.vimeo.com',
+      ]);
+    });
+
+    it('frames no wildcard and no cookie-setting YouTube host', () => {
+      const frameSrc = csp['frame-src'] as string[];
+      expect(frameSrc.some((s) => s.includes('*'))).toBe(false);
+      expect(frameSrc).not.toContain('https://www.youtube.com');
+      expect(frameSrc).not.toContain('https:');
+    });
+
     it('restricts base-uri to none', () => {
       expect(csp['base-uri']).toEqual(["'none'"]);
     });
@@ -143,6 +160,17 @@ describe('nuxt-security configuration', () => {
 
     it('sets Referrer-Policy to strict-origin-when-cross-origin', () => {
       expect(headers.referrerPolicy).toBe('strict-origin-when-cross-origin');
+    });
+
+    it('delegates fullscreen to the allowlisted video players only', () => {
+      const permissions = headers.permissionsPolicy as Record<string, string[]>;
+      expect(permissions.fullscreen).toEqual([
+        'self',
+        '"https://www.youtube-nocookie.com"',
+        '"https://player.vimeo.com"',
+      ]);
+      // The rest stay with the module's deny-all defaults.
+      expect(Object.keys(permissions)).toEqual(['fullscreen']);
     });
 
     it('disables Cross-Origin-Embedder-Policy', () => {

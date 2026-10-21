@@ -87,6 +87,19 @@ link the shopper can follow instead of a dead player.
 Prefer an embeddable form where you have the choice — it keeps the video
 on the page — but nothing breaks if you can't.
 
+An embed is only ever a player URL the storefront builds itself, from a
+validated id (YouTube: 11 URL-safe characters; Vimeo: digits) on one of the
+origins in `shared/utils/video-embed.ts`. YouTube plays from
+`www.youtube-nocookie.com`, Vimeo with `dnt=1`. A look-alike host, an id that
+fails validation, or a provider URL inside another site's query string is not
+an embed and falls through to `file` or `link`.
+
+The player itself loads only when the shopper presses play. Until then the
+page sends nothing to the provider; the button says which provider the video
+comes from. The same origin list is the CSP `frame-src` and the only origins
+given `fullscreen` in `Permissions-Policy`, so adding a provider means adding
+it there, with a builder and tests, not widening the policy by hand.
+
 ### 5. Absent means absent
 
 No parameter, an empty value, or a value with no usable URL all produce
@@ -175,6 +188,8 @@ The same extension table decides which URLs a `<video>` element can play
 ## Related files
 
 - `shared/constants/product-media.ts` — defaults, classifier, embed resolution
+- `shared/utils/video-embed.ts` — allowlisted player origins, id validation, player URLs
+- `app/components/shared/VideoEmbed.vue` — click-to-load player used by product tabs and the CMS Video widget
 - `shared/types/tenant-config.ts` — `productMediaParameters` on `TenantConfig`
 - `server/utils/tenant.ts` — merges defaults under the tenant's table
 - `server/schemas/store-settings.ts` — merchant API validation for the block

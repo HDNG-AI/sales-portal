@@ -1,3 +1,5 @@
+import { resolveVideoUrlToEmbed } from '../utils/video-embed';
+
 /**
  * Default parameter-name → media-kind mapping, used when a tenant hasn't
  * configured its own via `tenant.productMediaParameters` (see
@@ -224,20 +226,12 @@ function resolveDisplay(
 /**
  * Resolves a raw video URL to an embeddable iframe src for known providers.
  * Returns null for anything else — a direct file (played in a `<video>`
- * element) or a provider we don't recognize (rendered as a link).
+ * element) or a provider we don't recognize (rendered as a link). The src is
+ * always rebuilt from a validated id on an allowlisted player origin
+ * (shared/utils/video-embed.ts), never passed through.
  */
 export function resolveVideoEmbedUrl(url: string): string | null {
-  const youtubeMatch = url.match(
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]+)/,
-  );
-  if (youtubeMatch?.[1]) {
-    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
-  }
-  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
-  if (vimeoMatch?.[1]) {
-    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
-  }
-  return null;
+  return resolveVideoUrlToEmbed(url);
 }
 
 /**

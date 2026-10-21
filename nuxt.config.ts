@@ -1,6 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import type { Environment } from './shared/types/common';
 import type { NuxtPage } from 'nuxt/schema';
+import { VIDEO_FRAME_ORIGINS } from './shared/utils/video-embed';
 
 /**
  * Resolves the 'kv' storage mount (tenant configs, webhook dedup — see
@@ -165,7 +166,10 @@ export default defineNuxtConfig({
                 'https://*.geins.io',
                 'https://*.litium.io',
               ],
-              'frame-src': ["'self'"],
+              // Only the video players shared/utils/video-embed.ts builds
+              // srcs for. CMS HTML cannot carry an iframe (server/utils/
+              // cms-sanitize.ts), so this list is the whole of what is framed.
+              'frame-src': ["'self'", ...VIDEO_FRAME_ORIGINS],
               'base-uri': ["'none'"],
               'form-action': ["'self'"],
               'object-src': ["'none'"],
@@ -176,6 +180,13 @@ export default defineNuxtConfig({
             }
           : false,
       xContentTypeOptions: 'nosniff',
+      // nuxt-security denies fullscreen everywhere by default, which also
+      // takes the fullscreen button away from an embedded player. Delegate it
+      // to the allowlisted players only; camera, microphone and the rest keep
+      // the module's deny-all defaults.
+      permissionsPolicy: {
+        fullscreen: ['self', ...VIDEO_FRAME_ORIGINS.map((o) => `"${o}"`)],
+      },
       xFrameOptions: false,
       referrerPolicy: 'strict-origin-when-cross-origin',
       crossOriginEmbedderPolicy: false,

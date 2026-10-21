@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { VideoWidgetData, ContentConfigType } from '#shared/types/cms';
+import { buildVideoEmbedUrl } from '#shared/utils/video-embed';
 
 const props = defineProps<{
   data: VideoWidgetData;
@@ -8,31 +9,22 @@ const props = defineProps<{
 }>();
 
 /**
- * Video provider — 0=youtube, 1=vimeo.
- * Geins CMS videoProvider field: 0=youtube, 1=vimeo
+ * Geins CMS videoProvider field: 0=youtube, 1=vimeo.
+ * The id is validated before it becomes a src; an id that no provider could
+ * have issued renders nothing rather than a broken or redirected frame.
  */
-const provider = computed(() =>
-  props.data.videoProvider === 1 ? 'vimeo' : 'youtube',
+const embedUrl = computed(() =>
+  props.data.videoId
+    ? buildVideoEmbedUrl(
+        props.data.videoProvider === 1 ? 'vimeo' : 'youtube',
+        props.data.videoId,
+      )
+    : null,
 );
-
-/** Embed URL for the iframe */
-const embedUrl = computed(() => {
-  if (!props.data.videoId) return '';
-  return provider.value === 'vimeo'
-    ? `https://player.vimeo.com/video/${props.data.videoId}`
-    : `https://www.youtube.com/embed/${props.data.videoId}`;
-});
 </script>
 
 <template>
-  <div v-if="embedUrl" data-testid="cms-widget" class="w-full">
-    <iframe
-      :src="embedUrl"
-      class="aspect-video w-full"
-      frameborder="0"
-      allowfullscreen
-      allow="autoplay; encrypted-media"
-      :title="config.displayName || 'Video'"
-    />
+  <div v-if="embedUrl" data-testid="cms-widget" class="w-full min-w-0">
+    <VideoEmbed :src="embedUrl" :title="config.displayName || 'Video'" />
   </div>
 </template>

@@ -68,6 +68,31 @@ test.describe('Content-Security-Policy', () => {
     ).not.toContain("'unsafe-inline'");
   });
 
+  test('frames only the allowlisted video players and denies other features', async ({
+    page,
+  }) => {
+    const response = await page.goto('/');
+    const header = response?.headers()['content-security-policy'];
+
+    if (!header) {
+      noteOutOfScope('dev-server', 'no CSP header — frame-src not asserted');
+      return;
+    }
+
+    expect(parseCsp(header)['frame-src']).toEqual([
+      "'self'",
+      'https://www.youtube-nocookie.com',
+      'https://player.vimeo.com',
+    ]);
+
+    const permissions = response?.headers()['permissions-policy'] ?? '';
+    expect(permissions).toContain(
+      'fullscreen=(self "https://www.youtube-nocookie.com" "https://player.vimeo.com")',
+    );
+    expect(permissions).toContain('camera=()');
+    expect(permissions).toContain('microphone=()');
+  });
+
   test('server-rendered markup has no inline event handlers', async ({
     request,
   }) => {
