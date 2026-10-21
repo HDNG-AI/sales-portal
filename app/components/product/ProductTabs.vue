@@ -126,6 +126,14 @@ function linkHost(url: string): string {
   }
 }
 
+function mediaHeading(kind: 'video' | 'document', label: string): string {
+  if (kind === 'video') return locale.value.startsWith('sv') ? 'Film' : 'Video';
+  const name = label.toLowerCase().replace(/\s+/g, '');
+  if (name.includes('manual')) return locale.value.startsWith('sv') ? 'Manual' : 'Manual';
+  if (name.includes('spec') || name.includes('datasheet')) return locale.value.startsWith('sv') ? 'Datablad' : 'Datasheet';
+  return locale.value.startsWith('sv') ? 'Dokument' : 'Document';
+}
+
 const videoItems = computed(() => classifiedParameters.value.videos);
 const documentItems = computed(() => classifiedParameters.value.documents);
 const hasDocumentsContent = computed(
@@ -388,7 +396,7 @@ onMounted(() => {
               class="flex flex-col gap-2"
             >
               <p class="text-sm font-medium">
-                {{ video.label }}
+                {{ mediaHeading('video', video.label) }}
                 <small
                   v-if="video.fileName"
                   class="text-muted-foreground ml-1 font-normal"
@@ -450,7 +458,7 @@ onMounted(() => {
                 class="text-muted-foreground h-5 w-5 shrink-0"
               />
               <span class="min-w-0 truncate">
-                {{ doc.label }}
+                {{ mediaHeading('document', doc.label) }}
                 <small
                   v-if="doc.fileName"
                   class="text-muted-foreground ml-1 font-normal"
@@ -547,7 +555,7 @@ onMounted(() => {
                 class="flex flex-col gap-2"
               >
                 <p class="text-sm font-medium">
-                  {{ video.label }}
+                  {{ mediaHeading('video', video.label) }}
                   <small
                     v-if="video.fileName"
                     class="text-muted-foreground ml-1 font-normal"
@@ -600,7 +608,7 @@ onMounted(() => {
                   class="text-muted-foreground h-5 w-5 shrink-0"
                 />
                 <span class="min-w-0 truncate">
-                  {{ doc.label }}
+                  {{ mediaHeading('document', doc.label) }}
                   <small
                     v-if="doc.fileName"
                     class="text-muted-foreground ml-1 font-normal"
