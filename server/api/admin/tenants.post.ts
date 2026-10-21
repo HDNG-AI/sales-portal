@@ -1,7 +1,9 @@
-import { createTenant } from '../../utils/tenant-crud';
+import { createTenant, describeTenantChange } from '../../utils/tenant-crud';
 import { DEFAULT_GEINS_SETTINGS, resolveTenant } from '../../utils/tenant';
 import { CreateTenantSchema } from '../../schemas/admin-input';
 import { requireAdminAuth } from '../../utils/admin-auth';
+import { getClientIp } from '../../utils/rate-limiter';
+import { logger } from '../../utils/logger';
 
 /**
  * Admin tenant onboarding endpoint. Takes a hostname plus optional
@@ -25,7 +27,7 @@ import { requireAdminAuth } from '../../utils/admin-auth';
  */
 
 export default defineEventHandler(async (event) => {
-  await requireAdminAuth(event);
+  const caller = await requireAdminAuth(event);
 
   const body = await readValidatedBody(event, CreateTenantSchema.parse);
 
@@ -78,6 +80,20 @@ export default defineEventHandler(async (event) => {
           ? undefined
           : { ...DEFAULT_GEINS_SETTINGS },
     },
+  });
+
+  // Every admin write leaves a line naming what changed (never the values:
+  // geinsSettings holds the tenant's API key). A change to where orders,
+  // payments or a domain go is logged at warn so it stands out from theme
+  // edits; the replaced version itself is kept by createTenant in KV.
+  const change = describeTenantChange(existingViaHostname ?? null, tenant);
+  const log = change.criticalFields.length ? logger.warn : logger.info;
+  log.call(logger, '[admin-audit] tenant config written', {
+    tenantId: tenant.tenantId,
+    hostname: tenant.hostname,
+    scope: caller?.scope,
+    clientIp: getClientIp(event),
+    ...change,
   });
 
   return {

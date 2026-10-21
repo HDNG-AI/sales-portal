@@ -20,6 +20,124 @@ import {
   type TenantPortalOverrides,
 } from './tenant';
 import { withoutUndefined } from './object';
+import { KV_STORAGE_KEYS } from '../../shared/constants/storage';
+
+/**
+ * Tenant config fields a change to which alters where money, orders or a
+ * hostname go — not just how the storefront looks. `geinsSettings.*` is the
+ * Geins account (API key, account, channel) every product, cart and order
+ * call runs against; `aliases`/`hostname` decide which storefront a domain
+ * serves; `checkoutMode`/`mode`/`isActive` switch checkout or the whole
+ * storefront on and off.
+ */
+const CRITICAL_FIELDS = [
+  'aliases',
+  'checkoutMode',
+  'hostname',
+  'isActive',
+  'mode',
+];
+const CRITICAL_PREFIXES = ['geinsSettings.'];
+
+/** Bookkeeping fields every write touches; a change to them alone is no change. */
+const UNTRACKED_FIELDS = new Set([
+  'updatedAt',
+  'createdAt',
+  'css',
+  'themeHash',
+]);
+
+/** Fields compared one level deeper, so the audit names the exact setting. */
+const NESTED_FIELDS = new Set(['geinsSettings']);
+
+export interface TenantChange {
+  created: boolean;
+  /** Dotted field names that differ, sorted. Never values. */
+  changedFields: string[];
+  /** The subset of changedFields listed in CRITICAL_FIELDS/CRITICAL_PREFIXES. */
+  criticalFields: string[];
+}
+
+function flattenForAudit(config: TenantConfig | null): Map<string, string> {
+  const flat = new Map<string, string>();
+  if (!config) return flat;
+  for (const [key, value] of Object.entries(config)) {
+    if (UNTRACKED_FIELDS.has(key) || value === undefined) continue;
+    if (NESTED_FIELDS.has(key) && value && typeof value === 'object') {
+      for (const [sub, subValue] of Object.entries(value)) {
+        flat.set(`${key}.${sub}`, JSON.stringify(subValue));
+      }
+    } else {
+      flat.set(key, JSON.stringify(value));
+    }
+  }
+  return flat;
+}
+
+/**
+ * Names what an admin write changed, for the audit trail. Values are
+ * compared but never returned: `geinsSettings.apiKey` is a credential, and
+ * an audit line that echoed it would turn the log into a key store.
+ */
+export function describeTenantChange(
+  previous: TenantConfig | null,
+  next: TenantConfig,
+): TenantChange {
+  const before = flattenForAudit(previous);
+  const after = flattenForAudit(next);
+  const changedFields = [...new Set([...before.keys(), ...after.keys()])]
+    .filter((field) => before.get(field) !== after.get(field))
+    .sort();
+  const criticalFields = changedFields.filter(
+    (field) =>
+      CRITICAL_FIELDS.includes(field) ||
+      CRITICAL_PREFIXES.some((prefix) => field.startsWith(prefix)),
+  );
+  return { created: previous === null, changedFields, criticalFields };
+}
+
+export function tenantHistoryKeyPrefix(tenantId: string): string {
+  return `${KV_STORAGE_KEYS.TENANT_HISTORY_PREFIX}${tenantId}:`;
+}
+
+/**
+ * Keeps the config an admin write is about to replace, so a bad or
+ * malicious change can be put back from KV instead of reconstructed from
+ * memory. Same store and same sensitivity as the live config itself.
+ */
+async function snapshotPreviousConfig(
+  storage: ReturnType<typeof useStorage>,
+  previous: TenantConfig,
+): Promise<void> {
+  const stamp = `${new Date().toISOString()}:${Math.random().toString(36).slice(2, 8)}`;
+  await storage.setItem(
+    `${tenantHistoryKeyPrefix(previous.tenantId)}${stamp}`,
+    previous,
+  );
+}
+
+/**
+ * Refuses a config whose hostnames (primary or alias) already route to a
+ * different tenant. writeHostnameMappings deliberately overwrites such a
+ * mapping for the merchant-API refresh path, so an admin write must stop
+ * here first: otherwise listing another tenant's live domain as an alias
+ * silently moves that domain — its storefront, cart and checkout — onto
+ * this tenant. Moving a hostname means removing it from its owner first.
+ */
+async function assertHostnamesUnclaimed(
+  storage: ReturnType<typeof useStorage>,
+  config: TenantConfig,
+): Promise<void> {
+  for (const hostname of collectAllHostnames(config)) {
+    const owner = await storage.getItem<string>(tenantIdKey(hostname));
+    if (owner && owner !== config.tenantId) {
+      throw createAppError(
+        ErrorCode.CONFLICT,
+        `Hostname "${hostname}" already belongs to tenant "${owner}"; remove it there first`,
+      );
+    }
+  }
+}
 
 /**
  * A partial tenant update as accepted by createTenant/updateTenant: every
@@ -176,6 +294,8 @@ export async function createTenant(
       tenantId: finalTenantId,
       hostname: existingConfig.hostname,
     });
+    await assertHostnamesUnclaimed(storage, updatedConfig);
+    await snapshotPreviousConfig(storage, existingConfig);
     await storage.setItem(tenantConfigKey(finalTenantId), updatedConfig);
     await persistCmsOverride(storage, finalTenantId, partialConfig.cms);
     // Sequenced, not Promise.all: clearing the negative cache before
@@ -216,6 +336,7 @@ export async function createTenant(
 
   const finalConfig = mergeTenantConfig(baseConfig, partialConfig, identity);
 
+  await assertHostnamesUnclaimed(storage, finalConfig);
   await storage.setItem(tenantConfigKey(finalTenantId), finalConfig);
   await persistCmsOverride(storage, finalTenantId, partialConfig?.cms);
   await writeHostnameMappings(storage, finalConfig);
@@ -251,6 +372,8 @@ export async function updateTenant(
     hostname: existing.hostname,
   });
 
+  await assertHostnamesUnclaimed(storage, updatedConfig);
+  await snapshotPreviousConfig(storage, existing);
   await storage.setItem(tenantConfigKey(tid), updatedConfig);
   await persistCmsOverride(storage, tid, updates.cms);
   await writeHostnameMappings(storage, updatedConfig);

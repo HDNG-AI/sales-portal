@@ -15,6 +15,8 @@ export const KV_STORAGE_KEYS = {
   TENANT_CONFIG_PREFIX: 'tenant:config:',
   /** Prefix for persistent portal-specific overrides */
   TENANT_OVERRIDE_PREFIX: 'tenant:override:',
+  /** Prefix for the previous versions of a tenant config an admin write replaced */
+  TENANT_HISTORY_PREFIX: 'tenant:history:',
   /** Prefix for webhook delivery deduplication */
   WEBHOOK_PROCESSED_PREFIX: 'webhook:processed:',
 } as const;

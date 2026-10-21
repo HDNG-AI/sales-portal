@@ -6,6 +6,8 @@ import {
   updateTenant,
   deleteTenant,
   mergeCmsConfig,
+  describeTenantChange,
+  tenantHistoryKeyPrefix,
 } from '../../server/utils/tenant-crud';
 import {
   tenantConfigKey,
@@ -346,6 +348,118 @@ describe('createTenant', () => {
     });
 
     expect(cacheStore.has(nitroCacheKey)).toBe(false);
+  });
+
+  // Security regression: one admin write could repoint another tenant's live
+  // hostname (and so its storefront, checkout and Geins account) at a
+  // different tenant by listing that hostname as an alias. The mapping write
+  // only logged a warning and then overwrote it.
+  it('refuses an alias that already belongs to another tenant and leaves both tenants untouched', async () => {
+    await createTenant({
+      hostname: 'www.victim.example',
+      tenantId: 'victim',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+    await createTenant({
+      hostname: 'www.other.example',
+      tenantId: 'other',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+    const otherBefore = structuredClone(kvStore.get(tenantConfigKey('other')));
+
+    await expect(
+      createTenant({
+        hostname: 'www.other.example',
+        tenantId: 'other',
+        config: { aliases: ['www.victim.example'] },
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(kvStore.get(tenantIdKey('www.victim.example'))).toBe('victim');
+    expect(kvStore.get(tenantConfigKey('other'))).toEqual(otherBefore);
+  });
+
+  it('refuses a new tenant whose alias already belongs to another tenant', async () => {
+    await createTenant({
+      hostname: 'www.victim.example',
+      tenantId: 'victim',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+
+    await expect(
+      createTenant({
+        hostname: 'www.new.example',
+        tenantId: 'newcomer',
+        config: { aliases: ['www.victim.example'] },
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(kvStore.get(tenantIdKey('www.victim.example'))).toBe('victim');
+    expect(kvStore.has(tenantConfigKey('newcomer'))).toBe(false);
+    expect(kvStore.has(tenantIdKey('www.new.example'))).toBe(false);
+  });
+
+  it('keeps the previous version of an updated tenant so a bad change can be rolled back', async () => {
+    await createTenant({
+      hostname: 'shop.example.com',
+      tenantId: 'shop',
+      config: { checkoutMode: 'custom', geinsSettings: GEINS_SETTINGS },
+    });
+    const before = structuredClone(kvStore.get(tenantConfigKey('shop')));
+
+    await createTenant({
+      hostname: 'shop.example.com',
+      tenantId: 'shop',
+      config: { checkoutMode: 'hosted' },
+    });
+
+    const history = [...kvStore.entries()].filter(([key]) =>
+      key.startsWith(tenantHistoryKeyPrefix('shop')),
+    );
+    expect(history).toHaveLength(1);
+    expect(history[0]![1]).toEqual(before);
+  });
+});
+
+describe('describeTenantChange', () => {
+  const base = {
+    tenantId: 'shop',
+    hostname: 'shop.example.com',
+    checkoutMode: 'custom',
+    geinsSettings: GEINS_SETTINGS,
+  } as unknown as TenantConfig;
+
+  it('names changed fields and flags critical ones without echoing any value', () => {
+    const next = {
+      ...base,
+      checkoutMode: 'hosted',
+      geinsSettings: { ...GEINS_SETTINGS, apiKey: 'new-secret-key' },
+    } as unknown as TenantConfig;
+
+    const change = describeTenantChange(base, next);
+
+    expect(change.changedFields).toEqual([
+      'checkoutMode',
+      'geinsSettings.apiKey',
+    ]);
+    expect(change.criticalFields).toEqual([
+      'checkoutMode',
+      'geinsSettings.apiKey',
+    ]);
+    expect(JSON.stringify(change)).not.toContain('new-secret-key');
+    expect(JSON.stringify(change)).not.toContain('key-1');
+  });
+
+  it('treats a brand-new tenant as a change to every critical field it sets', () => {
+    const change = describeTenantChange(null, base);
+    expect(change.created).toBe(true);
+    expect(change.criticalFields).toContain('checkoutMode');
+    expect(change.criticalFields).toContain('geinsSettings.apiKey');
+  });
+
+  it('reports no change when nothing but the timestamp moved', () => {
+    const next = { ...base, updatedAt: 'later' } as unknown as TenantConfig;
+    expect(describeTenantChange(base, next).changedFields).toEqual([]);
   });
 });
 
