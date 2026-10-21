@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { VideoWidgetData, ContentConfigType } from '#shared/types/cms';
-import { buildVideoEmbedUrl } from '#shared/utils/video-embed';
+import { resolveVideoField } from '#shared/utils/video-embed';
+import { logger } from '~/utils/logger';
 
 const props = defineProps<{
   data: VideoWidgetData;
@@ -10,17 +11,28 @@ const props = defineProps<{
 
 /**
  * Geins CMS videoProvider field: 0=youtube, 1=vimeo.
- * The id is validated before it becomes a src; an id that no provider could
- * have issued renders nothing rather than a broken or redirected frame.
+ * The field may hold an id, an id with a share suffix or a whole URL; it is
+ * reduced to a validated id before it becomes a src, and a value no provider
+ * could have issued renders nothing rather than a broken or redirected frame.
  */
 const embedUrl = computed(() =>
   props.data.videoId
-    ? buildVideoEmbedUrl(
+    ? resolveVideoField(
         props.data.videoProvider === 1 ? 'vimeo' : 'youtube',
         props.data.videoId,
       )
     : null,
 );
+
+// A rejected value is otherwise invisible: the widget just isn't there. Name
+// its shape (never the value) so the merchant or a test run can see why.
+onMounted(() => {
+  if (!props.data.videoId || embedUrl.value) return;
+  const value = props.data.videoId.trim();
+  logger.warn(
+    `[cms] video widget "${props.config.name}" skipped: provider=${props.data.videoProvider ?? 'unset'} length=${value.length} url=${/^[a-z]+:/i.test(value)}`,
+  );
+});
 </script>
 
 <template>

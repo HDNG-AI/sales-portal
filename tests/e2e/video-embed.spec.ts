@@ -65,6 +65,13 @@ test.describe('Embedded video', () => {
       const providerRequests = trackProviderRequests(page);
       const cspViolations = trackCspViolations(page);
 
+      const skippedWidgets: string[] = [];
+      page.on('console', (msg) => {
+        if (msg.text().includes('[cms] video widget')) {
+          skippedWidgets.push(msg.text().replace(/^.*\[cms\]/, '[cms]'));
+        }
+      });
+
       await page.goto(VIDEO_PATH);
       await waitForHydration(page);
 
@@ -73,7 +80,9 @@ test.describe('Embedded video', () => {
       outOfScope(
         count === 0,
         'fixture-missing',
-        `no embedded video on ${VIDEO_PATH} for this tenant`,
+        `no embedded video on ${VIDEO_PATH} for this tenant${
+          skippedWidgets.length ? ` (${skippedWidgets.join('; ')})` : ''
+        }`,
       );
 
       // Before consent: no frame, and not one request to the provider.

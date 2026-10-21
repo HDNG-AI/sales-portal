@@ -3,6 +3,7 @@ import {
   VIDEO_FRAME_ORIGINS,
   buildVideoEmbedUrl,
   parseVideoUrl,
+  resolveVideoField,
   resolveVideoUrlToEmbed,
   videoProviderOf,
 } from '../../../shared/utils/video-embed';
@@ -103,5 +104,35 @@ describe('videoProviderOf', () => {
     expect(videoProviderOf(`https://www.youtube.com/embed/${ID}`)).toBeNull();
     expect(videoProviderOf('https://evil.example/embed/x')).toBeNull();
     expect(videoProviderOf('javascript:alert(1)')).toBeNull();
+  });
+});
+
+describe('resolveVideoField', () => {
+  const PLAYER = `https://www.youtube-nocookie.com/embed/${ID}`;
+
+  it.each([
+    ['a bare id', ID],
+    ['an id with spaces around it', `  ${ID} `],
+    ['an id with a share suffix', `${ID}?si=AbCdEf123`],
+    ['an id with a timestamp', `${ID}&t=42`],
+    ['a watch URL', `https://www.youtube.com/watch?v=${ID}`],
+    ['a short link', `https://youtu.be/${ID}?si=x`],
+  ])('accepts %s', (_label, value) => {
+    expect(resolveVideoField('youtube', value)).toBe(PLAYER);
+  });
+
+  it('takes the provider from a pasted URL over the field setting', () => {
+    expect(resolveVideoField('youtube', 'https://vimeo.com/42')).toBe(
+      'https://player.vimeo.com/video/42?dnt=1',
+    );
+  });
+
+  it.each([
+    `https://evil.example/embed/${ID}`,
+    `../../watch?v=${ID}`,
+    '"><script>alert(1)</script>',
+    'abc123',
+  ])('refuses %s', (value) => {
+    expect(resolveVideoField('youtube', value)).toBeNull();
   });
 });

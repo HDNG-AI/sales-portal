@@ -104,6 +104,23 @@ export function parseVideoUrl(
   return null;
 }
 
+/**
+ * The player URL for a CMS video field, which merchants fill in more than one
+ * way: the bare id, the id with a share suffix (`dQw4w9WgXcQ?si=…`), or the
+ * whole page URL. All three resolve to the same validated id; anything else
+ * is null.
+ */
+export function resolveVideoField(
+  provider: VideoProvider,
+  raw: string,
+): string | null {
+  const value = raw.trim();
+  const parsed = parseVideoUrl(value);
+  if (parsed) return buildVideoEmbedUrl(parsed.provider, parsed.id);
+  const bareId = value.split(/[?&#]/, 1)[0] ?? '';
+  return buildVideoEmbedUrl(provider, bareId);
+}
+
 /** A pasted video URL as an embeddable player src, or null. */
 export function resolveVideoUrlToEmbed(raw: string): string | null {
   const parsed = parseVideoUrl(raw);

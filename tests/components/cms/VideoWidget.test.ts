@@ -80,6 +80,16 @@ describe('VideoWidget', () => {
     expect(wrapper.find('iframe').exists()).toBe(false);
   });
 
+  it.each([
+    ['an id with a share suffix', 'dQw4w9WgXcQ?si=AbCdEf123'],
+    ['a pasted watch URL', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
+  ])('plays a YouTube field holding %s', async (_label, videoId) => {
+    const wrapper = await play(makeProps({ videoId }));
+    expect(wrapper.find('iframe').attributes('src')).toBe(
+      'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1',
+    );
+  });
+
   it('renders nothing for a non-numeric Vimeo id', () => {
     const wrapper = mountComponent(VideoWidget, {
       props: makeProps({ videoId: 'abc', videoProvider: 1 }),
