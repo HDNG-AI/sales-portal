@@ -1,6 +1,10 @@
 import * as ordersService from '../../services/orders';
 import { requireAuth } from '../../utils/auth';
-import { requireOdelcoOrderOwnership, requireVerifiedCheckoutBuyer, requiresVerifiedCheckoutBuyer } from '../../utils/checkout-access';
+import {
+  requireOdelcoOrderOwnership,
+  requireVerifiedCheckoutBuyer,
+  requiresVerifiedCheckoutBuyer,
+} from '../../utils/checkout-access';
 import { OrderIdSchema } from '../../schemas/api-input';
 
 export default defineEventHandler(async (event) => {
@@ -8,13 +12,18 @@ export default defineEventHandler(async (event) => {
   const tokens = privateBuyer
     ? await requireVerifiedCheckoutBuyer(event)
     : await requireAuth(event);
-  setResponseHeader(event, 'Cache-Control', privateBuyer
-    ? 'private, no-store'
-    : 'private, max-age=30, must-revalidate');
+  // Order details are per-company and access can be revoked at any time, so
+  // no cache may keep a copy.
+  setResponseHeader(event, 'Cache-Control', 'private, no-store');
   const id = getRouterParam(event, 'id');
   const { id: validatedId } = OrderIdSchema.parse({ id });
   return withErrorHandling(
     async () => {
+      // getOrderPublic does no ownership check of its own, so the requested
+      // ID must be in the company's order list before any detail is read.
+      if (privateBuyer) {
+        await requireOdelcoOrderOwnership(event, tokens, validatedId, 'public');
+      }
       const order = await ordersService.getOrder(
         { publicOrderId: validatedId },
         event,
@@ -22,8 +31,8 @@ export default defineEventHandler(async (event) => {
       if (!order) {
         throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
       }
-      if (privateBuyer) {
-        await requireOdelcoOrderOwnership(event, tokens, order.publicId, 'public');
+      if (privateBuyer && String(order.publicId ?? '') !== validatedId) {
+        throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
       }
       return { order };
     },

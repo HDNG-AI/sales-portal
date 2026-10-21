@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { H3Event } from 'h3';
 
-const { mockRequiresPrivateBuyer, mockVerifyBuyer, mockOwner } = vi.hoisted(() => ({
-  mockRequiresPrivateBuyer: vi.fn(),
-  mockVerifyBuyer: vi.fn(),
-  mockOwner: vi.fn(),
-}));
+const { mockRequiresPrivateBuyer, mockVerifyBuyer, mockOwner } = vi.hoisted(
+  () => ({
+    mockRequiresPrivateBuyer: vi.fn(),
+    mockVerifyBuyer: vi.fn(),
+    mockOwner: vi.fn(),
+  }),
+);
 vi.mock('../../../../server/utils/checkout-access', () => ({
   requiresVerifiedCheckoutBuyer: mockRequiresPrivateBuyer,
   requireVerifiedCheckoutBuyer: mockVerifyBuyer,
@@ -70,7 +72,10 @@ describe('GET /api/orders/[id]', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockRequiresPrivateBuyer.mockReturnValue(false);
-    mockVerifyBuyer.mockResolvedValue({ authToken: 'verified', refreshToken: 'refresh' });
+    mockVerifyBuyer.mockResolvedValue({
+      authToken: 'verified',
+      refreshToken: 'refresh',
+    });
     mockOwner.mockResolvedValue(undefined);
     handler = (await import('../../../../server/api/orders/[id].get'))
       .default as unknown as (event: H3Event) => Promise<unknown>;
@@ -117,30 +122,81 @@ describe('GET /api/orders/[id]', () => {
     mockedGetRouterParam.mockReturnValueOnce('opaque-id');
     const order = { publicId: 'opaque-id', customerId: '77', status: 'Placed' };
     mockGetOrder.mockResolvedValueOnce(order);
-    const event = { context: { tenant: { tenantId: 'odelco' } } } as unknown as H3Event;
+    const event = {
+      context: { tenant: { tenantId: 'odelco' } },
+    } as unknown as H3Event;
     const result = await handler(event);
     expect(mockVerifyBuyer).toHaveBeenCalledWith(event);
     expect(mockRequireAuth).not.toHaveBeenCalled();
-    expect(mockOwner).toHaveBeenCalledWith(event,
-      { authToken: 'verified', refreshToken: 'refresh' }, 'opaque-id', 'public');
+    expect(mockOwner).toHaveBeenCalledWith(
+      event,
+      { authToken: 'verified', refreshToken: 'refresh' },
+      'opaque-id',
+      'public',
+    );
     expect(result).toEqual({ order });
-    expect(setResponseHeader).toHaveBeenCalledWith(event, 'Cache-Control', 'private, no-store');
+    expect(setResponseHeader).toHaveBeenCalledWith(
+      event,
+      'Cache-Control',
+      'private, no-store',
+    );
   });
 
-  it('never returns a different company order even when Geins returns it', async () => {
+  it('rejects another company order before reading any detail from Geins', async () => {
     mockRequiresPrivateBuyer.mockReturnValue(true);
     mockedGetRouterParam.mockReturnValueOnce('other-company-id');
-    mockGetOrder.mockResolvedValueOnce({ publicId: 'other-company-id', customerId: '9000' });
-    mockOwner.mockRejectedValueOnce(Object.assign(new Error('Order not found'), { statusCode: 404 }));
-    await expect(handler({ context: { tenant: { tenantId: 'odelco' } } } as unknown as H3Event))
-      .rejects.toMatchObject({ statusCode: 404 });
+    mockOwner.mockRejectedValueOnce(
+      Object.assign(new Error('Order not found'), { statusCode: 404 }),
+    );
+    const event = {
+      context: { tenant: { tenantId: 'odelco' } },
+    } as unknown as H3Event;
+    await expect(handler(event)).rejects.toMatchObject({ statusCode: 404 });
+    expect(mockOwner).toHaveBeenCalledWith(
+      event,
+      { authToken: 'verified', refreshToken: 'refresh' },
+      'other-company-id',
+      'public',
+    );
+    expect(mockGetOrder).not.toHaveBeenCalled();
+  });
+
+  it('never returns an order whose public ID differs from the one authorized', async () => {
+    mockRequiresPrivateBuyer.mockReturnValue(true);
+    mockedGetRouterParam.mockReturnValueOnce('own-company-id');
+    mockGetOrder.mockResolvedValueOnce({ publicId: 'other-company-id' });
+    await expect(
+      handler({
+        context: { tenant: { tenantId: 'odelco' } },
+      } as unknown as H3Event),
+    ).rejects.toThrow('Order not found');
+  });
+
+  it('marks order detail private, no-store for every tenant', async () => {
+    mockRequireAuth.mockResolvedValueOnce({
+      authToken: 'token',
+      refreshToken: 'refresh',
+    });
+    mockedGetRouterParam.mockReturnValueOnce('abc-123');
+    mockGetOrder.mockResolvedValueOnce({ publicId: 'abc-123' });
+    await handler(mockEvent);
+    expect(setResponseHeader).toHaveBeenCalledWith(
+      mockEvent,
+      'Cache-Control',
+      'private, no-store',
+    );
   });
 
   it('does not fetch order data when CRM buyer validation fails', async () => {
     mockRequiresPrivateBuyer.mockReturnValue(true);
-    mockVerifyBuyer.mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { statusCode: 401 }));
-    await expect(handler({ context: { tenant: { tenantId: 'odelco' } } } as unknown as H3Event))
-      .rejects.toMatchObject({ statusCode: 401 });
+    mockVerifyBuyer.mockRejectedValueOnce(
+      Object.assign(new Error('Unauthorized'), { statusCode: 401 }),
+    );
+    await expect(
+      handler({
+        context: { tenant: { tenantId: 'odelco' } },
+      } as unknown as H3Event),
+    ).rejects.toMatchObject({ statusCode: 401 });
     expect(mockGetOrder).not.toHaveBeenCalled();
   });
 
