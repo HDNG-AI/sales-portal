@@ -64,7 +64,17 @@ function linkAttrs(item: MenuItemType): Record<string, string | undefined> {
     class="bg-nav-bar-background relative hidden h-12 items-center border-b lg:flex"
     :aria-label="$t('layout.main_navigation')"
   >
-    <div class="mx-auto w-full max-w-7xl px-4 lg:px-6">
+    <!--
+      The menu comes from the merchant admin, so the row has no fixed length.
+      When it is wider than the container it scrolls inside this bar rather
+      than widening the page. The mega menu is absolutely positioned against
+      the <nav> above (every element in between is static), so it escapes
+      this container's overflow and is not clipped by it.
+    -->
+    <div
+      class="mx-auto w-full max-w-7xl min-w-0 overflow-x-auto px-4 [scrollbar-width:thin] lg:px-6"
+      data-testid="header-nav-scroller"
+    >
       <NavigationMenu
         :viewport="false"
         class="static max-w-none justify-start [&>div]:!static"

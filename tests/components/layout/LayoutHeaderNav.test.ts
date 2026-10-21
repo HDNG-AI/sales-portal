@@ -214,6 +214,29 @@ describe('LayoutHeaderNav', () => {
     expect(wrapper.text()).toContain('Sub B');
   });
 
+  it('scrolls a menu row wider than the container inside the bar, not the page', () => {
+    mockMenu.value = {
+      id: '1',
+      title: 'Main',
+      menuItems: Array.from({ length: 20 }, (_, i) => ({
+        id: String(i),
+        label: `Category ${i}`,
+        canonicalUrl: `/se/sv/l/category-${i}`,
+        order: i,
+      })),
+    };
+
+    const wrapper = shallowMountComponent(LayoutHeaderNav, mountOptions);
+    const scroller = wrapper.find('[data-testid="header-nav-scroller"]');
+
+    expect(scroller.classes()).toContain('overflow-x-auto');
+    expect(scroller.classes()).toContain('min-w-0');
+    // The mega menu positions against the <nav>, outside the scroller, so the
+    // scroller's overflow cannot clip it.
+    expect(wrapper.find('nav').classes()).toContain('relative');
+    expect(scroller.classes()).not.toContain('relative');
+  });
+
   it('caps the mega menu height and scrolls its contents internally', () => {
     mockMenu.value = {
       id: '1',
