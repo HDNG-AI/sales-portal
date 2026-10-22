@@ -19,6 +19,8 @@ vi.stubGlobal('setHeader', setHeaderMock);
 vi.mock('#shared/constants/storage', () => ({
   COOKIE_NAMES: {
     PREVIEW_MODE: 'preview_mode',
+    AUTH_TOKEN: 'auth_token',
+    REFRESH_TOKEN: 'refresh_token',
   },
 }));
 
@@ -77,5 +79,44 @@ describe('cache-headers middleware', () => {
     query = { preview: '1' };
     run('/sv/sv/');
     expect(headers['cache-control']).toBe('private, no-store');
+  });
+
+  // Regression: anonymous GET /se/sv/checkout answers 302 -> /se/sv/ from the
+  // orderPlacement feature middleware. Shared as public, that redirect would be
+  // replayed to signed-in buyers on the same host.
+  it.each([
+    '/se/sv/checkout',
+    '/se/sv/checkout/',
+    '/se/sv/checkout?quotationId=q1',
+    '/se/sv/cart',
+    '/se/sv/login?redirect=/se/sv/portal',
+    '/se/sv/portal',
+    '/se/sv/portal/orders/123',
+    '/se/sv/account/reset-password',
+    '/se/sv/order-confirmation?orderId=abc',
+    '/se/sv/quote-confirmation/q1',
+    '/checkout',
+  ])('marks session page %s as private for anonymous callers', (path) => {
+    run(path);
+    expect(headers['cache-control']).toBe('private, no-store');
+    expect(headers['vary']).toBeUndefined();
+  });
+
+  it('marks every page as private when the caller sends a user token', () => {
+    cookies.auth_token = 'token';
+    run('/se/sv/p/some-product');
+    expect(headers['cache-control']).toBe('private, no-store');
+  });
+
+  it.each([
+    '/se/sv/',
+    '/se/sv/p/some-product',
+    '/se/sv/cartridges',
+    '/se/sv/c/portal-hinges',
+  ])('keeps anonymous catalog page %s publicly cacheable', (path) => {
+    run(path);
+    expect(headers['cache-control']).toBe(
+      'public, s-maxage=60, stale-while-revalidate=600',
+    );
   });
 });
