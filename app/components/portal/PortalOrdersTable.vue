@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Badge } from '~/components/ui/badge';
+import { getOrderStatusLabel } from '~/utils/order-status';
 import { formatTenantDate } from '~/utils/tenant-date';
 
 const { t } = useI18n();
@@ -62,19 +63,6 @@ function getStatusVariant(
   }
 }
 
-function getStatusKey(status: string): string {
-  const key = status.toLowerCase();
-  const knownStatuses = [
-    'placed',
-    'pending',
-    'delivered',
-    'processing',
-    'shipped',
-    'cancelled',
-  ];
-  return knownStatuses.includes(key) ? `portal.orders.status.${key}` : status;
-}
-
 function getTotal(order: {
   cart?: {
     summary?: {
@@ -127,7 +115,7 @@ function handleSortCreated() {
           <div class="mb-2 flex items-center justify-between">
             <span class="font-medium">#{{ order.id }}</span>
             <Badge :variant="getStatusVariant(order.status)">
-              {{ t(getStatusKey(order.status)) }}
+              {{ getOrderStatusLabel(order.status, t) }}
             </Badge>
           </div>
           <div class="text-muted-foreground space-y-1 text-sm">
@@ -193,7 +181,7 @@ function handleSortCreated() {
             </td>
             <td class="py-3 pr-4">
               <Badge :variant="getStatusVariant(order.status)">
-                {{ t(getStatusKey(order.status)) }}
+                {{ getOrderStatusLabel(order.status, t) }}
               </Badge>
             </td>
             <td class="py-3 text-right">

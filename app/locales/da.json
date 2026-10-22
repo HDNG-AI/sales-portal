@@ -1,5 +1,9 @@
 {
   "common": {
+    "shipping_may_apply": "Kan tilkomme",
+    "to_pay_inc_vat": "At betale inkl. moms",
+    "vat": "Moms",
+    "vat_included": "Heraf moms",
     "loading": "Indlæser…",
     "error": "Fejl",
     "not_found": "Ikke fundet",
@@ -602,7 +606,13 @@
         "delivered": "Leveret",
         "processing": "Behandles",
         "shipped": "Afsendt",
-        "cancelled": "Annulleret"
+        "cancelled": "Annulleret",
+        "on_hold": "På hold",
+        "inactive": "Inaktiv",
+        "refunded": "Refunderet",
+        "partial": "Delvist leveret",
+        "backorder": "Restordre",
+        "completed": "Gennemført"
       },
       "view": "Vis",
       "type_web": "Webordre",

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { H3Event } from 'h3';
 import {
+  requireCompanyOrderOwnership,
   requireOdelcoOrderOwnership,
   requireOdelcoSummaryOwnership,
   requireVerifiedCheckoutBuyer,
@@ -258,5 +259,50 @@ describe('Odelco company-scoped order ownership', () => {
       summary(),
     );
     expect(listOrders).not.toHaveBeenCalled();
+  });
+});
+
+describe('company-scoped order ownership for every tenant', () => {
+  const tokens = { authToken: 'valid-token', refreshToken: 'valid-refresh' };
+
+  it('enforces membership for a resolved public tenant', async () => {
+    const event = tenantEvent('public');
+    await requireCompanyOrderOwnership(event, tokens, 'public-104', 'public');
+    expect(listOrders).toHaveBeenCalledWith(event, 'valid-token');
+    await expect(
+      requireCompanyOrderOwnership(event, tokens, 'foreign-order-id', 'public'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('enforces membership for a private tenant other than Odelco', async () => {
+    const event = tenantEvent('private-prices', {
+      priceVisibility: { enabled: true, access: 'authenticated' },
+    });
+    await expect(
+      requireCompanyOrderOwnership(event, tokens, 'foreign-order-id', 'public'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    // The Odelco-scoped variant lets the same request through unchecked.
+    await requireOdelcoOrderOwnership(
+      event,
+      tokens,
+      'foreign-order-id',
+      'public',
+    );
+    expect(listOrders).toHaveBeenCalledOnce();
+  });
+
+  it('denies missing IDs and an unavailable listing for any tenant', async () => {
+    const event = tenantEvent('public');
+    await expect(
+      requireCompanyOrderOwnership(event, tokens, null, 'public'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    await expect(
+      requireCompanyOrderOwnership(event, tokens, '', 'public'),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(listOrders).not.toHaveBeenCalled();
+    listOrders.mockRejectedValueOnce(new Error('Upstream unavailable'));
+    await expect(
+      requireCompanyOrderOwnership(event, tokens, 'public-104', 'public'),
+    ).rejects.toMatchObject({ statusCode: 404 });
   });
 });

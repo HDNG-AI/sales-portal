@@ -134,6 +134,45 @@ describe('orders service', () => {
       expect(result).toHaveProperty('total');
     });
 
+    it('scopes the company order list by the user token, uncached', async () => {
+      mockGraphqlQuery.mockResolvedValueOnce({ getCompanyOrders: [] });
+
+      await ordersService.listOrders(mockEvent);
+
+      const call = mockGraphqlQuery.mock.calls[0]![0];
+      // Geins resolves the company from this token; without it the list is
+      // not the caller's company's.
+      expect(call.userToken).toBe('test-user-token');
+      // No per-call fetch policy: the server-side SDK defaults to no-cache,
+      // so one user's list is never served to another from the Apollo cache.
+      expect(call.requestOptions).toBeUndefined();
+      // Nothing in the variables can point the query at another company.
+      expect(Object.keys(call.variables).sort()).toEqual([
+        'channelId',
+        'languageId',
+        'marketId',
+      ]);
+    });
+
+    it('lists orders with getCompanyOrders and no caller-chosen company or paging', async () => {
+      const { readFileSync } = await import('node:fs');
+      const { fileURLToPath } = await import('node:url');
+      const query = readFileSync(
+        fileURLToPath(
+          new URL(
+            '../../../server/services/graphql/orders/orders-list.graphql',
+            import.meta.url,
+          ),
+        ),
+        'utf8',
+      );
+      // The argument list is exactly these three, so there is no company id
+      // and no page size or offset that could truncate or redirect the list.
+      expect(query).toMatch(
+        /getCompanyOrders\(channelId: \$channelId, languageId: \$languageId, marketId: \$marketId\) \{/,
+      );
+    });
+
     it('lists orders with a verified token in place of the request cookie', async () => {
       mockGraphqlQuery.mockResolvedValueOnce({ getCompanyOrders: [] });
 

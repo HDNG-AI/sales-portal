@@ -88,22 +88,18 @@ export async function requireVerifiedCheckoutBuyer(
  *
  * Fail closed on absent IDs, unavailable scoped listing and any other error.
  * No order identifiers or personally identifiable fields are logged here.
+ *
+ * Applies to every tenant. Use it where the caller has no other ownership
+ * guarantee, as for order detail: `getOrderPublic` reads any order by its
+ * public ID. `requireOdelcoOrderOwnership` is the same check limited to
+ * Odelco and to requests with no resolved tenant config.
  */
-export async function requireOdelcoOrderOwnership(
+export async function requireCompanyOrderOwnership(
   event: H3Event,
   tokens: AuthTokens,
   orderId: unknown,
   idType: 'internal' | 'public' = 'internal',
 ): Promise<void> {
-  const tenant = event.context.tenant;
-  // Skip only for a resolved non-Odelco tenant. An unresolved one is checked.
-  if (
-    tenant?.config &&
-    (tenant.tenantId ?? tenant.config.tenantId) !== 'odelco'
-  ) {
-    return;
-  }
-
   if (typeof orderId !== 'number' && typeof orderId !== 'string') {
     throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
   }
@@ -126,6 +122,27 @@ export async function requireOdelcoOrderOwnership(
     // Geins list failure, invalid company context, etc. -> deny.
   }
   throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
+}
+
+/**
+ * `requireCompanyOrderOwnership` for Odelco and for a request with no
+ * resolved tenant config. A resolved non-Odelco tenant passes unchecked.
+ */
+export async function requireOdelcoOrderOwnership(
+  event: H3Event,
+  tokens: AuthTokens,
+  orderId: unknown,
+  idType: 'internal' | 'public' = 'internal',
+): Promise<void> {
+  const tenant = event.context.tenant;
+  // Skip only for a resolved non-Odelco tenant. An unresolved one is checked.
+  if (
+    tenant?.config &&
+    (tenant.tenantId ?? tenant.config.tenantId) !== 'odelco'
+  ) {
+    return;
+  }
+  return requireCompanyOrderOwnership(event, tokens, orderId, idType);
 }
 
 export async function requireOdelcoSummaryOwnership(
