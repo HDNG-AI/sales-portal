@@ -126,6 +126,14 @@ function linkHost(url: string): string {
   }
 }
 
+function mediaHeading(kind: 'video' | 'document', label: string): string {
+  if (kind === 'video') return locale.value.startsWith('sv') ? 'Film' : 'Video';
+  const name = label.toLowerCase().replace(/\s+/g, '');
+  if (name.includes('manual')) return locale.value.startsWith('sv') ? 'Manual' : 'Manual';
+  if (name.includes('spec') || name.includes('datasheet')) return locale.value.startsWith('sv') ? 'Datablad' : 'Datasheet';
+  return locale.value.startsWith('sv') ? 'Dokument' : 'Document';
+}
+
 const videoItems = computed(() => classifiedParameters.value.videos);
 const documentItems = computed(() => classifiedParameters.value.documents);
 const hasDocumentsContent = computed(
@@ -256,6 +264,25 @@ onMounted(() => {
 
 <template>
   <div data-testid="product-tabs">
+    <!-- Feature the first product film without requiring the Documents tab. -->
+    <section
+      v-if="videoItems[0]?.embedUrl"
+      class="bg-card mb-6 rounded-lg border p-4 md:p-6"
+      data-testid="product-featured-video"
+    >
+      <h2 class="font-heading mb-4 text-xl font-semibold">
+        {{ locale === 'sv' ? 'Film' : 'Video' }}
+      </h2>
+      <iframe
+        :src="videoItems[0].embedUrl"
+        :title="product.name + ' – video'"
+        loading="lazy"
+        allow="fullscreen; picture-in-picture"
+        allowfullscreen
+        referrerpolicy="strict-origin-when-cross-origin"
+        class="aspect-video w-full rounded-lg border-0"
+      />
+    </section>
     <!-- Desktop: Tabs (hidden below md via CSS to avoid SSR/client flash) -->
     <Tabs class="hidden md:block" :default-value="defaultTab">
       <TabsList variant="underline">
@@ -369,7 +396,7 @@ onMounted(() => {
               class="flex flex-col gap-2"
             >
               <p class="text-sm font-medium">
-                {{ video.label }}
+                {{ mediaHeading('video', video.label) }}
                 <small
                   v-if="video.fileName"
                   class="text-muted-foreground ml-1 font-normal"
@@ -431,7 +458,7 @@ onMounted(() => {
                 class="text-muted-foreground h-5 w-5 shrink-0"
               />
               <span class="min-w-0 truncate">
-                {{ doc.label }}
+                {{ mediaHeading('document', doc.label) }}
                 <small
                   v-if="doc.fileName"
                   class="text-muted-foreground ml-1 font-normal"
@@ -528,7 +555,7 @@ onMounted(() => {
                 class="flex flex-col gap-2"
               >
                 <p class="text-sm font-medium">
-                  {{ video.label }}
+                  {{ mediaHeading('video', video.label) }}
                   <small
                     v-if="video.fileName"
                     class="text-muted-foreground ml-1 font-normal"
@@ -581,7 +608,7 @@ onMounted(() => {
                   class="text-muted-foreground h-5 w-5 shrink-0"
                 />
                 <span class="min-w-0 truncate">
-                  {{ doc.label }}
+                  {{ mediaHeading('document', doc.label) }}
                   <small
                     v-if="doc.fileName"
                     class="text-muted-foreground ml-1 font-normal"
