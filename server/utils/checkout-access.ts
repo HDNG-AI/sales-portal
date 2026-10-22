@@ -13,6 +13,10 @@ import { listOrders } from '../services/orders';
  */
 export function requiresVerifiedCheckoutBuyer(event: H3Event): boolean {
   const tenant = event.context.tenant;
+  // No resolved config (e.g. a ?preview=1 request whose merchant API call
+  // failed) tells us nothing about the tenant's policy, so treat it as
+  // private. The SDK can still resolve the tenant from KV in that case.
+  if (!tenant?.config) return true;
   const id = tenant?.tenantId ?? tenant?.config?.tenantId;
   const features = tenant?.config?.features;
   return (
@@ -31,30 +35,45 @@ export function requiresVerifiedCheckoutBuyer(event: H3Event): boolean {
  * This is session validation only. The OMS order/cart ownership guarantee
  * requires a distinct security review and integration test (#42).
  */
-export async function requireVerifiedCheckoutBuyer(event: H3Event): Promise<AuthTokens> {
+export async function requireVerifiedCheckoutBuyer(
+  event: H3Event,
+): Promise<AuthTokens> {
   const tokens = await optionalAuth(event);
   if (!tokens?.authToken || !tokens.refreshToken) {
-    throw createAppError(ErrorCode.UNAUTHORIZED, 'Verified buyer session required');
+    throw createAppError(
+      ErrorCode.UNAUTHORIZED,
+      'Verified buyer session required',
+    );
   }
 
   const exp = decodeJwtPayload(tokens.authToken)?.exp;
-  if (typeof exp !== 'number' || !Number.isFinite(exp) ||
-      exp * 1000 <= Date.now() + 5_000) {
+  if (
+    typeof exp !== 'number' ||
+    !Number.isFinite(exp) ||
+    exp * 1000 <= Date.now() + 5_000
+  ) {
     throw createAppError(ErrorCode.UNAUTHORIZED, 'Buyer session expired');
   }
 
   try {
     // A real Geins CRM query, not a local JWT decode or token refresh.
     const buyer = await userService.getUser(tokens.authToken, event);
-    const identity = buyer as { id?: unknown; authenticated?: boolean } | undefined;
-    if (identity?.authenticated !== false &&
-        (typeof identity?.id === 'string' || typeof identity?.id === 'number')) {
+    const identity = buyer as
+      | { id?: unknown; authenticated?: boolean }
+      | undefined;
+    if (
+      identity?.authenticated !== false &&
+      (typeof identity?.id === 'string' || typeof identity?.id === 'number')
+    ) {
       return tokens;
     }
   } catch {
     // CRM/network failure is a deny, not a guest fallback.
   }
-  throw createAppError(ErrorCode.UNAUTHORIZED, 'Verified buyer session required');
+  throw createAppError(
+    ErrorCode.UNAUTHORIZED,
+    'Verified buyer session required',
+  );
 }
 
 /**
@@ -72,12 +91,18 @@ export async function requireVerifiedCheckoutBuyer(event: H3Event): Promise<Auth
  */
 export async function requireOdelcoOrderOwnership(
   event: H3Event,
-  _tokens: AuthTokens,
+  tokens: AuthTokens,
   orderId: unknown,
   idType: 'internal' | 'public' = 'internal',
 ): Promise<void> {
   const tenant = event.context.tenant;
-  if ((tenant?.tenantId ?? tenant?.config?.tenantId) !== 'odelco') return;
+  // Skip only for a resolved non-Odelco tenant. An unresolved one is checked.
+  if (
+    tenant?.config &&
+    (tenant.tenantId ?? tenant.config.tenantId) !== 'odelco'
+  ) {
+    return;
+  }
 
   if (typeof orderId !== 'number' && typeof orderId !== 'string') {
     throw createAppError(ErrorCode.NOT_FOUND, 'Order not found');
@@ -88,9 +113,10 @@ export async function requireOdelcoOrderOwnership(
   }
 
   try {
-    // This service runs getCompanyOrders with this request's Geins user token.
-    // Unlike getOrderPublic, it returns only the authenticated company's orders.
-    const { orders } = await listOrders(event);
+    // getCompanyOrders runs with the verified token, not the request cookie,
+    // which is stale after a silent refresh. Unlike getOrderPublic, it
+    // returns only the authenticated company's orders.
+    const { orders } = await listOrders(event, tokens.authToken);
     const permitted = orders.some((order) => {
       const value = idType === 'public' ? order.publicId : order.id;
       return value !== undefined && value !== null && String(value) === id;
@@ -107,5 +133,10 @@ export async function requireOdelcoSummaryOwnership(
   tokens: AuthTokens,
   summary: CheckoutSummaryType,
 ): Promise<void> {
-  return requireOdelcoOrderOwnership(event, tokens, summary.order?.orderId, 'internal');
+  return requireOdelcoOrderOwnership(
+    event,
+    tokens,
+    summary.order?.orderId,
+    'internal',
+  );
 }

@@ -3,11 +3,15 @@ import { CheckoutTokenSchema } from '../../schemas/api-input';
 import { createToken, getCheckout } from '../../services/checkout';
 import { HOSTED_CHECKOUT_BASE_URL } from '#shared/constants/checkout';
 import { COOKIE_NAMES } from '#shared/constants/storage';
-import { requireVerifiedCheckoutBuyer, requiresVerifiedCheckoutBuyer } from '../../utils/checkout-access';
+import {
+  requireVerifiedCheckoutBuyer,
+  requiresVerifiedCheckoutBuyer,
+} from '../../utils/checkout-access';
 
 const TWO_LETTER = /^[a-z]{2}$/;
 
 export default defineEventHandler(async (event) => {
+  setResponseHeader(event, 'Cache-Control', 'private, no-store');
   if (event.context.tenant?.config?.mode === 'catalog') {
     throw createError({
       statusCode: 403,
@@ -23,7 +27,6 @@ export default defineEventHandler(async (event) => {
   if (requiresVerifiedCheckoutBuyer(event)) {
     await requireVerifiedCheckoutBuyer(event);
   }
-  setResponseHeader(event, 'Cache-Control', 'private, no-store');
 
   const { cartId } = await readValidatedBody(event, CheckoutTokenSchema.parse);
 

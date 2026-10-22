@@ -8,13 +8,13 @@ import {
 import { OrderIdSchema } from '../../schemas/api-input';
 
 export default defineEventHandler(async (event) => {
+  // Order details are per-company and access can be revoked at any time, so
+  // no cache may keep a copy, including of an early 401.
+  setResponseHeader(event, 'Cache-Control', 'private, no-store');
   const privateBuyer = requiresVerifiedCheckoutBuyer(event);
   const tokens = privateBuyer
     ? await requireVerifiedCheckoutBuyer(event)
     : await requireAuth(event);
-  // Order details are per-company and access can be revoked at any time, so
-  // no cache may keep a copy.
-  setResponseHeader(event, 'Cache-Control', 'private, no-store');
   const id = getRouterParam(event, 'id');
   const { id: validatedId } = OrderIdSchema.parse({ id });
   return withErrorHandling(
