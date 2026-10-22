@@ -1,10 +1,19 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  assert,
+} from 'vitest';
 import { shallowMountComponent } from '../../utils/component';
 import CartPage from '../../../app/components/pages/CartPage.vue';
 import type { CartType } from '../../../shared/types/commerce';
 import { useCartStore } from '../../../app/stores/cart';
 import { createPinia, setActivePinia } from 'pinia';
 import { mockShowIncVat } from '../../setup-components';
+import { useTenant } from '../../../app/composables/useTenant';
 
 const mockCart: CartType = {
   id: 'cart-123',
@@ -249,6 +258,65 @@ describe('CartPage', () => {
     expect(shipping.text()).toBe('cart.calculated_at_checkout');
   });
 
+  // Registered in tests/unit/config-coverage/map.ts with the other
+  // shippingTerms consumers.
+  describe('shippingTerms', () => {
+    const { tenant } = useTenant();
+
+    function setShippingTerms(terms: 'standard' | 'agreement' | undefined) {
+      assert.isDefined(tenant.value);
+      tenant.value.layout = {
+        ...(tenant.value.layout ?? {}),
+        shippingTerms: terms,
+      };
+    }
+
+    function cartWithShipping(shipping: Record<string, unknown> | undefined) {
+      return {
+        ...mockCart,
+        summary: { ...mockCart.summary, shipping },
+      } as unknown as CartType;
+    }
+
+    function shippingText() {
+      return shallowMountComponent(CartPage, {
+        global: { stubs: defaultStubs },
+      })
+        .find('[data-testid="cart-summary-shipping"]')
+        .text();
+    }
+
+    afterEach(() => setShippingTerms(undefined));
+
+    it('says an explicit zero fee is invoiced separately when shippingTerms is agreement', () => {
+      setShippingTerms('agreement');
+      useCartStore().cart = cartWithShipping({
+        feeIncVat: 0,
+        feeIncVatFormatted: '0,00 kr',
+      });
+      expect(shippingText()).toBe('checkout.shipping_invoiced_separately');
+    });
+
+    it('keeps the unknown-fee fallback for a missing fee when shippingTerms is agreement', () => {
+      setShippingTerms('agreement');
+      useCartStore().cart = cartWithShipping(undefined);
+      expect(shippingText()).toBe('cart.calculated_at_checkout');
+      useCartStore().cart = cartWithShipping({
+        feeIncVat: null,
+        feeIncVatFormatted: null,
+      });
+      expect(shippingText()).toBe('cart.calculated_at_checkout');
+    });
+
+    it('shows a zero fee as it is when shippingTerms is absent', () => {
+      useCartStore().cart = cartWithShipping({
+        feeIncVat: 0,
+        feeIncVatFormatted: '0,00 kr',
+      });
+      expect(shippingText()).toBe('0,00 kr');
+    });
+  });
+
   it('shows a localized fallback when tax is missing', () => {
     const store = useCartStore();
     store.cart = {
@@ -383,8 +451,14 @@ describe('CartPage', () => {
         ...mockCart,
         summary: {
           ...mockCart.summary,
-          subTotal: { sellingPriceIncVatFormatted: '125 kr', sellingPriceIncVat: 125 },
-          total: { sellingPriceIncVatFormatted: '125 kr', sellingPriceIncVat: 125 },
+          subTotal: {
+            sellingPriceIncVatFormatted: '125 kr',
+            sellingPriceIncVat: 125,
+          },
+          total: {
+            sellingPriceIncVatFormatted: '125 kr',
+            sellingPriceIncVat: 125,
+          },
         },
       } as unknown as CartType;
 
@@ -392,8 +466,12 @@ describe('CartPage', () => {
         global: { stubs: defaultStubs },
       });
 
-      expect(wrapper.find('[data-testid="cart-summary-subtotal"]').text()).toBe('');
-      expect(wrapper.find('[data-testid="cart-summary-total"]').text()).toBe('');
+      expect(wrapper.find('[data-testid="cart-summary-subtotal"]').text()).toBe(
+        '',
+      );
+      expect(wrapper.find('[data-testid="cart-summary-total"]').text()).toBe(
+        '',
+      );
       expect(wrapper.text()).not.toContain('125 kr');
     });
 

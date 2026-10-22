@@ -153,6 +153,8 @@
     "discount": "Discount",
     "total": "Total",
     "free_shipping": "Free",
+    "shipping_by_agreement": "Shipping as agreed",
+    "shipping_invoiced_separately": "Invoiced separately",
     "no_payment_methods": "No payment methods available.",
     "payment_types": {
       "invoice": "Invoice",

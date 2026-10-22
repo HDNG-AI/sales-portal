@@ -153,6 +153,8 @@
     "discount": "Rabat",
     "total": "I alt",
     "free_shipping": "Gratis",
+    "shipping_by_agreement": "Fragt efter aftale",
+    "shipping_invoiced_separately": "Faktureres separat",
     "no_payment_methods": "Ingen betalingsmetoder tilgængelige.",
     "payment_types": {
       "invoice": "Faktura",

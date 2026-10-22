@@ -2,6 +2,7 @@
 import type { ShippingOptionType } from '#shared/types/commerce';
 
 const { t } = useI18n();
+const { byAgreement, optionName } = useShippingTerms();
 
 const props = defineProps<{
   options: ShippingOptionType[];
@@ -48,10 +49,13 @@ function selectOption(id: number) {
         <div class="flex-1">
           <div class="flex items-center justify-between">
             <span class="text-sm font-medium">
-              {{ option.displayName ?? option.name }}
+              {{ optionName(option) }}
             </span>
             <span class="text-sm">
-              <template v-if="option.feeIncVat === 0">
+              <template v-if="byAgreement && option.feeIncVat === 0">
+                {{ t('checkout.shipping_invoiced_separately') }}
+              </template>
+              <template v-else-if="option.feeIncVat === 0">
                 {{ t('checkout.free_shipping') }}
               </template>
               <template v-else>
@@ -61,6 +65,7 @@ function selectOption(id: number) {
           </div>
           <p
             v-if="
+              !byAgreement &&
               option.amountLeftToFreeShipping > 0 &&
               option.amountLeftToFreeShippingFormatted
             "

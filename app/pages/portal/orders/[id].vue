@@ -152,6 +152,15 @@ const orderItemRows = computed<PortalItemRow[]>(() =>
   })),
 );
 
+// On agreement terms a zero fee reads as invoiced separately, not "0 kr".
+const { feeLabel: shippingFeeLabel } = useShippingTerms();
+const shippingFee = computed(() =>
+  shippingFeeLabel(
+    order.value?.cart?.summary?.shipping?.feeIncVat,
+    order.value?.cart?.summary?.shipping?.feeIncVatFormatted ?? undefined,
+  ),
+);
+
 const orderTotals = computed<PortalItemTotal[]>(() => [
   {
     label: t('portal.orders.detail.summary.subtotal_with_count', {
@@ -163,8 +172,7 @@ const orderTotals = computed<PortalItemTotal[]>(() => [
   },
   {
     label: t('portal.orders.detail.summary.shipping'),
-    value:
-      order.value?.cart?.summary?.shipping?.feeIncVatFormatted ?? undefined,
+    value: shippingFee.value,
   },
   {
     label: t('portal.orders.detail.summary.tax'),
@@ -340,7 +348,7 @@ const orderTotals = computed<PortalItemTotal[]>(() => [
                       {{ t('portal.orders.detail.summary.shipping') }}
                     </td>
                     <td class="px-4 py-3 text-right text-sm">
-                      {{ order?.cart?.summary?.shipping?.feeIncVatFormatted }}
+                      {{ shippingFee }}
                     </td>
                   </tr>
                   <tr>
@@ -426,7 +434,7 @@ const orderTotals = computed<PortalItemTotal[]>(() => [
                     t('portal.orders.detail.summary.shipping')
                   }}</span>
                   <span data-testid="order-summary-shipping">{{
-                    order?.cart?.summary?.shipping?.feeIncVatFormatted
+                    shippingFee
                   }}</span>
                 </div>
                 <div class="flex justify-between text-sm">

@@ -153,6 +153,8 @@
     "discount": "Alennus",
     "total": "Yhteensä",
     "free_shipping": "Ilmainen",
+    "shipping_by_agreement": "Toimitus sopimuksen mukaan",
+    "shipping_invoiced_separately": "Laskutetaan erikseen",
     "no_payment_methods": "Maksutapoja ei ole saatavilla.",
     "payment_types": {
       "invoice": "Lasku",
