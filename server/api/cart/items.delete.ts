@@ -1,3 +1,4 @@
+import { protectCartPrices } from '../../utils/price-response';
 import { CartDeleteItemSchema } from '../../schemas/api-input';
 import { deleteItem } from '../../services/cart';
 
@@ -9,7 +10,7 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      return await deleteItem(cartId, itemId, event);
+      return protectCartPrices(event, await deleteItem(cartId, itemId, event));
     },
     { operation: 'cart.deleteItem' },
   );

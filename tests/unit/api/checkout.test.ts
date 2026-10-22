@@ -41,6 +41,7 @@ vi.mock('../../../server/utils/rate-limiter', () => ({
 
 // Stub Nitro auto-imports
 vi.stubGlobal('withErrorHandling', async (fn: () => Promise<unknown>) => fn());
+vi.stubGlobal('setResponseHeader', vi.fn());
 vi.stubGlobal(
   'createError',
   ({
@@ -107,7 +108,13 @@ function mockEvent(
   } = {},
 ) {
   return {
-    context: { tenant: { hostname: 'test.com' } },
+    // A resolved public tenant: guests may read their post-payment summary.
+    context: {
+      tenant: {
+        hostname: 'test.com',
+        config: { tenantId: 'public-test', features: {} },
+      },
+    },
     __query: overrides.query,
     __body: overrides.body,
     node: { req: { socket: { remoteAddress: '127.0.0.1' } } },

@@ -2,7 +2,7 @@ import type { H3Event } from 'h3';
 import { createHash } from 'node:crypto';
 import { LRUCache } from 'lru-cache';
 import type { AuthTokens } from './auth';
-import { decodeJwtPayload } from './auth';
+import { decodeJwtPayload, optionalAuth } from './auth';
 import { canAccessFeature } from '#shared/utils/feature-access';
 import { isPriceFacet } from '#shared/utils/filters';
 import * as userService from '../services/user';
@@ -16,7 +16,8 @@ import * as userService from '../services/user';
  * from a filters array entirely: its values are numeric even when its keys
  * do not contain the word "price".
  */
-const PRICE_FIELD = /price|discount|currency|^vat$|^tax(?:es)?$|^amount$|^offers?$|^rebate/i;
+const PRICE_FIELD =
+  /price|discount|currency|^vat(?:Formatted)?$|^balance$|^amountLeftToFreeShipping(?:Formatted)?$|^tax(?:es)?$|^amount$|^offers?$|^rebate|^(?:(?:shipping|payment)?fee|itemValue|lineValue|lineTotal|subTotal|totalAmount|netAmount|grossAmount)(?:Inc|Ex)?(?:Vat)?(?:Formatted)?$|^total(?:Inc|Ex)?Vat(?:Formatted)?$|^totalFormatted$/i;
 
 function isPricingFacet(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -105,13 +106,19 @@ async function isVerifiedBuyer(
       const identity = profile as
         | { id?: string | number; authenticated?: boolean }
         | undefined;
-      if (!identity || identity.authenticated === false ||
-          (typeof identity.id !== 'string' && typeof identity.id !== 'number')) {
+      if (
+        !identity ||
+        identity.authenticated === false ||
+        (typeof identity.id !== 'string' && typeof identity.id !== 'number')
+      ) {
         return false;
       }
 
       // Cap the cache lifetime again in case the SDK lookup took a while.
-      const remaining = Math.min(ttl, exp * 1000 - Date.now() - CLOCK_SAFETY_MS);
+      const remaining = Math.min(
+        ttl,
+        exp * 1000 - Date.now() - CLOCK_SAFETY_MS,
+      );
       if (remaining > 0) validatedTokens.set(key, true, { ttl: remaining });
       return remaining > 0;
     } catch {
@@ -129,8 +136,11 @@ async function isVerifiedBuyer(
 
 /**
  * Enforce the tenant's effective public-price policy at the server boundary.
- * Unknown tenants retain existing public-price behavior for compatibility.
- * Odelco fails closed if its priceVisibility feature is missing.
+ * Resolved tenants without a priceVisibility feature retain existing
+ * public-price behavior for compatibility. Odelco fails closed if its
+ * priceVisibility feature is missing, and every tenant fails closed when no
+ * config was resolved: a failed `?preview=1` lookup leaves only the hostname
+ * on the context while the SDK still serves the tenant's catalog from KV.
  */
 export async function protectProductPrices<T>(
   event: H3Event,
@@ -140,15 +150,40 @@ export async function protectProductPrices<T>(
   const tenant = event.context?.tenant;
   const visibility = tenant?.config?.features?.priceVisibility;
   const tenantId = tenant?.tenantId ?? tenant?.config?.tenantId;
+  if (!tenant?.config) return removePriceFields(result) as T;
   if (visibility === undefined && tenantId !== 'odelco') return result;
   if (visibility && canAccessFeature(visibility, { authenticated: false })) {
     return result;
   }
 
-  if (visibility?.enabled && visibility.access === 'authenticated' &&
-      await isVerifiedBuyer(event, auth)) {
+  if (
+    visibility?.enabled &&
+    visibility.access === 'authenticated' &&
+    (await isVerifiedBuyer(event, auth))
+  ) {
     return result;
   }
 
   return removePriceFields(result) as T;
+}
+
+/**
+ * Cart API response guard. An opaque cart ID must not bypass a tenant's
+ * private pricing policy after logout, session expiry, or for a guest.
+ * Sanitize response copies, never shared Geins SDK objects.
+ */
+export async function protectCartPrices<T>(
+  event: H3Event,
+  result: T,
+): Promise<T> {
+  setResponseHeader(event, 'Cache-Control', 'private, no-store');
+  const tenant = event.context?.tenant;
+  const visibility = tenant?.config?.features?.priceVisibility;
+  const tenantId = tenant?.tenantId ?? tenant?.config?.tenantId;
+  if (!tenant?.config) return protectProductPrices(event, null, result);
+  if (visibility === undefined && tenantId !== 'odelco') return result;
+  if (visibility && canAccessFeature(visibility, { authenticated: false }))
+    return result;
+  const auth = await optionalAuth(event);
+  return protectProductPrices(event, auth, result);
 }
