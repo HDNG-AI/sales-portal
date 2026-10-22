@@ -160,6 +160,8 @@ export const LayoutConfigSchema = z
     vatDisplayLocked: z.boolean().nullable().optional(),
     // Optional tenant opt-in; absence preserves existing PDP text placement.
     productTextPlacement: z.enum(['legacy', 'semantic']).nullable().optional(),
+    // Optional tenant opt-in; absence keeps the label on totalStock.
+    stockLevelBasis: z.enum(['total', 'available']).nullable().optional(),
   })
   .nullable()
   .optional();

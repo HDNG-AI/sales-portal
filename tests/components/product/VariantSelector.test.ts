@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, assert } from 'vitest';
 import type { VariantDimensionType, VariantType } from '@geins/types';
 import { nextTick } from 'vue';
 import type { ComponentPublicInstance } from 'vue';
 import { mountComponent } from '../../utils/component';
 import VariantSelector from '../../../app/components/product/VariantSelector.vue';
 import { mockShowIncVat } from '../../setup-components';
+import { useTenant } from '../../../app/composables/useTenant';
 
 const dimensions = [
   { dimensionName: 'Color', values: ['Red', 'Blue'] },
@@ -442,5 +443,78 @@ describe('VariantSelector row price follows the VAT preference', () => {
     await nextTick();
 
     expect(rowPrices(wrapper)).toEqual(['960 kr', '760 kr', '680 kr']);
+  });
+});
+
+// An oversell allowance inflates totalStock, so the in/out label would read
+// in stock for every row. On the available basis each row gets the
+// three-level badge instead. Registered alongside the StockBadge cases in
+// tests/unit/config-coverage/map.ts.
+describe('VariantSelector row stock on the available basis', () => {
+  const { tenant } = useTenant();
+  const rowDimensions = [{ dimension: 'Variant', value: 'A' }];
+  const rowVariants = [
+    {
+      alias: 'a',
+      dimension: 'Variant',
+      value: 'A',
+      stock: { inStock: 9, oversellable: 1000, totalStock: 1009, static: 0 },
+    },
+    {
+      alias: 'b',
+      dimension: 'Variant',
+      value: 'B',
+      stock: { inStock: 2, oversellable: 1000, totalStock: 1002, static: 0 },
+    },
+    {
+      alias: 'c',
+      dimension: 'Variant',
+      value: 'C',
+      stock: { inStock: 0, oversellable: 1000, totalStock: 998, static: 0 },
+    },
+  ];
+
+  function setBasis(basis: 'total' | 'available' | undefined) {
+    assert.isDefined(tenant.value);
+    tenant.value.features = {};
+    tenant.value.layout = {
+      ...(tenant.value.layout ?? {}),
+      stockLevelBasis: basis,
+    };
+  }
+
+  afterEach(() => setBasis(undefined));
+
+  async function rowTexts() {
+    const wrapper = mountComponent(VariantSelector, {
+      props: {
+        variantDimensions: rowDimensions as unknown as VariantDimensionType[],
+        variants: rowVariants as unknown as VariantType[],
+        modelValue: { Variant: 'A' },
+      },
+      global: { stubs: sheetStubs },
+    });
+    await wrapper
+      .find('[data-testid="variant-trigger-Variant"]')
+      .trigger('click');
+    return wrapper
+      .find('[data-testid="variant-sheet-options"]')
+      .findAll('li')
+      .map((li) => li.text());
+  }
+
+  it('labels every row in stock on totalStock when stockLevelBasis is absent', async () => {
+    setBasis(undefined);
+    const texts = await rowTexts();
+    expect(texts.every((text) => text.includes('product.in_stock'))).toBe(true);
+  });
+
+  it('labels rows in stock, few left and backorder when stockLevelBasis is available', async () => {
+    setBasis('available');
+    const texts = await rowTexts();
+    expect(texts[0]).toContain('product.in_stock');
+    expect(texts[1]).toContain('product.low_stock');
+    expect(texts[2]).toContain('product.backorder');
+    expect(texts.join(' ')).not.toMatch(/\b(9|2|998|1002|1009)\b/);
   });
 });

@@ -1840,11 +1840,23 @@ export const CONFIG_COVERAGE_MAP = {
       status: 'has-test',
       test: {
         spec: 'tests/components/product/ProductTabs.test.ts',
-        title: 'shows technical HTML under Specifications only when tenant opts into semantic placement',
+        title:
+          'shows technical HTML under Specifications only when tenant opts into semantic placement',
         kind: 'consumer',
         drives: 'field',
       },
       note: 'Absent and legacy retain the existing generic PIM text mapping; the flag is opt-in.',
+    },
+    stockLevelBasis: {
+      status: 'has-test',
+      test: {
+        spec: 'tests/components/commerce/StockBadge.test.ts',
+        title:
+          'labels zero or less available as a backorder (blue) when stockLevelBasis is available',
+        kind: 'consumer',
+        drives: 'field',
+      },
+      note: 'Absent and total keep the label on totalStock; the available basis is opt-in.',
     },
     vatDisplay: {
       ex: {

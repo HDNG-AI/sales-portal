@@ -12,11 +12,11 @@ const props = withDefaults(
 );
 
 const { t } = useI18n();
-const { showStock } = useStockVisibility();
+const { showStock, stockLevelBasis } = useStockVisibility();
 
 const status = computed<StockStatus | null>(() => {
   if (!props.stock) return null;
-  return getStockStatus(props.stock, props.threshold);
+  return getStockStatus(props.stock, props.threshold, stockLevelBasis.value);
 });
 
 const label = computed(() => {
@@ -29,6 +29,8 @@ const label = computed(() => {
       return t('product.out_of_stock');
     case 'on-demand':
       return t('product.on_demand');
+    case 'backorder':
+      return t('product.backorder');
     default:
       return '';
   }
@@ -44,6 +46,8 @@ const badgeClass = computed(() => {
       return 'border-destructive/30 bg-destructive/10 text-destructive';
     case 'on-demand':
       return 'border-border bg-muted text-foreground';
+    case 'backorder':
+      return 'border-info/30 bg-info/10 text-info';
     default:
       return '';
   }
@@ -59,6 +63,8 @@ const dotColor = computed(() => {
       return 'border-destructive';
     case 'on-demand':
       return 'border-muted-foreground';
+    case 'backorder':
+      return 'border-info';
     default:
       return '';
   }
@@ -74,6 +80,8 @@ const labelClass = computed(() => {
       return 'text-destructive';
     case 'on-demand':
       return 'text-foreground';
+    case 'backorder':
+      return 'text-info';
     default:
       return 'text-muted-foreground';
   }

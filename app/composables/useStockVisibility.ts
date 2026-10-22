@@ -1,5 +1,7 @@
+import type { StockLevelBasis } from '#shared/types/commerce';
+
 export function useStockVisibility() {
-  const { isFeatureConfigured, hasFeature } = useTenant();
+  const { tenant, isFeatureConfigured, hasFeature } = useTenant();
   const { canAccess } = useFeatureAccess();
 
   const showStock = computed(() => {
@@ -8,5 +10,11 @@ export function useStockVisibility() {
     return canAccess('stockStatus');
   });
 
-  return { showStock };
+  const stockLevelBasis = computed<StockLevelBasis>(() =>
+    tenant.value?.layout?.stockLevelBasis === 'available'
+      ? 'available'
+      : 'total',
+  );
+
+  return { showStock, stockLevelBasis };
 }
