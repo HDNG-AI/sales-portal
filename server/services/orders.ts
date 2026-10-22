@@ -24,8 +24,13 @@ export async function getOrder(
   );
 }
 
+/**
+ * @param userToken - A token already verified for this request. Defaults to
+ *   the auth cookie, which is stale after a silent refresh.
+ */
 export async function listOrders(
   event: H3Event,
+  userToken?: string,
 ): Promise<{ orders: OrderListItem[]; total: number }> {
   const sdk = await getTenantSDK(event);
   const requestContext = buildRequestContext(event);
@@ -45,7 +50,7 @@ export async function listOrders(
           variables: {
             ...getRequestChannelVariables(sdk, event),
           },
-          userToken: requestContext?.userToken,
+          userToken: userToken ?? requestContext?.userToken,
         }),
       'order',
       OrderError,
