@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, defineComponent, h, Suspense, computed } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
@@ -99,10 +99,14 @@ vi.stubGlobal(
 // them during setup, so each test sets them before mounting.
 const mockCheckoutMode = ref<'custom' | 'hosted'>('custom');
 const mockIsCatalogMode = ref(false);
+const mockTenant = ref<{
+  locale: string;
+  layout?: { shippingTerms?: 'standard' | 'agreement' };
+}>({ locale: 'en' });
 
 vi.mock('../../../app/composables/useTenant', () => ({
   useTenant: () => ({
-    tenant: ref({ locale: 'en' }),
+    tenant: mockTenant,
     checkoutMode: mockCheckoutMode,
     isCatalogMode: computed(() => mockIsCatalogMode.value),
     hasFeature: vi.fn(() => true),
@@ -209,9 +213,12 @@ function checkoutStoreStub(overrides: Partial<CheckoutStore>): CheckoutStore {
   } as unknown as CheckoutStore;
 }
 
+// The cart the page reads its summary from; null unless a test sets one.
+const mockCartState = vi.hoisted(() => ({ cart: null as unknown }));
+
 vi.mock('../../../app/stores/cart', () => ({
   useCartStore: vi.fn(() => ({
-    cart: null,
+    cart: mockCartState.cart,
     cartId: 'cart-test-001',
     itemCount: 0,
     discountAmount: 0,
@@ -392,6 +399,44 @@ describe('checkout page', () => {
         replace: true,
       });
       expect(wrapper.find('[data-testid="checkout-page"]').exists()).toBe(true);
+    });
+  });
+
+  // Registered in tests/unit/config-coverage/map.ts with the other
+  // shippingTerms consumers.
+  describe('shippingTerms', () => {
+    afterEach(() => {
+      mockTenant.value = { locale: 'en' };
+      mockCartState.cart = null;
+    });
+
+    async function summaryShippingFee() {
+      const wrapper = await mountCheckoutPage();
+      return wrapper
+        .findComponent(stubs.CheckoutOrderSummary)
+        .props('shippingFee');
+    }
+
+    it('says an explicit zero fee is invoiced separately when shippingTerms is agreement', async () => {
+      mockTenant.value = {
+        locale: 'en',
+        layout: { shippingTerms: 'agreement' },
+      };
+      mockCartState.cart = {
+        summary: { shipping: { feeIncVat: 0, feeIncVatFormatted: '0,00 kr' } },
+      };
+      expect(await summaryShippingFee()).toBe(
+        'checkout.shipping_invoiced_separately',
+      );
+    });
+
+    it('leaves a missing fee unknown when shippingTerms is agreement', async () => {
+      mockTenant.value = {
+        locale: 'en',
+        layout: { shippingTerms: 'agreement' },
+      };
+      mockCartState.cart = { summary: {} };
+      expect(await summaryShippingFee()).toBeNull();
     });
   });
 

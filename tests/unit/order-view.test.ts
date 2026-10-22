@@ -5,6 +5,7 @@ import {
   orderPaymentLabel,
   orderRows,
   orderTotalRows,
+  withShippingTerms,
 } from '../../app/utils/order-view';
 
 const price = (inc: number, ex: number) => ({
@@ -419,5 +420,59 @@ describe('orderPaymentLabel', () => {
     expect(
       orderPaymentLabel(makeOrder({ paymentDetails: [{ name: '' }] })),
     ).toBe(undefined);
+  });
+});
+
+describe('withShippingTerms', () => {
+  // Stands in for useShippingTerms().feeLabel on agreement terms.
+  const agreement = (fee: number | null | undefined, formatted?: string) =>
+    fee === 0 ? 'invoiced separately' : formatted;
+  const charged = {
+    feeIncVat: 49,
+    feeIncVatFormatted: '49 inc',
+    feeExVat: 39.2,
+    feeExVatFormatted: '39.2 ex',
+  };
+
+  it('hands the label the cart summary fee with VAT, on either side', () => {
+    const order = withSummary({ shipping: charged });
+    for (const inc of [true, false]) {
+      const feeLabel = vi.fn(agreement);
+      const amounts = orderAmounts(order, inc);
+      withShippingTerms(amounts, order, feeLabel);
+      expect(feeLabel).toHaveBeenCalledWith(49, amounts.shipping);
+    }
+  });
+
+  it('words a zero fee by the terms, on either VAT side', () => {
+    const order = withSummary({ shipping: { feeIncVat: 0, feeExVat: 0 } });
+    for (const inc of [true, false]) {
+      const amounts = orderAmounts(order, inc);
+      expect(amounts.shipping).toBeUndefined();
+      expect(withShippingTerms(amounts, order, agreement).shipping).toBe(
+        'invoiced separately',
+      );
+    }
+  });
+
+  it("falls back to the order's own fee when the summary has none", () => {
+    const order = makeOrder({ shippingFee: price(0, 0) });
+    expect(
+      withShippingTerms(orderAmounts(order, true), order, agreement).shipping,
+    ).toBe('invoiced separately');
+  });
+
+  it('leaves a charged fee and every other amount as they are', () => {
+    const order = withSummary({ shipping: charged });
+    const amounts = orderAmounts(order, true);
+    expect(amounts.shipping).toBe('49 inc');
+    expect(withShippingTerms(amounts, order, agreement)).toEqual(amounts);
+  });
+
+  it('claims nothing for a missing fee', () => {
+    const order = makeOrder();
+    expect(
+      withShippingTerms(orderAmounts(order, true), order, agreement).shipping,
+    ).toBeUndefined();
   });
 });

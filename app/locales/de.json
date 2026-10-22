@@ -157,6 +157,8 @@
     "discount": "Rabatt",
     "total": "Gesamt",
     "free_shipping": "Kostenlos",
+    "shipping_by_agreement": "Versand laut Vereinbarung",
+    "shipping_invoiced_separately": "Wird separat berechnet",
     "no_payment_methods": "Keine Zahlungsarten verfügbar.",
     "payment_types": {
       "invoice": "Rechnung",

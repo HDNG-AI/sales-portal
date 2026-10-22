@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, type Ref } from 'vue';
 import { mountComponent } from '../../utils/component';
 import { mockShowIncVat } from '../../setup-components';
+import { useTenant } from '../../../app/composables/useTenant';
 
 /**
  * The confirmation page, both ways a buyer lands on it.
@@ -282,6 +283,51 @@ describe('Order confirmation page — placed in the app', () => {
 
     expect(propsOf(mount(), OrderSummaryCardStub).amounts).toMatchObject({
       discount: 'SEK\u00a025.00',
+    });
+  });
+
+  // The same shipping wording as the portal order page, from the same parts.
+  describe('shippingTerms', () => {
+    const { tenant } = useTenant();
+
+    function setShippingTerms(terms: 'agreement' | undefined) {
+      if (!tenant.value) throw new Error('test tenant missing');
+      tenant.value.layout = {
+        ...(tenant.value.layout ?? {}),
+        shippingTerms: terms,
+      };
+    }
+
+    function zeroShippingOrder() {
+      const order = makeOrder();
+      Object.assign(order.order.cart.summary, {
+        shipping: { feeIncVat: 0, feeIncVatFormatted: '0,00 kr' },
+      });
+      return order;
+    }
+
+    afterEach(() => setShippingTerms(undefined));
+
+    it('says a zero shipping fee is invoiced separately when shippingTerms is agreement', () => {
+      setShippingTerms('agreement');
+      resultFor(ORDER_URL).data.value = zeroShippingOrder();
+      const wrapper = mount();
+
+      expect(propsOf(wrapper, OrderSummaryCardStub).amounts).toMatchObject({
+        shipping: 'checkout.shipping_invoiced_separately',
+      });
+      expect(propsOf(wrapper, OrderItemsTableStub).amounts).toMatchObject({
+        shipping: 'checkout.shipping_invoiced_separately',
+      });
+    });
+
+    it('shows no shipping row for a zero fee when shippingTerms is absent', () => {
+      resultFor(ORDER_URL).data.value = zeroShippingOrder();
+      const amounts = propsOf(mount(), OrderSummaryCardStub).amounts as {
+        shipping?: string;
+      };
+
+      expect(amounts.shipping).toBeUndefined();
     });
   });
 

@@ -9,6 +9,7 @@ import {
   orderPaymentLabel,
   orderRows,
   orderTotalRows,
+  withShippingTerms,
 } from '~/utils/order-view';
 
 definePageMeta({ layout: 'checkout' });
@@ -71,8 +72,14 @@ const awaitingOrder = computed(
 
 // The order as the portal order page shows it, with the same parts.
 const itemCount = computed(() => order.value?.cart?.items?.length ?? 0);
+// On agreement terms a zero shipping fee reads as invoiced separately.
+const { feeLabel: shippingFeeLabel } = useShippingTerms();
 const amounts = computed(() =>
-  orderAmounts(order.value, showIncVat.value, formatLocale.value),
+  withShippingTerms(
+    orderAmounts(order.value, showIncVat.value, formatLocale.value),
+    order.value,
+    shippingFeeLabel,
+  ),
 );
 
 /** A configured row's product page, with that row's choices replayed. */

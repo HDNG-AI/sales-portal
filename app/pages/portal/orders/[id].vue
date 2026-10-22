@@ -15,6 +15,7 @@ import {
   orderPaymentLabel,
   orderRows,
   orderTotalRows,
+  withShippingTerms,
 } from '~/utils/order-view';
 
 definePageMeta({
@@ -44,8 +45,11 @@ const reorder = computed(() => {
   }
   return { lines, skipped };
 });
-const canReorder = computed(() =>
-  canAccess('reorder') && !isCatalogMode.value && reorder.value.lines.length > 0,
+const canReorder = computed(
+  () =>
+    canAccess('reorder') &&
+    !isCatalogMode.value &&
+    reorder.value.lines.length > 0,
 );
 
 const isReordering = ref(false);
@@ -123,8 +127,15 @@ const itemCount = computed(() => order.value?.cart?.items?.length ?? 0);
 // Every amount is the side of the buyer's VAT choice; VAT itself is one number.
 const { showIncVat } = useVatDisplay();
 
+// On agreement terms a zero shipping fee reads as invoiced separately.
+const { feeLabel: shippingFeeLabel } = useShippingTerms();
+
 const amounts = computed(() =>
-  orderAmounts(order.value, showIncVat.value, formatLocale.value),
+  withShippingTerms(
+    orderAmounts(order.value, showIncVat.value, formatLocale.value),
+    order.value,
+    shippingFeeLabel,
+  ),
 );
 
 useHead({

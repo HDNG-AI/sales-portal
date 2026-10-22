@@ -36,8 +36,12 @@ const totalFormatted = computed(() =>
   ),
 );
 
-const shippingFee = computed(
-  () => cartStore.cart?.summary?.shipping?.feeIncVatFormatted ?? null,
+const { feeLabel: shippingFeeLabel } = useShippingTerms();
+const shippingFee = computed(() =>
+  shippingFeeLabel(
+    cartStore.cart?.summary?.shipping?.feeIncVat,
+    cartStore.cart?.summary?.shipping?.feeIncVatFormatted ?? null,
+  ),
 );
 
 const taxFormatted = computed(

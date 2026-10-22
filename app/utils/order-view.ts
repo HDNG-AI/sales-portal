@@ -105,6 +105,27 @@ export function orderAmounts(
 }
 
 /**
+ * `amounts` with its shipping row worded by `layout.shippingTerms`.
+ * `feeLabel` is `useShippingTerms().feeLabel`: on agreement terms an explicit
+ * zero fee reads as invoiced separately, and otherwise the row stays as
+ * `orderAmounts` made it, so a zero fee still has no row.
+ */
+export function withShippingTerms(
+  amounts: OrderAmounts,
+  order: OrderDetailType | null | undefined,
+  feeLabel: (
+    fee: number | null | undefined,
+    formatted: string | undefined,
+  ) => string | undefined,
+): OrderAmounts {
+  // The same fee `orderAmounts` reads: the cart summary's, else the order's.
+  const fee =
+    order?.cart?.summary?.shipping?.feeIncVat ??
+    order?.shippingFee?.sellingPriceIncVat;
+  return { ...amounts, shipping: feeLabel(fee, amounts.shipping) };
+}
+
+/**
  * The order's rows, as the desktop table and the mobile sheet render them.
  * `replayHrefOf` gives a configured row's replay link from its canonical path
  * and position, or undefined to fall back to the product page.

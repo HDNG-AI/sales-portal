@@ -137,15 +137,18 @@ const subtotal = computed(() =>
   ),
 );
 
+// On agreement terms a zero fee reads as invoiced separately, not as free.
+const { feeLabel: shippingFeeLabel } = useShippingTerms();
 const shippingFee = computed(() =>
-  (showIncVat.value
-    ? cartSummary.value?.shipping?.feeIncVatFormatted
-    : cartSummary.value?.shipping?.feeExVatFormatted) || null,
+  shippingFeeLabel(
+    cartSummary.value?.shipping?.feeIncVat,
+    (showIncVat.value
+      ? cartSummary.value?.shipping?.feeIncVatFormatted
+      : cartSummary.value?.shipping?.feeExVatFormatted) || null,
+  ),
 );
 
-const tax = computed(
-  () => cartSummary.value?.total?.vatFormatted || null,
-);
+const tax = computed(() => cartSummary.value?.total?.vatFormatted || null);
 
 const total = computed(() =>
   formatCartSummaryAmount(
@@ -165,8 +168,7 @@ const discountFormatted = computed(() => {
     ? cartSummary.value?.fixedAmountDiscountIncVat
     : cartSummary.value?.fixedAmountDiscountExVat;
 
-  if (amount == null || !Number.isFinite(amount) || amount === 0)
-    return '';
+  if (amount == null || !Number.isFinite(amount) || amount === 0) return '';
 
   return formatPrice(
     amount,

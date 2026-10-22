@@ -157,6 +157,8 @@
     "discount": "Rabatt",
     "total": "Totalt",
     "free_shipping": "Gratis",
+    "shipping_by_agreement": "Frakt etter avtale",
+    "shipping_invoiced_separately": "Faktureres separat",
     "no_payment_methods": "Ingen betalingsmåter tilgjengelig.",
     "payment_types": {
       "invoice": "Faktura",

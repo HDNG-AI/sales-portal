@@ -1115,6 +1115,96 @@ describe('OrderDetail', () => {
       expect(summary.text()).toContain('699,00 kr');
     });
 
+    // On agreement terms a zero fee reads as invoiced separately, not "0 kr".
+    // Registered in tests/unit/config-coverage/map.ts.
+    describe('shippingTerms', () => {
+      function zeroShippingOrder() {
+        const data = makeOrder();
+        data.order.cart.summary.shipping = {
+          feeIncVat: 0,
+          feeIncVatFormatted: '0,00 kr',
+          feeExVat: 0,
+          feeExVatFormatted: '0,00 kr',
+        };
+        return data;
+      }
+
+      function setShippingTerms(terms: 'standard' | 'agreement' | undefined) {
+        assert.isDefined(tenant.value);
+        tenant.value.layout = {
+          ...(tenant.value.layout ?? {}),
+          shippingTerms: terms,
+        };
+      }
+
+      afterEach(() => setShippingTerms(undefined));
+
+      // A placed order shows no shipping row for a zero fee (see
+      // orderAmounts); absent and standard terms keep that.
+      it.each([undefined, 'standard'] as const)(
+        'shows no row for a zero shipping fee when shippingTerms is %s',
+        (terms) => {
+          setShippingTerms(terms);
+          mockData.value = zeroShippingOrder();
+          const wrapper = shallowMountComponent(OrderDetail, {
+            global: { stubs: defaultStubs },
+          });
+          expect(
+            wrapper.find('[data-testid="order-summary-shipping"]').exists(),
+          ).toBe(false);
+          expect(wrapper.text()).not.toContain(
+            'checkout.shipping_invoiced_separately',
+          );
+        },
+      );
+
+      it('says a zero shipping fee is invoiced separately when shippingTerms is agreement', () => {
+        setShippingTerms('agreement');
+        mockData.value = zeroShippingOrder();
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(
+          wrapper.find('[data-testid="order-summary-shipping"]').text(),
+        ).toBe('checkout.shipping_invoiced_separately');
+        expect(
+          wrapper.find('[data-testid="order-items-footer-shipping"]').text(),
+        ).toBe('checkout.shipping_invoiced_separately');
+        const totals = wrapper
+          .findComponent({ name: 'PortalItemRowsSheet' })
+          .props('totals') as { value?: string }[];
+        expect(totals.map((row) => row.value)).toContain(
+          'checkout.shipping_invoiced_separately',
+        );
+        expect(wrapper.html()).not.toContain('>0,00 kr<');
+      });
+
+      it('does not claim a missing shipping fee is invoiced separately when shippingTerms is agreement', () => {
+        setShippingTerms('agreement');
+        const data = makeOrder();
+        delete (data.order.cart.summary as { shipping?: unknown }).shipping;
+        delete (data.order as { shippingFee?: unknown }).shippingFee;
+        mockData.value = data;
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(wrapper.text()).not.toContain(
+          'checkout.shipping_invoiced_separately',
+        );
+      });
+
+      it('still shows a real shipping fee when shippingTerms is agreement', () => {
+        setShippingTerms('agreement');
+        mockData.value = makeOrder();
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(
+          wrapper.find('[data-testid="order-summary-shipping"]').text(),
+        ).toBe('49,00 kr');
+      });
+    });
+
     it('sidebar subtotal uses subtotal_with_count i18n key', () => {
       mockData.value = makeOrder();
 
