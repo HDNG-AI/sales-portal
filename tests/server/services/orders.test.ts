@@ -134,6 +134,16 @@ describe('orders service', () => {
       expect(result).toHaveProperty('total');
     });
 
+    it('lists orders with a verified token in place of the request cookie', async () => {
+      mockGraphqlQuery.mockResolvedValueOnce({ getCompanyOrders: [] });
+
+      await ordersService.listOrders(mockEvent, 'refreshed-token');
+
+      expect(mockGraphqlQuery).toHaveBeenCalledWith(
+        expect.objectContaining({ userToken: 'refreshed-token' }),
+      );
+    });
+
     it('returns empty array when getOrders returns null', async () => {
       mockGraphqlQuery.mockResolvedValueOnce({ getCompanyOrders: null });
 
