@@ -586,7 +586,7 @@ describe('CartDrawer', () => {
       expect(summary.text()).not.toContain('125 kr');
     });
 
-    it('falls back to incl-VAT when excl-VAT formatted is absent and showIncVat is false', () => {
+    it('never substitutes incl-VAT when excl-VAT is unavailable', () => {
       mockShowIncVat.value = false;
       const store = useCartStore();
       store.isOpen = true;
@@ -610,7 +610,7 @@ describe('CartDrawer', () => {
       });
 
       const summary = wrapper.find('[data-testid="cart-summary-card"]');
-      expect(summary.text()).toContain('125 kr');
+      expect(summary.text()).not.toContain('125 kr');
     });
   });
 });

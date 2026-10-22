@@ -46,7 +46,10 @@ const { t } = useI18n();
 const { localePath } = useLocaleMarket();
 
 function isFullProduct(p: ProductCardProp): p is ListProduct | DetailProduct {
-  return 'unitPrice' in p;
+  // Odelco's anonymous B2B API removes unitPrice by design. Product identity
+  // must use a public, stable field so redacting prices cannot also hide
+  // productImages, stock or other non-sensitive card information.
+  return 'productId' in p;
 }
 
 const cartStore = useCartStore();

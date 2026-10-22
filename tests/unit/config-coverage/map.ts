@@ -1836,6 +1836,16 @@ export const CONFIG_COVERAGE_MAP = {
 
   // --- Layout --------------------------------------------------------------
   layout: {
+    productTextPlacement: {
+      status: 'has-test',
+      test: {
+        spec: 'tests/components/product/ProductTabs.test.ts',
+        title: 'shows technical HTML under Specifications only when tenant opts into semantic placement',
+        kind: 'consumer',
+        drives: 'field',
+      },
+      note: 'Absent and legacy retain the existing generic PIM text mapping; the flag is opt-in.',
+    },
     vatDisplay: {
       ex: {
         status: 'has-test',

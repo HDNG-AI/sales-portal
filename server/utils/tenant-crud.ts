@@ -18,9 +18,11 @@ import {
   invalidateTenantCaches,
   tenantOverrideKey,
   tenantRefreshStateKey,
+  type TenantRefreshState,
   type TenantPortalOverrides,
 } from './tenant';
 import { withoutUndefined } from './object';
+import { TimezoneSchema } from '../schemas/store-settings';
 
 /**
  * A partial tenant update as accepted by createTenant/updateTenant: every
@@ -81,28 +83,128 @@ export function mergeCmsConfig(
 }
 
 /**
- * Persists portal-owned CMS wiring independently from the disposable
- * effective Geins tenant cache.
+ * Persist only portal-owned fields in tenant:override:<id>. Never use this
+ * key for Geins-owned theme/branding/hostname fields.
  *
- * A Geins config-refresh may delete tenant:config:<id>, but must never
- * delete tenant:override:<id>.
+ * The timezone is validated here as well as at the authenticated admin
+ * boundary because createTenant/updateTenant may be called by other code.
  */
-async function persistCmsOverride(
+async function persistPortalOverrides(
   storage: ReturnType<typeof useStorage>,
   tenantId: string,
-  update: CmsConfigUpdate | undefined,
+  update: Pick<TenantConfigUpdate, 'cms' | 'timezone'>,
 ): Promise<void> {
-  if (!update) return;
+  if (update.cms === undefined && update.timezone === undefined) return;
 
   const key = tenantOverrideKey(tenantId);
   const existing = await storage.getItem<TenantPortalOverrides>(key);
-
-  const cms = mergeCmsConfig(existing?.cms, update);
+  const cms = mergeCmsConfig(existing?.cms, update.cms);
+  const timezone =
+    update.timezone === undefined
+      ? existing?.timezone
+      : TimezoneSchema.parse(update.timezone);
 
   await storage.setItem(key, {
     ...(existing ?? {}),
     ...(cms ? { cms } : {}),
+    ...(timezone !== undefined ? { timezone } : {}),
   } satisfies TenantPortalOverrides);
+}
+
+/**
+ * Narrow administrator write path for remotely sourced tenants. Unlike the
+ * generic onboarding update, this does NOT relabel the tenant as KV-local,
+ * overwrite Geins SDK settings, change aliases, or mutate its theme.
+ *
+ * Remote tenants retain their last-known-good config for transport outages
+ * and force a fresh Geins read on the next normal request. KV-local tenants
+ * are updated in place because there is no upstream source to refresh from.
+ */
+export async function setTenantOperatingTimezone(
+  hostname: string,
+  timezone: string,
+  event?: import('h3').H3Event,
+): Promise<{ tenantId: string; timezone: string } | null> {
+  const zone = TimezoneSchema.parse(timezone);
+  const existing = await resolveTenant(hostname, event);
+  if (!existing) return null;
+
+  const tenantId = existing.tenantId;
+  const storage = useStorage('kv');
+  const refreshKey = tenantRefreshStateKey(tenantId);
+  const state = await storage.getItem<TenantRefreshState>(refreshKey);
+  await persistPortalOverrides(storage, tenantId, { timezone: zone });
+
+  if (state?.source === 'local') {
+    await storage.setItem(tenantConfigKey(tenantId), {
+      ...existing,
+      timezone: zone,
+    });
+  } else {
+    // Expire without deleting the cached tenant: retain last-known-good
+    // during transient Geins failures and avoid changing source provenance.
+    await storage.setItem(refreshKey, {
+      checkedAt: 0,
+      source: state?.source ?? 'unknown',
+    } satisfies TenantRefreshState);
+  }
+
+  await invalidateTenantCaches(
+    tenantId,
+    hostnamesToInvalidate(hostname, existing),
+    useStorage('cache'),
+  );
+  return { tenantId, timezone: zone };
+}
+
+/**
+ * Narrow portal-owned presentation opt-in. Keep the Geins-managed tenant's
+ * source provenance intact and preserve existing CMS/timezone overrides.
+ * Neither generic onboarding nor ad-hoc edits to tenant:config are safe for
+ * remote tenants because Geins refresh overwrites the disposable cache.
+ */
+export async function setTenantProductTextPlacement(
+  hostname: string,
+  placement: 'legacy' | 'semantic',
+  event?: import('h3').H3Event,
+): Promise<{ tenantId: string; productTextPlacement: 'legacy' | 'semantic' } | null> {
+  if (placement !== 'legacy' && placement !== 'semantic') {
+    throw createAppError(ErrorCode.VALIDATION_ERROR, 'Invalid product text placement');
+  }
+  const existing = await resolveTenant(hostname, event);
+  if (!existing) return null;
+
+  const storage = useStorage('kv');
+  const key = tenantOverrideKey(existing.tenantId);
+  const previous = await storage.getItem<TenantPortalOverrides>(key);
+  await storage.setItem(key, {
+    ...(previous ?? {}),
+    layout: {
+      ...(previous?.layout ?? {}),
+      productTextPlacement: placement,
+    },
+  } satisfies TenantPortalOverrides);
+
+  const refreshKey = tenantRefreshStateKey(existing.tenantId);
+  const state = await storage.getItem<TenantRefreshState>(refreshKey);
+  if (state?.source === 'local') {
+    await storage.setItem(tenantConfigKey(existing.tenantId), {
+      ...existing,
+      layout: { ...(existing.layout ?? {}), productTextPlacement: placement },
+    });
+  } else {
+    await storage.setItem(refreshKey, {
+      checkedAt: 0,
+      source: state?.source ?? 'unknown',
+    } satisfies TenantRefreshState);
+  }
+
+  await invalidateTenantCaches(
+    existing.tenantId,
+    hostnamesToInvalidate(hostname, existing),
+    useStorage('cache'),
+  );
+  return { tenantId: existing.tenantId, productTextPlacement: placement };
 }
 
 /**
@@ -182,7 +284,7 @@ export async function createTenant(
       checkedAt: Date.now(),
       source: 'local',
     });
-    await persistCmsOverride(storage, finalTenantId, partialConfig.cms);
+    await persistPortalOverrides(storage, finalTenantId, partialConfig);
     // Sequenced, not Promise.all: clearing the negative cache before
     // tenantIdKey(<alias>) is durable leaves a window where a request for
     // that alias still misses KV and writes the negative entry straight
@@ -226,7 +328,7 @@ export async function createTenant(
     checkedAt: Date.now(),
     source: 'local',
   });
-  await persistCmsOverride(storage, finalTenantId, partialConfig?.cms);
+  await persistPortalOverrides(storage, finalTenantId, partialConfig ?? {});
   await writeHostnameMappings(storage, finalConfig);
   // Clears any negative-cache entry from a lookup that happened before this
   // hostname was onboarded, so it resolves immediately rather than waiting
@@ -265,7 +367,7 @@ export async function updateTenant(
     checkedAt: Date.now(),
     source: 'local',
   });
-  await persistCmsOverride(storage, tid, updates.cms);
+  await persistPortalOverrides(storage, tid, updates);
   await writeHostnameMappings(storage, updatedConfig);
   await invalidateTenantCaches(
     tid,

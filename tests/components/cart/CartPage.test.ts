@@ -376,6 +376,27 @@ describe('CartPage', () => {
       expect(total.text()).toBe('$237.97');
     });
 
+    it('does not show an incl-VAT amount as the excl-VAT total if Geins omits it', () => {
+      mockShowIncVat.value = false;
+      const store = useCartStore();
+      store.cart = {
+        ...mockCart,
+        summary: {
+          ...mockCart.summary,
+          subTotal: { sellingPriceIncVatFormatted: '125 kr', sellingPriceIncVat: 125 },
+          total: { sellingPriceIncVatFormatted: '125 kr', sellingPriceIncVat: 125 },
+        },
+      } as unknown as CartType;
+
+      const wrapper = shallowMountComponent(CartPage, {
+        global: { stubs: defaultStubs },
+      });
+
+      expect(wrapper.find('[data-testid="cart-summary-subtotal"]').text()).toBe('');
+      expect(wrapper.find('[data-testid="cart-summary-total"]').text()).toBe('');
+      expect(wrapper.text()).not.toContain('125 kr');
+    });
+
     it('shows excl-VAT subtotal and total when showIncVat is false', () => {
       mockShowIncVat.value = false;
       const store = useCartStore();

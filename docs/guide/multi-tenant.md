@@ -340,3 +340,54 @@ curl -X POST "https://<host>/api/admin/tenants" \
 - [Theming System](/guide/theming) — How to customize tenant appearance
 - [API Reference](/guide/api-reference) — Tenant-related API endpoints
 - [Architecture Overview](/architecture) — Full system architecture
+
+
+## Tenant operating timezone – source of truth and migration (2026-10-14)
+
+Tenant timezone is an explicit IANA identifier (ADR-024), not inferred from
+market, language or server timezone.
+
+**Precedence:** a valid Geins StoreSettings timezone other than legacy `UTC`
+wins; otherwise a validated persistent portal-owned `tenant:override:<id>.timezone`
+wins; then the temporary Odelco-specific bridge (`Europe/Stockholm`); otherwise
+the incoming Geins value remains unchanged. All other themes, channels, aliases,
+branding and locale settings continue to be managed by Geins Studio.
+
+### Authorized operator update
+
+`PUT /api/admin/tenants/<hostname>/timezone` with JSON
+`{"timezone":"Europe/Stockholm"}` and a **write-scoped** `x-admin-key`
+uses existing `requireAdminAuth` constant-time key comparison, rate limiting,
+and strict IANA input validation. The endpoint returns only tenant ID and chosen
+timezone. It does not accept theme, hostname, credentials, or Geins account
+changes. Never paste credentials into GitHub, terminal logs or tickets.
+
+The admin update writes `tenant:override:<id>` independently of
+`tenant:config:<id>` and preserves the current CMS override. A remote tenant
+remains `source: remote`; only the freshness timestamp is expired, then
+Nitro /api/config and SDK caches are invalidated, so the next normal
+request fetches fresh Geins StoreSettings and combines the persistent timezone.
+The existing last-known-good tenant cache stays available during temporary
+Geins outages. A truly KV-local tenant is updated in place.
+
+### Two-phase cutover – DO NOT REMOVE BRIDGE EARLY
+
+1. Merge and qualify this PR for `odelco-staging` with green checks and
+   Erik's review. No automatic admin mutation is performed in this PR.
+2. An authorized operator sets `Europe/Stockholm` once through the
+   write-scoped endpoint for `staging-odelco.hdng.ai`. This is a tenant
+   config mutation; take a non-secret backup of the existing override
+   record first. Do **not** use the generic onboarding POST for this
+   update because that may change a remotely managed tenant's provenance.
+3. Confirm `/api/config` and `?preview=1` expose
+   `timezone: Europe/Stockholm`; verify from the persisted override
+   and after a signed Studio refresh / automatic 60s Geins refresh. Check
+   normal SSR, branding, canonical hostname and aliases remain intact.
+4. Only after #3 is proven, remove the temporary
+   `APPROVED_TENANT_TIMEZONES` constant in a **separate PR**, rerun tests,
+   and deploy the removal. Test at least one Geins-supplied zone (e.g.
+   `Europe/London`) to prove that Geins now wins without a code edit.
+
+Odelco's desired operating timezone is `Europe/Stockholm`. This does **not**
+authorize switching the storefront hostname to `odelco.se`, changing VAT
+defaults, or editing other customer settings. See issue #44 and PR #45.

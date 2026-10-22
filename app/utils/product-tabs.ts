@@ -53,6 +53,25 @@ export function productDescriptionTexts(product: DetailProduct): {
   };
 }
 
+/**
+ * Semantic copy follows Geins Management's Short/Long/Technical fields
+ * delivered by the Merchant API as text1/text2/text3. It is opt-in per
+ * tenant; the historical PIM offset is kept intact for other storefronts.
+ * All HTML returned by the product API is sanitized before reaching here.
+ */
+export function semanticProductTexts(product: DetailProduct): {
+  short?: string;
+  long?: string;
+  technical?: string;
+} {
+  const texts = product.texts;
+  return {
+    short: hasRenderableHtml(texts?.text1) ? texts?.text1 : undefined,
+    long: hasRenderableHtml(texts?.text2) ? texts?.text2 : undefined,
+    technical: hasRenderableHtml(texts?.text3) ? texts?.text3 : undefined,
+  };
+}
+
 const HIDDEN_PARAMETER_GROUPS = /^monitor$/i;
 
 /** Groups the buyer may see, each stripped of parameters with nothing to show. */
