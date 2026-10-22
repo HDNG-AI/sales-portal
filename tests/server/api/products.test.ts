@@ -166,15 +166,23 @@ describe('Product API Routes', () => {
       vi.mocked(getRouterParam).mockReturnValue('private-product');
       mockGraphqlQuery.mockResolvedValue({
         product: {
-          id: 1, name: 'Private product',
-          unitPrice: { sellingPriceIncVat: 125, sellingPriceExVatFormatted: '100 SEK' },
+          id: 1,
+          name: 'Private product',
+          unitPrice: {
+            sellingPriceIncVat: 125,
+            sellingPriceExVatFormatted: '100 SEK',
+          },
           lowestPrice: { lowestPriceIncVat: 120 },
         },
       });
       const event = {
         context: {
           tenant: {
-            config: { features: { priceVisibility: { enabled: true, access: 'authenticated' } } },
+            config: {
+              features: {
+                priceVisibility: { enabled: true, access: 'authenticated' },
+              },
+            },
           },
         },
       } as unknown as H3Event;
@@ -495,10 +503,24 @@ describe('Product API Routes', () => {
       mockGraphqlQuery.mockResolvedValue({
         priceHistory: [{ price: 100, date: '2026-01-01' }],
       });
+      const publicTenantEvent = {
+        context: { tenant: { hostname: 'public.example.com', config: {} } },
+      } as unknown as H3Event;
+
+      const result = await handler(publicTenantEvent);
+
+      expect(result).toEqual([{ price: 100, date: '2026-01-01' }]);
+    });
+
+    it('withholds price history when no tenant config was resolved', async () => {
+      vi.mocked(getRouterParam).mockReturnValue('my-product');
+      mockGraphqlQuery.mockResolvedValue({
+        priceHistory: [{ price: 100, date: '2026-01-01' }],
+      });
 
       const result = await handler(fakeEvent);
 
-      expect(result).toEqual([{ price: 100, date: '2026-01-01' }]);
+      expect(JSON.stringify(result)).not.toContain('100');
     });
 
     it('throws ZodError for empty alias', async () => {
