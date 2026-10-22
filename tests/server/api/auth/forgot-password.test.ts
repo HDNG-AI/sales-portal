@@ -32,6 +32,9 @@ vi.mock('../../../../server/utils/rate-limiter', () => ({
   getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
 }));
 
+const mockLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn() }));
+vi.mock('../../../../server/utils/logger', () => ({ logger: mockLogger }));
+
 vi.stubGlobal('defineEventHandler', (fn: AnyFn) => fn);
 vi.stubGlobal('readValidatedBody', vi.fn());
 vi.stubGlobal(
@@ -95,5 +98,63 @@ describe('POST /api/auth/forgot-password', () => {
       await import('../../../../server/api/auth/forgot-password.post')
     ).default;
     await expect(handler(mockEvent)).rejects.toThrow('RATE_LIMITED');
+  });
+
+  it('logs a failed Geins call without the email address', async () => {
+    mockPasswordRequestReset.mockRejectedValueOnce(new Error('Geins down'));
+    const handler = (
+      await import('../../../../server/api/auth/forgot-password.post')
+    ).default;
+    await handler(mockEvent);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Password reset request failed',
+      expect.objectContaining({ errorMessage: 'Geins down' }),
+    );
+    expect(JSON.stringify(mockLogger.warn.mock.calls)).not.toContain(
+      'user@example.com',
+    );
+  });
+
+  it('redacts an address echoed in upstream error text', async () => {
+    mockPasswordRequestReset.mockRejectedValueOnce(
+      Object.assign(new Error('Variable email "user@example.com" rejected'), {
+        data: { originalMessage: 'unknown user@example.com' },
+      }),
+    );
+    const handler = (
+      await import('../../../../server/api/auth/forgot-password.post')
+    ).default;
+    await handler(mockEvent);
+    const logged = JSON.stringify(mockLogger.warn.mock.calls);
+    expect(logged).not.toContain('user@example.com');
+    expect(logged).toContain('[redacted]');
+  });
+
+  it('logs when Geins accepts the request', async () => {
+    const handler = (
+      await import('../../../../server/api/auth/forgot-password.post')
+    ).default;
+    await handler(mockEvent);
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'Password reset request accepted by Geins',
+      expect.any(Object),
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('logs a rate-limited request', async () => {
+    mockCheck.mockResolvedValueOnce({
+      allowed: false,
+      remaining: 0,
+      resetTime: 0,
+    });
+    const handler = (
+      await import('../../../../server/api/auth/forgot-password.post')
+    ).default;
+    await expect(handler(mockEvent)).rejects.toThrow('RATE_LIMITED');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Password reset request rate limited',
+      expect.any(Object),
+    );
   });
 });
