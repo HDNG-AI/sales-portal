@@ -6,7 +6,8 @@
  * charges shipping on the invoice under each buyer's contract, so a zero fee
  * is not free shipping: the zero-fee option is named as shipping by
  * agreement and its fee reads as invoiced separately, wherever the fee is
- * shown. A fee above zero is always shown as the amount it is.
+ * shown. A fee above zero is always shown as the amount it is, and a missing
+ * fee keeps whatever the caller shows for an unknown one.
  */
 export function useShippingTerms() {
   const { tenant } = useTenant();
@@ -16,8 +17,10 @@ export function useShippingTerms() {
     () => tenant.value?.layout?.shippingTerms === 'agreement',
   );
 
+  // Only an explicit zero. A missing or not-yet-loaded fee is unknown, and
+  // saying it is invoiced separately would assert more than the data does.
   function isUncharged(fee: number | null | undefined): boolean {
-    return !((fee ?? 0) > 0);
+    return fee === 0;
   }
 
   /** The fee as a summary row shows it, or `formatted` when terms are standard. */

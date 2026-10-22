@@ -36,14 +36,20 @@ describe('useShippingTerms', () => {
     }
   });
 
-  it('reads a zero or missing fee as invoiced separately on agreement terms', () => {
+  it('reads an explicit zero fee as invoiced separately on agreement terms', () => {
     mockLayout.value = { shippingTerms: 'agreement' };
-    const { feeLabel } = useShippingTerms();
-    expect(feeLabel(0, '0 kr')).toBe('checkout.shipping_invoiced_separately');
-    expect(feeLabel(null, null)).toBe('checkout.shipping_invoiced_separately');
-    expect(feeLabel(undefined, undefined)).toBe(
+    expect(useShippingTerms().feeLabel(0, '0 kr')).toBe(
       'checkout.shipping_invoiced_separately',
     );
+  });
+
+  it('leaves a missing fee unknown on agreement terms', () => {
+    mockLayout.value = { shippingTerms: 'agreement' };
+    const { feeLabel, optionName } = useShippingTerms();
+    expect(feeLabel(null, null)).toBeNull();
+    expect(feeLabel(undefined, undefined)).toBeUndefined();
+    expect(feeLabel(undefined, '')).toBe('');
+    expect(optionName({ name: 'Default', feeIncVat: null })).toBe('Default');
   });
 
   it('keeps a real fee on agreement terms', () => {

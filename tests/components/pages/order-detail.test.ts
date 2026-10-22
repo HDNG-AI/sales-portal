@@ -746,6 +746,19 @@ describe('OrderDetail', () => {
         expect(wrapper.html()).not.toContain('>0,00 kr<');
       });
 
+      it('does not claim a missing shipping fee is invoiced separately when shippingTerms is agreement', () => {
+        setShippingTerms('agreement');
+        const data = makeOrder();
+        delete (data.order.cart.summary as { shipping?: unknown }).shipping;
+        mockData.value = data;
+        const wrapper = shallowMountComponent(OrderDetail, {
+          global: { stubs: defaultStubs },
+        });
+        expect(wrapper.text()).not.toContain(
+          'checkout.shipping_invoiced_separately',
+        );
+      });
+
       it('still shows a real shipping fee when shippingTerms is agreement', () => {
         setShippingTerms('agreement');
         mockData.value = makeOrder();
