@@ -1,3 +1,4 @@
+import { protectCartPrices } from '../../utils/price-response';
 import { CartAddItemSchema } from '../../schemas/api-input';
 import { addItem } from '../../services/cart';
 
@@ -13,11 +14,11 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      return await addItem(
+      return protectCartPrices(event, await addItem(
         body.cartId,
         { skuId: body.skuId, quantity: body.quantity },
         event,
-      );
+      ));
     },
     { operation: 'cart.addItem' },
   );

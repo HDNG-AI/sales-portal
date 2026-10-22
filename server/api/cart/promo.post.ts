@@ -1,3 +1,4 @@
+import { protectCartPrices } from '../../utils/price-response';
 import { CartPromoCodeSchema } from '../../schemas/api-input';
 import { applyPromoCode } from '../../services/cart';
 import { promoCodeRateLimiter, getClientIp } from '../../utils/rate-limiter';
@@ -17,7 +18,7 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      return await applyPromoCode(body.cartId, body.promoCode, event);
+      return protectCartPrices(event, await applyPromoCode(body.cartId, body.promoCode, event));
     },
     { operation: 'cart.applyPromoCode' },
   );

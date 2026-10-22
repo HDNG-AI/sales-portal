@@ -47,9 +47,18 @@ function makeStock(overrides: Record<string, number> = {}) {
   };
 }
 
+function setStockLevelBasis(basis: 'total' | 'available' | undefined) {
+  assert.isDefined(tenant.value);
+  tenant.value.layout = {
+    ...(tenant.value.layout ?? {}),
+    stockLevelBasis: basis,
+  };
+}
+
 describe('StockBadge', () => {
   beforeEach(() => {
     setFeatures({});
+    setStockLevelBasis(undefined);
     // Sign out: the Pinia store is shared across this file's tests.
     useAuthStore().user = null;
   });
@@ -151,6 +160,99 @@ describe('StockBadge', () => {
         stockStatus: { enabled: false, access: 'authenticated' },
       });
       expect(mount().text()).toBe('');
+    });
+  });
+
+  // A tenant that lets buyers order without stock sets oversellable on every
+  // article, so totalStock alone reads as in stock everywhere. On the
+  // `available` basis the label reads totalStock minus oversellable instead.
+  // Registered in tests/unit/config-coverage/map.ts.
+  describe('stockLevelBasis', () => {
+    const OVERSELL = 1000;
+
+    it('keeps reading totalStock when stockLevelBasis is absent', () => {
+      const wrapper = mountComponent(StockBadge, {
+        props: {
+          stock: makeStock({
+            inStock: 0,
+            oversellable: OVERSELL,
+            totalStock: 998,
+          }),
+        },
+        global: { stubs },
+      });
+      expect(wrapper.text()).toContain('product.in_stock');
+    });
+
+    it('labels more than five available as in stock (green) when stockLevelBasis is available', () => {
+      setStockLevelBasis('available');
+      const wrapper = mountComponent(StockBadge, {
+        props: {
+          stock: makeStock({
+            inStock: 6,
+            oversellable: OVERSELL,
+            totalStock: OVERSELL + 6,
+          }),
+        },
+        global: { stubs },
+      });
+      expect(wrapper.text()).toContain('product.in_stock');
+      expect(wrapper.find('.badge').classes()).toContain('text-success');
+    });
+
+    it('labels one to five available as few left (yellow) when stockLevelBasis is available', () => {
+      setStockLevelBasis('available');
+      for (const remaining of [1, 5]) {
+        const wrapper = mountComponent(StockBadge, {
+          props: {
+            stock: makeStock({
+              inStock: remaining,
+              oversellable: OVERSELL,
+              totalStock: OVERSELL + remaining,
+            }),
+          },
+          global: { stubs },
+        });
+        expect(wrapper.text()).toContain('product.low_stock');
+        expect(wrapper.find('.badge').classes()).toContain('text-warning');
+      }
+    });
+
+    it('labels zero or less available as a backorder (blue) when stockLevelBasis is available', () => {
+      setStockLevelBasis('available');
+      // Physical 0 with two undelivered orders already drawn from totalStock.
+      for (const totalStock of [OVERSELL, OVERSELL - 2]) {
+        const wrapper = mountComponent(StockBadge, {
+          props: {
+            stock: makeStock({
+              inStock: 0,
+              oversellable: OVERSELL,
+              totalStock,
+            }),
+          },
+          global: { stubs },
+        });
+        expect(wrapper.text()).toContain('product.backorder');
+        const classes = wrapper.find('.badge').classes();
+        expect(classes).toContain('text-info');
+        expect(classes).not.toContain('bg-muted');
+      }
+    });
+
+    it('never renders a stock quantity when stockLevelBasis is available', () => {
+      setStockLevelBasis('available');
+      const wrapper = mountComponent(StockBadge, {
+        props: {
+          stock: makeStock({
+            inStock: 3,
+            oversellable: OVERSELL,
+            totalStock: OVERSELL + 3,
+          }),
+          size: 'sm',
+        },
+        global: { stubs },
+      });
+      expect(wrapper.text()).not.toMatch(/\d/);
     });
   });
 });

@@ -20,6 +20,16 @@ export function resolveConfigCacheKey(event: H3Event): string {
     : base;
 }
 
+/**
+ * A ?preview=1 request is never read back from the cache: its key carries a
+ * per-request timestamp so each preview render rebuilds. Storing it anyway
+ * would leave one full tenant config behind per preview render, forever on the
+ * in-process cache mount, so preview requests skip the cache entirely.
+ */
+export function shouldBypassConfigCache(event: H3Event): boolean {
+  return getQuery(event).preview === '1';
+}
+
 export default defineCachedEventHandler(
   async (event) => {
     const { hostname } = event.context.tenant;
@@ -49,6 +59,7 @@ export default defineCachedEventHandler(
   },
   {
     getKey: (event) => resolveConfigCacheKey(event),
+    shouldBypassCache: (event) => shouldBypassConfigCache(event),
     // Serve a stale cached response while asynchronously revalidating it
     swr: true,
     // Cache for 1 hour

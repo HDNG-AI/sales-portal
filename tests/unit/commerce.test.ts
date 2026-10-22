@@ -42,6 +42,41 @@ describe('getStockStatus', () => {
   });
 });
 
+describe('getStockStatus on the available basis', () => {
+  const stock = (totalStock: number, oversellable = 1000) => ({
+    totalStock,
+    inStock: 0,
+    static: 0,
+    oversellable,
+  });
+
+  it('subtracts oversellable before applying the threshold', () => {
+    expect(getStockStatus(stock(1006), 5, 'available')).toBe('in-stock');
+    expect(getStockStatus(stock(1005), 5, 'available')).toBe('low-stock');
+    expect(getStockStatus(stock(1001), 5, 'available')).toBe('low-stock');
+  });
+
+  it('returns backorder at or below zero instead of out-of-stock', () => {
+    expect(getStockStatus(stock(1000), 5, 'available')).toBe('backorder');
+    expect(getStockStatus(stock(998), 5, 'available')).toBe('backorder');
+  });
+
+  it('follows a changed oversell allowance', () => {
+    expect(getStockStatus(stock(510, 500), 5, 'available')).toBe('in-stock');
+    expect(getStockStatus(stock(503, 500), 5, 'available')).toBe('low-stock');
+  });
+
+  it('treats a missing oversellable as zero', () => {
+    expect(
+      getStockStatus({ totalStock: 3, inStock: 3, static: 0 }, 5, 'available'),
+    ).toBe('low-stock');
+  });
+
+  it('leaves the total basis unchanged by oversellable', () => {
+    expect(getStockStatus(stock(998))).toBe('in-stock');
+  });
+});
+
 describe('formatPrice', () => {
   it('formats with default SEK locale', () => {
     const result = formatPrice(199, 'SEK', 'sv-SE');

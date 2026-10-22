@@ -119,6 +119,14 @@ export interface TenantConfig {
     vatDisplayLocked?: boolean | null;
     /** Opt into semantic short/long/technical product copy placement. */
     productTextPlacement?: 'legacy' | 'semantic' | null;
+    /**
+     * Which stock figure the stock label reads. Absent or `total` keeps the
+     * label on `totalStock`. `available` subtracts `oversellable` first, for a
+     * tenant that allows ordering without stock: the allowance otherwise
+     * makes every article read as in stock. At or below zero the article is
+     * then a backorder rather than out of stock, since it can still be ordered.
+     */
+    stockLevelBasis?: 'total' | 'available' | null;
   } | null;
 
   // Features — keyed by feature name

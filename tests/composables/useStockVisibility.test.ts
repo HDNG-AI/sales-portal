@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -8,8 +8,12 @@ import { computed } from 'vue';
 let mockIsFeatureConfigured = (_name: string): boolean => false;
 let mockHasFeature = (_name: string): boolean => false;
 let mockCanAccess = (_name: string): boolean => false;
+const mockTenant = ref<{ layout?: { stockLevelBasis?: string | null } } | null>(
+  null,
+);
 
 vi.stubGlobal('useTenant', () => ({
+  tenant: mockTenant,
   isFeatureConfigured: (name: string) => mockIsFeatureConfigured(name),
   hasFeature: (name: string) => mockHasFeature(name),
 }));
@@ -22,6 +26,7 @@ vi.stubGlobal('computed', computed);
 
 vi.mock('../../app/composables/useTenant', () => ({
   useTenant: () => ({
+    tenant: mockTenant,
     isFeatureConfigured: (name: string) => mockIsFeatureConfigured(name),
     hasFeature: (name: string) => mockHasFeature(name),
   }),
@@ -47,6 +52,23 @@ describe('useStockVisibility', () => {
     mockIsFeatureConfigured = () => false;
     mockHasFeature = () => false;
     mockCanAccess = () => false;
+    mockTenant.value = null;
+  });
+
+  it('reads stock levels from totalStock when the tenant sets no basis', () => {
+    expect(useStockVisibility().stockLevelBasis.value).toBe('total');
+    mockTenant.value = { layout: {} };
+    expect(useStockVisibility().stockLevelBasis.value).toBe('total');
+  });
+
+  it('reads stock levels net of oversellable when the tenant opts into available', () => {
+    mockTenant.value = { layout: { stockLevelBasis: 'available' } };
+    expect(useStockVisibility().stockLevelBasis.value).toBe('available');
+  });
+
+  it('falls back to totalStock for an unknown basis value', () => {
+    mockTenant.value = { layout: { stockLevelBasis: 'physical' } };
+    expect(useStockVisibility().stockLevelBasis.value).toBe('total');
   });
 
   it('returns showStock=true when stockStatus feature is not configured (fail-open)', () => {

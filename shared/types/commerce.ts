@@ -55,16 +55,37 @@ export type StockStatus =
   | 'in-stock'
   | 'low-stock'
   | 'out-of-stock'
-  | 'on-demand';
+  | 'on-demand'
+  | 'backorder';
+
+/** Which stock figure a label reads — see `layout.stockLevelBasis`. */
+export type StockLevelBasis = 'total' | 'available';
 
 /**
  * Derive stock status from StockType.
  * Geins stock field mapping
+ *
+ * The `available` basis subtracts the oversell allowance from `totalStock`,
+ * which already drops when an order is placed, so ordered-but-undelivered
+ * units no longer count. Nothing at or below zero is out of stock on that
+ * basis: the allowance is what lets the article be ordered anyway.
  */
 export function getStockStatus(
-  stock: { totalStock: number; inStock: number; static: number },
+  stock: {
+    totalStock: number;
+    inStock: number;
+    static: number;
+    oversellable?: number;
+  },
   threshold = 5,
+  basis: StockLevelBasis = 'total',
 ): StockStatus {
+  if (basis === 'available') {
+    const remaining = stock.totalStock - (stock.oversellable ?? 0);
+    if (remaining <= 0) return 'backorder';
+    if (remaining <= threshold) return 'low-stock';
+    return 'in-stock';
+  }
   if (stock.totalStock === 0 && stock.static > 0) return 'on-demand';
   if (stock.totalStock === 0) return 'out-of-stock';
   if (stock.totalStock <= threshold) return 'low-stock';

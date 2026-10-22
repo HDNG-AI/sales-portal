@@ -4,6 +4,7 @@ import type {
   VariantDimensionType,
   VariantType,
   ProductImageType,
+  StockType,
 } from '#shared/types/commerce';
 import type { SkuType } from '@geins/types';
 import { Button } from '~/components/ui/button';
@@ -129,6 +130,7 @@ function variantInfoFor(
   value: string,
 ): {
   articleNumber?: string;
+  stock?: StockType;
   stockTotal: number;
   priceIncVatFormatted?: string | null;
   priceExVatFormatted?: string | null;
@@ -163,6 +165,7 @@ function variantInfoFor(
     sku?.articleNumber ||
     props.productArticleNumber ||
     undefined;
+  const stock = matchingVariant?.stock ?? sku?.stock ?? undefined;
   const stockTotal =
     matchingVariant?.stock?.totalStock ?? sku?.stock?.totalStock ?? 0;
   const priceIncVatFormatted = sibling?.priceIncVatFormatted ?? null;
@@ -174,6 +177,7 @@ function variantInfoFor(
   if (!articleNumber && !matchingVariant) return null;
   return {
     articleNumber,
+    stock,
     stockTotal,
     priceIncVatFormatted,
     priceExVatFormatted,
@@ -300,7 +304,7 @@ const activeDimension = computed(
     ) ?? null,
 );
 
-const { showStock } = useStockVisibility();
+const { showStock, stockLevelBasis } = useStockVisibility();
 const { showPrice } = usePriceVisibility();
 </script>
 
@@ -436,8 +440,28 @@ const { showPrice } = usePriceVisibility();
                       })
                     }}
                   </div>
+                  <!-- The in/out label below reads totalStock, which an
+                       oversell allowance inflates; a tenant on the
+                       available basis gets the three-level badge instead. -->
                   <div
-                    v-if="showStock"
+                    v-if="
+                      showStock &&
+                      stockLevelBasis === 'available' &&
+                      variantInfoFor(activeDimension.dimensionName, value)
+                        ?.stock
+                    "
+                    class="mt-1"
+                  >
+                    <StockBadge
+                      size="sm"
+                      :stock="
+                        variantInfoFor(activeDimension.dimensionName, value)
+                          ?.stock
+                      "
+                    />
+                  </div>
+                  <div
+                    v-else-if="showStock"
                     class="mt-1 flex items-center gap-1 text-xs"
                     :class="
                       isValueInStock(activeDimension.dimensionName, value)
