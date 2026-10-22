@@ -136,8 +136,11 @@ async function isVerifiedBuyer(
 
 /**
  * Enforce the tenant's effective public-price policy at the server boundary.
- * Unknown tenants retain existing public-price behavior for compatibility.
- * Odelco fails closed if its priceVisibility feature is missing.
+ * Resolved tenants without a priceVisibility feature retain existing
+ * public-price behavior for compatibility. Odelco fails closed if its
+ * priceVisibility feature is missing, and every tenant fails closed when no
+ * config was resolved: a failed `?preview=1` lookup leaves only the hostname
+ * on the context while the SDK still serves the tenant's catalog from KV.
  */
 export async function protectProductPrices<T>(
   event: H3Event,
@@ -147,6 +150,7 @@ export async function protectProductPrices<T>(
   const tenant = event.context?.tenant;
   const visibility = tenant?.config?.features?.priceVisibility;
   const tenantId = tenant?.tenantId ?? tenant?.config?.tenantId;
+  if (!tenant?.config) return removePriceFields(result) as T;
   if (visibility === undefined && tenantId !== 'odelco') return result;
   if (visibility && canAccessFeature(visibility, { authenticated: false })) {
     return result;
@@ -176,6 +180,7 @@ export async function protectCartPrices<T>(
   const tenant = event.context?.tenant;
   const visibility = tenant?.config?.features?.priceVisibility;
   const tenantId = tenant?.tenantId ?? tenant?.config?.tenantId;
+  if (!tenant?.config) return protectProductPrices(event, null, result);
   if (visibility === undefined && tenantId !== 'odelco') return result;
   if (visibility && canAccessFeature(visibility, { authenticated: false }))
     return result;

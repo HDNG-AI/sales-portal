@@ -363,6 +363,35 @@ describe('cart API on a restricted-price tenant', () => {
     expect(clearAuthCookies).toHaveBeenCalled();
   });
 
+  // A `?preview=1` request resolves the tenant only through the merchant API.
+  // When that lookup fails the context carries just the hostname, while the
+  // SDK still serves the tenant's cart from KV.
+  it.each(ROUTES)(
+    '%s returns no prices when ?preview=1 tenant resolution failed',
+    async (_name, path, sdkCall) => {
+      cookies = { authToken: jwt(3600), refreshToken: 'refresh-valid' };
+      getUser.mockResolvedValue({ id: 501, email: 'buyer@example.com' });
+      const unresolvedPreviewEvent = {
+        path: '/api/cart?preview=1',
+        context: {
+          tenant: { hostname: 'odelco.se', resolution: 'transport-failure' },
+        },
+        node: { req: { headers: {} } },
+      } as unknown as H3Event;
+
+      const response = await callRoute(path, unresolvedPreviewEvent);
+
+      expect(sdkCall).toHaveBeenCalledTimes(1);
+      expectNoPrices(response);
+      expectCartStructurePreserved(response);
+      expect(setResponseHeader).toHaveBeenCalledWith(
+        expect.anything(),
+        'Cache-Control',
+        'private, no-store',
+      );
+    },
+  );
+
   it('leaves public-price tenants unchanged', async () => {
     const response = await callRoute(
       ROUTES[0][1],
