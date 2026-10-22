@@ -1,6 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import type { Environment } from './shared/types/common';
 import type { NuxtPage } from 'nuxt/schema';
+import { CACHE_STORAGE_MOUNT } from './server/utils/cache-storage';
 
 /**
  * Resolves the 'kv' storage mount (tenant configs, webhook dedup — see
@@ -425,6 +426,8 @@ export default defineNuxtConfig({
   nitro: {
     storage: {
       kv: resolveKvStorageMount(),
+      // Bounded, unlike Nitro's default memory mount (server/utils/cache-storage.ts)
+      cache: CACHE_STORAGE_MOUNT,
     },
     // Enable compression
     compressPublicAssets: true,

@@ -23,12 +23,14 @@ vi.mock('#shared/constants/storage', () => ({
 }));
 
 let resolveConfigCacheKey: (event: H3Event) => string;
+let shouldBypassConfigCache: (event: H3Event) => boolean;
 
 beforeEach(async () => {
   query = {};
   vi.resetModules();
-  resolveConfigCacheKey = (await import('../../server/api/config.get'))
-    .resolveConfigCacheKey;
+  const mod = await import('../../server/api/config.get');
+  resolveConfigCacheKey = mod.resolveConfigCacheKey;
+  shouldBypassConfigCache = mod.shouldBypassConfigCache;
 });
 
 function createEvent(
@@ -107,5 +109,30 @@ describe('resolveConfigCacheKey', () => {
   it("preview as array ['1'] does not trigger the preview suffix", () => {
     query = { preview: ['1'] };
     expect(resolveConfigCacheKey(createEvent())).toBe(base);
+  });
+});
+
+// A preview key is unique per request and never read back, so storing it only
+// leaves a full tenant config behind in the in-process cache per preview render.
+describe('shouldBypassConfigCache', () => {
+  it('bypasses the cache for ?preview=1', () => {
+    query = { preview: '1' };
+    expect(shouldBypassConfigCache(createEvent())).toBe(true);
+  });
+
+  it('uses the cache for a clean request', () => {
+    expect(shouldBypassConfigCache(createEvent())).toBe(false);
+  });
+
+  it('uses the cache when only a preview cookie is present', () => {
+    const event = createEvent({ store_settings_preview: 'true' });
+    expect(shouldBypassConfigCache(event)).toBe(false);
+  });
+
+  it('uses the cache for preview values other than the string 1', () => {
+    for (const preview of ['true', '0', ['1']]) {
+      query = { preview };
+      expect(shouldBypassConfigCache(createEvent())).toBe(false);
+    }
   });
 });
