@@ -9,7 +9,7 @@ import type {
   FeatureAccessInput,
   FeatureConfig,
 } from '../schemas/store-settings';
-import { StoreSettingsSchema } from '../schemas/store-settings';
+import { StoreSettingsSchema, TimezoneSchema } from '../schemas/store-settings';
 import { deriveThemeColors } from './theme';
 import {
   STOREFRONT_SETTINGS_DEFAULTS,
@@ -317,16 +317,17 @@ export function isTenantRefreshFresh(
  */
 export interface TenantPortalOverrides {
   cms?: TenantConfig['cms'];
+  /** Per-tenant operating timezone retained independently of Geins cache. */
+  timezone?: string;
+  /** A portal-owned PDP presentation override; does not mutate Geins. */
+  layout?: { productTextPlacement?: 'legacy' | 'semantic' };
 }
 
 /**
- * Approved Sales Portal-only operating timezone until Geins Studio exposes
- * an authoritative per-tenant setting. The Odelco value is an explicit
- * merchant decision (2026-10-14), not an inferred market/locale default.
- * Keep this allowlist narrow: no theme, routing, or other Studio-owned keys.
- *
- * Applied after each Geins load (including preview) and retained in the
- * cached effective tenant config. Geins publish refresh cannot erase it.
+ * Temporary backwards-compatibility bridge. Odelco's chosen zone must be
+ * seeded through the authenticated tenant timezone API into
+ * tenant:override:odelco before removing this constant in a later PR.
+ * Do not use it as a general market or locale-based default.
  */
 const APPROVED_TENANT_TIMEZONES: Readonly<Record<string, string>> = {
   odelco: 'Europe/Stockholm',
@@ -336,12 +337,30 @@ export function mergeTenantPortalOverrides(
   base: TenantConfig,
   overrides: TenantPortalOverrides | null | undefined,
 ): TenantConfig {
-  const timezone = APPROVED_TENANT_TIMEZONES[base.tenantId];
-  if (!overrides?.cms && !timezone) return base;
+  // A merchant-provided non-UTC timezone wins. Historical UTC and unset
+  // records can inherit the persisted portal operating timezone. The legacy
+  // Odelco constant is ONLY a migration fallback until its KV value is seeded.
+  // Validate KV reads too: a malformed stored override must never break SSR.
+  const savedZone = TimezoneSchema.safeParse(overrides?.timezone);
+  const portalZone = savedZone.success ? savedZone.data : undefined;
+  const timezone =
+    base.timezone && base.timezone !== 'UTC'
+      ? base.timezone
+      : (portalZone ?? APPROVED_TENANT_TIMEZONES[base.tenantId] ?? base.timezone);
+  // Fail closed on malformed KV values. A tenant without the explicit
+  // override retains Geins's placement (or the storefront's legacy default).
+  const rawPlacement = overrides?.layout?.productTextPlacement;
+  const placement = rawPlacement === 'semantic' || rawPlacement === 'legacy'
+    ? rawPlacement
+    : undefined;
+  if (!overrides?.cms && timezone === base.timezone && !placement) return base;
 
   return {
     ...base,
-    ...(timezone ? { timezone } : {}),
+    ...(timezone !== undefined ? { timezone } : {}),
+    ...(placement
+      ? { layout: { ...(base.layout ?? {}), productTextPlacement: placement } }
+      : {}),
     ...(overrides?.cms
       ? {
           cms: {

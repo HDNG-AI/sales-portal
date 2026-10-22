@@ -38,6 +38,9 @@ export function useTenant() {
   const watermark = computed(() => tenant.value?.branding?.watermark ?? 'full');
   // Falls back to the same defaults server/utils/tenant.ts merges in for an
   // unconfigured tenant — only relevant here before `tenant` has loaded.
+  const productTextPlacement = computed(
+    () => tenant.value?.layout?.productTextPlacement ?? 'legacy',
+  );
   const productMediaParameters = computed(
     () =>
       tenant.value?.productMediaParameters ?? PRODUCT_MEDIA_PARAMETER_DEFAULTS,
@@ -149,6 +152,7 @@ export function useTenant() {
     checkoutMode,
     timezone,
     watermark,
+    productTextPlacement,
     productMediaParameters,
     availableLocales,
     availableMarkets,

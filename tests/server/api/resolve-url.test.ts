@@ -208,10 +208,34 @@ describe('GET /api/resolve-url', () => {
     const keyB = capturedGetKey!(eventB);
 
     expect(keyA).not.toBe(keyB);
-    expect(keyA).toContain('alpha.example');
-    expect(keyB).toContain('beta.example');
-    // Path must also be present in the key so a host-only key bug would fail.
-    expect(keyA).toContain('/se/sv/grenror');
+    // Path must also be in the key so a host-only key bug would fail.
+    (getQuery as ReturnType<typeof vi.fn>).mockReturnValue({
+      path: '/se/sv/kopparror',
+    });
+    expect(capturedGetKey!(eventA)).not.toBe(keyA);
+  });
+
+  // Nitro stores escapeKey(getKey()), which drops every non-word character.
+  // A readable `host::path` key would collapse all of these onto one entry.
+  it('getKey survives Nitro key escaping without collisions', async () => {
+    (getQuery as ReturnType<typeof vi.fn>).mockReturnValue({ path: '/x' });
+    mockResolveEntityUrl.mockResolvedValue(null);
+    await handler(createMockEvent()).catch(() => {});
+    expect(capturedGetKey).not.toBeNull();
+
+    const nitroEscape = (key: string) => key.replace(/\W/g, '');
+    const pairs: Array<[string, string]> = [
+      ['shop.se', '/se/sv/foo-bar'],
+      ['shop.se', '/se/sv/foobar'],
+      ['shop.se', '/se/svfoo/bar'],
+      ['shop.sese', '/sv/foobar'],
+      ['shopse', '/se/sv/foobar'],
+    ];
+    const stored = pairs.map(([host, path]) => {
+      (getQuery as ReturnType<typeof vi.fn>).mockReturnValue({ path });
+      return nitroEscape(capturedGetKey!(createMockEvent(host)));
+    });
+    expect(new Set(stored).size).toBe(pairs.length);
   });
 
   it('getKey normalizes trailing slashes: /se/sv/grenror/ and /se/sv/grenror produce equal keys', async () => {

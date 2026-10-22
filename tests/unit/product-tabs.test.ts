@@ -5,6 +5,7 @@ import {
   defaultProductTab,
   hasRenderableHtml,
   productDescriptionTexts,
+  semanticProductTexts,
   visibleParameterGroups,
 } from '../../app/utils/product-tabs';
 
@@ -42,6 +43,37 @@ describe('productDescriptionTexts', () => {
     expect(
       productDescriptionTexts(product({ text1: '<p></p>', text2: '<p>x</p>' })),
     ).toEqual({ text2: undefined, text3: '<p>x</p>' });
+  });
+});
+
+describe('semanticProductTexts (tenant opt-in only)', () => {
+  const product = (texts: Record<string, string>) =>
+    ({ texts } as unknown as DetailProduct);
+
+  it('maps Geins Short/Long/Technical raw API fields by semantics', () => {
+    const fields = product({
+      text1: '<p>Kort beskrivning</p>',
+      text2: '<p>Mer produktinformation</p>',
+      text3: '<ul><li>12 V</li></ul>',
+    });
+    expect(semanticProductTexts(fields)).toEqual({
+      short: '<p>Kort beskrivning</p>',
+      long: '<p>Mer produktinformation</p>',
+      technical: '<ul><li>12 V</li></ul>',
+    });
+    // Legacy mapping stays untouched for tenants without an explicit opt-in.
+    expect(productDescriptionTexts(fields)).toEqual({
+      text2: '<p>Kort beskrivning</p>',
+      text3: '<p>Mer produktinformation</p>',
+    });
+  });
+
+  it('ignores empty HTML, but keeps technical HTML when populated', () => {
+    expect(semanticProductTexts(product({
+      text1: '<p><br></p>', text2: '', text3: '<p>Tekniska data</p>',
+    }))).toEqual({
+      short: undefined, long: undefined, technical: '<p>Tekniska data</p>',
+    });
   });
 });
 

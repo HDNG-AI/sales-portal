@@ -158,6 +158,8 @@ export const LayoutConfigSchema = z
     showCompanyName: z.boolean().nullable().optional(),
     vatDisplay: z.enum(['ex', 'inc']).nullable().optional(),
     vatDisplayLocked: z.boolean().nullable().optional(),
+    // Optional tenant opt-in; absence preserves existing PDP text placement.
+    productTextPlacement: z.enum(['legacy', 'semantic']).nullable().optional(),
   })
   .nullable()
   .optional();

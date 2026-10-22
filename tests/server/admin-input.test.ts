@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CreateTenantSchema } from '../../server/schemas/admin-input';
+import { CreateTenantSchema, UpdateTenantTimezoneSchema } from '../../server/schemas/admin-input';
 
 describe('CreateTenantSchema', () => {
   it('accepts a minimal payload with only hostname', () => {
@@ -210,4 +210,29 @@ describe('CreateTenantSchema', () => {
       expect(result.data.cms?.menus?.footer).toBeNull();
     }
   });
+});
+
+describe('UpdateTenantTimezoneSchema', () => {
+  it('accepts one explicit IANA operating timezone', () => {
+    expect(UpdateTenantTimezoneSchema.parse({
+      timezone: 'Europe/Stockholm',
+    })).toEqual({ timezone: 'Europe/Stockholm' });
+    expect(UpdateTenantTimezoneSchema.safeParse({
+      timezone: 'UTC',
+    }).success).toBe(true);
+  });
+
+  it('rejects unknown keys and silent tenant mutations', () => {
+    expect(UpdateTenantTimezoneSchema.safeParse({
+      timezone: 'Europe/Stockholm',
+      aliases: ['example.com'],
+    }).success).toBe(false);
+  });
+
+  it.each(['GMT+1', '+02:00', '', 'Invalid/Timezone'])(
+    'rejects an invalid or offset-only timezone %s',
+    (timezone) => {
+      expect(UpdateTenantTimezoneSchema.safeParse({ timezone }).success).toBe(false);
+    },
+  );
 });

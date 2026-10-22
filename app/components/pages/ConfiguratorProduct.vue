@@ -36,6 +36,7 @@ import {
   CONFIGURATION_TAB_ID,
   configuratorTabs,
   productDescriptionTexts,
+  semanticProductTexts,
   visibleParameterGroups,
   type ProductTabValue,
 } from '~/utils/product-tabs';
@@ -152,14 +153,24 @@ const { data: pdpCmsArea } = useFetch<ContentAreaType>('/api/cms/area', {
 // The tab row
 // ---------------------------------------------------------------------------
 
-const descriptionTexts = computed(() => productDescriptionTexts(product));
+const { productTextPlacement } = useTenant();
+const isSemantic = computed(() => productTextPlacement?.value === 'semantic');
+const semanticTexts = computed(() => semanticProductTexts(product));
+const descriptionTexts = computed(() =>
+  isSemantic.value
+    ? { text2: semanticTexts.value.long, text3: undefined }
+    : productDescriptionTexts(product),
+);
+const technicalText = computed(() =>
+  isSemantic.value ? semanticTexts.value.technical : undefined,
+);
 const hasDescription = computed(
   () => !!(descriptionTexts.value.text2 || descriptionTexts.value.text3),
 );
 const visibleGroups = computed(() =>
   visibleParameterGroups(product.parameterGroups),
 );
-const hasSpecs = computed(() => visibleGroups.value.length > 0);
+const hasSpecs = computed(() => visibleGroups.value.length > 0 || !!technicalText.value);
 const hasRelated = computed(() => (related.value?.length ?? 0) > 0);
 
 const tabs = computed(() =>
@@ -663,7 +674,7 @@ async function onRestart(): Promise<void> {
           force-mount
           class="bg-card mt-6 rounded-lg border p-6 data-[state=inactive]:hidden"
         >
-          <ProductSpecificationsPanel :groups="visibleGroups" />
+          <ProductSpecificationsPanel :groups="visibleGroups" :technical-html="technicalText" />
         </TabsContent>
 
         <TabsContent

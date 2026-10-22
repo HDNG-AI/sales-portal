@@ -151,6 +151,94 @@ describe('GET /api/search/products', () => {
     );
   });
 
+  it('retries a SKU-like search miss by exact Geins article numbers', async () => {
+    vi.mocked(getQuery).mockReturnValue({ query: 'PIN122251000', take: '5' });
+    mockGraphqlQuery
+      .mockResolvedValueOnce({ searchProducts: { products: [], count: 0 } })
+      .mockResolvedValueOnce({
+        searchProducts: {
+          products: [{ productId: 77, articleNumber: 'PIN122251000', name: 'Victron' }],
+          count: 1,
+        },
+      });
+
+    const result = await handler(fakeEvent);
+    expect(mockGraphqlQuery).toHaveBeenCalledTimes(2);
+    expect(mockGraphqlQuery).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      variables: expect.objectContaining({
+        filter: expect.objectContaining({
+          articleNumbers: ['PIN122251000'],
+          includeCollapsed: true,
+        }),
+        skip: 0,
+      }),
+    }));
+    expect(result).toMatchObject({
+      count: 1,
+      products: [{ articleNumber: 'PIN122251000' }],
+    });
+  });
+
+  it('preserves buyer authorization and existing filters for the SKU fallback', async () => {
+    vi.mocked(getQuery).mockReturnValue({
+      query: 'pin122251000', filter: { brandIds: [17] },
+    });
+    vi.mocked(optionalAuth).mockResolvedValue({ authToken: 'buyer-token' } as never);
+    mockGraphqlQuery
+      .mockResolvedValueOnce({ searchProducts: { products: [], count: 0 } })
+      .mockResolvedValueOnce({
+        searchProducts: { products: [{ articleNumber: 'PIN122251000' }], count: 1 },
+      });
+
+    await handler(fakeEvent);
+    expect(mockGraphqlQuery).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      userToken: 'buyer-token',
+      variables: expect.objectContaining({
+        channelId: '1', languageId: 'sv-SE', marketId: 'se',
+        filter: expect.objectContaining({
+          brandIds: [17],
+          articleNumbers: ['pin122251000', 'PIN122251000'],
+        }),
+      }),
+    }));
+  });
+
+  it('does not retry name searches, non-first search pages, or searches with hits', async () => {
+    for (const [query, skip, found] of [
+      ['Victron BlueSmart', undefined, []],
+      ['PIN122251000', '10', []],
+      ['PIN122251000', undefined, [{ articleNumber: 'PIN122251000' }]],
+    ] as const) {
+      vi.mocked(getQuery).mockReturnValue({ query, ...(skip ? { skip } : {}) });
+      mockGraphqlQuery.mockResolvedValueOnce({
+        searchProducts: { products: found, count: found.length },
+      });
+      await handler(fakeEvent);
+    }
+    expect(mockGraphqlQuery).toHaveBeenCalledTimes(3);
+  });
+
+  it('redacts prices from exact SKU fallback when public Odelco access is restricted', async () => {
+    vi.mocked(getQuery).mockReturnValue({ query: 'PIN122251000' });
+    mockGraphqlQuery
+      .mockResolvedValueOnce({ searchProducts: { products: [], count: 0 } })
+      .mockResolvedValueOnce({
+        searchProducts: {
+          products: [{ articleNumber: 'PIN122251000', name: 'Victron', unitPrice: { sellingPriceExVat: 50 } }],
+          count: 1,
+        },
+      });
+    const event = {
+      context: { tenant: { config: {
+        features: { priceVisibility: { enabled: true, access: 'authenticated' } },
+      } } },
+    } as unknown as import('h3').H3Event;
+    const out = await handler(event) as {
+      products: Array<Record<string, unknown>>;
+    };
+    expect(out.products[0]).not.toHaveProperty('unitPrice');
+  });
+
   it('rejects empty query with Zod error', async () => {
     vi.mocked(getQuery).mockReturnValue({ query: '' });
 
