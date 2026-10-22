@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ResolveUrlSchema } from '../schemas/api-input';
 import { resolveEntityUrl } from '../services/url-resolver';
 import {
@@ -11,8 +12,8 @@ import type { TenantConfig } from '#shared/types/tenant-config';
  *
  * Caching behaviour:
  *  - Wrapped in `defineCachedEventHandler` with SWR (stale-while-revalidate).
- *  - Cache key: `{host}::{normalizedPath}` where host is tenant-specific so two
- *    tenants sharing a path never collide. Security note: URL->canonical mapping
+ *  - Cache key: a digest of `{host}::{normalizedPath}` (see resolveUrlCacheKey)
+ *    where host is tenant-specific so two tenants sharing a path never collide. Security note: URL->canonical mapping
  *    is auth-independent (the same URL resolves to the same canonical for all
  *    users), so keying on host+path (not auth token) is safe.
  *  - Trailing-slash policy: the path is lower-cased and trailing slashes are
@@ -60,6 +61,29 @@ type ResolverCacheResult =
  */
 function getResolverHost(event: Parameters<typeof getRequestHost>[0]): string {
   return getRequestHost(event);
+}
+
+/**
+ * Cache key for one host + inbound path.
+ *
+ * Normalized: lower-case + strip trailing slash so /Se/Sv/Foo/ and /se/sv/foo
+ * share a single cache entry. "Strip trailing slash" is the canonical form
+ * (Nuxt routes never have trailing slashes by default).
+ *
+ * The host is in the key for tenant isolation: two tenants sharing the same
+ * path must not share a cache entry (different canonical targets).
+ *
+ * Hashed because Nitro strips every non-word character from a handler's key
+ * before storing it. `shop.se::/se/sv/foo-bar` would be stored as
+ * `shopsesesvfoobar`, the same entry as `/se/sv/foobar` or `/se/svfoo/bar`,
+ * and the host/path boundary would vanish with it. A hex digest has only word
+ * characters, so distinct host + path pairs keep distinct entries.
+ */
+export function resolveUrlCacheKey(host: string, rawPath: string): string {
+  const normalizedPath = rawPath.toLowerCase().replace(/\/+$/, '');
+  return createHash('sha256')
+    .update(`${host}::${normalizedPath}`)
+    .digest('hex');
 }
 
 /**
@@ -123,14 +147,7 @@ const cachedResolver = defineCachedEventHandler(
       // Parse path from the query so normalization matches what the handler sees.
       const query = getQuery(event);
       const rawPath = typeof query.path === 'string' ? query.path : '';
-      // Normalize: lower-case + strip trailing slash so /Se/Sv/Foo/ and
-      // /se/sv/foo share a single cache entry. "Strip trailing slash" is the
-      // canonical form (Nuxt routes never have trailing slashes by default).
-      const normalizedPath = rawPath.toLowerCase().replace(/\/+$/, '');
-      // Include host in the key for tenant isolation: two tenants sharing the
-      // same path must not share a cache entry (different canonical targets).
-      const host = getResolverHost(event);
-      return `${host}::${normalizedPath}`;
+      return resolveUrlCacheKey(getResolverHost(event), rawPath);
     },
   },
 );
