@@ -61,6 +61,34 @@ describe('PriceDisplay', () => {
     expect(wrapper.text()).toContain('199,00 kr');
   });
 
+  describe('discountBadges prop', () => {
+    it('shows the discount percentage and type label by default', () => {
+      const wrapper = mountComponent(PriceDisplay, {
+        props: { price: makePrice(), discountType: 'SALE_PRICE' },
+      });
+      expect(wrapper.text()).toContain('-33%');
+      expect(wrapper.find('[data-testid="discount-type-label"]').exists()).toBe(
+        true,
+      );
+    });
+
+    it('leaves out the percentage and type label but keeps the struck price when off', () => {
+      const wrapper = mountComponent(PriceDisplay, {
+        props: {
+          price: makePrice(),
+          discountType: 'SALE_PRICE',
+          discountBadges: false,
+        },
+      });
+      expect(wrapper.text()).not.toContain('%');
+      expect(wrapper.find('[data-testid="discount-type-label"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.find('.line-through').text()).toBe('299,00 kr');
+      expect(wrapper.text()).toContain('199,00 kr');
+    });
+  });
+
   describe('testid prop', () => {
     it('puts the given test id on the element carrying the amount', () => {
       const wrapper = mountComponent(PriceDisplay, {

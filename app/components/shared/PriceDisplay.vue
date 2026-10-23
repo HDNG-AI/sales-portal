@@ -16,6 +16,11 @@ const props = withDefaults(
     quantity?: number;
     showVat?: boolean;
     showDiscount?: boolean;
+    /**
+     * Off where a discount shows only as the struck regular price: no
+     * percentage and no sale or campaign label. A cart line is one.
+     */
+    discountBadges?: boolean;
     fromPrice?: boolean;
     lowestPrice?: LowestPriceInfo;
     discountType?: ProductDiscountType;
@@ -35,6 +40,7 @@ const props = withDefaults(
     // back to the user's VAT preference. An explicitly passed true/false still wins.
     showVat: undefined,
     showDiscount: true,
+    discountBadges: true,
     fromPrice: false,
   },
 );
@@ -84,7 +90,7 @@ const isDiscounted = computed(
 const discountPercentage = computed(() => props.price?.discountPercentage ?? 0);
 
 const discountLabel = computed(() => {
-  if (!isDiscounted.value) return '';
+  if (!isDiscounted.value || !props.discountBadges) return '';
   switch (props.discountType) {
     case 'SALE_PRICE':
       return t('discount.sale');
@@ -140,7 +146,7 @@ const lowestPriceFormatted = computed(() => {
         {{ regularPrice }}
       </span>
       <span
-        v-if="isDiscounted && discountPercentage > 0"
+        v-if="isDiscounted && discountBadges && discountPercentage > 0"
         :class="BADGE_DESTRUCTIVE"
       >
         -{{ discountPercentage }}%

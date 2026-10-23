@@ -173,6 +173,31 @@ describe('CartItem', () => {
     expect(total.attributes('data-quantity')).toBe(String(mockItem.quantity));
   });
 
+  it('shows no discount percentage or sale label on either cart line price', () => {
+    const wrapper = mountComponent(CartItem, {
+      props: { item: mockItem },
+      global: {
+        stubs: {
+          GeinsImage: true,
+          PriceDisplay: {
+            template:
+              '<span :data-testid="testid" :data-badges="String(discountBadges)" />',
+            props: ['price', 'quantity', 'testid', 'discountBadges'],
+          },
+          QuantityInput: {
+            template: '<div />',
+            props: ['modelValue', 'min', 'max'],
+          },
+        },
+      },
+    });
+    for (const id of ['cart-item-unit-price', 'cart-item-total-price']) {
+      expect(
+        wrapper.find(`[data-testid="${id}"]`).attributes('data-badges'),
+      ).toBe('false');
+    }
+  });
+
   describe('campaign badges', () => {
     const stubs = {
       GeinsImage: true,
