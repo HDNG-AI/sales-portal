@@ -152,6 +152,7 @@ const maxQuantity = computed(() => {
           {{ t('cart.unit_price_prefix') }}
           <PriceDisplay
             :price="item.unitPrice"
+            :discount-badges="false"
             testid="cart-item-unit-price"
             class="inline text-sm"
           />
@@ -165,6 +166,8 @@ const maxQuantity = computed(() => {
       >
         <PriceDisplay
           :price="item.totalPrice"
+          :quantity="item.quantity"
+          :discount-badges="false"
           testid="cart-item-total-price"
           class="text-sm font-semibold"
         />

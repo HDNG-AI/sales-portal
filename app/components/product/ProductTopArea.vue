@@ -6,7 +6,15 @@ import type { DetailProduct } from '#shared/types/commerce';
  * brand. What a product type shows beyond that goes in the slots — `info` for
  * the rest of the middle column, `aside` for the right one.
  */
-defineProps<{ product: DetailProduct }>();
+const props = defineProps<{
+  product: DetailProduct;
+  /** The picked SKU's own number, shown in place of the product's. */
+  articleNumber?: string | null;
+}>();
+
+const shownArticleNumber = computed(
+  () => props.articleNumber || props.product.articleNumber,
+);
 </script>
 
 <template>
@@ -41,11 +49,11 @@ defineProps<{ product: DetailProduct }>();
 
         <!-- Article number -->
         <p
-          v-if="product.articleNumber"
+          v-if="shownArticleNumber"
           class="text-muted-foreground font-mono text-[20px]"
           data-testid="product-article-number"
         >
-          Art nr. {{ product.articleNumber }}
+          Art nr. {{ shownArticleNumber }}
         </p>
 
         <!-- Brand -->
