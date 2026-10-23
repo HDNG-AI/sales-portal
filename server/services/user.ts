@@ -64,17 +64,18 @@ export async function register(
   );
 }
 
+/**
+ * Not wrapped in wrapServiceCall on purpose: that helper turns the failure into
+ * an app error whose details (Geins' own exception text) are logged verbatim.
+ * The forgot-password handler classifies the raw error and logs only a safe
+ * category, so the upstream text never reaches the log.
+ */
 export async function requestPasswordReset(
   email: string,
   event: H3Event,
 ): Promise<unknown> {
   const { crm } = await getTenantSDK(event);
-  return wrapServiceCall(
-    () => crm.user.password.requestReset(email),
-    'user',
-    AuthError,
-    ErrorCode.BAD_REQUEST,
-  );
+  return crm.user.password.requestReset(email);
 }
 
 export async function commitPasswordReset(

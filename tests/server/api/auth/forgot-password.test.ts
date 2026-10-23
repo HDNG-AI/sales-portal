@@ -100,34 +100,45 @@ describe('POST /api/auth/forgot-password', () => {
     await expect(handler(mockEvent)).rejects.toThrow('RATE_LIMITED');
   });
 
-  it('logs a failed Geins call without the email address', async () => {
-    mockPasswordRequestReset.mockRejectedValueOnce(new Error('Geins down'));
+  it('logs a failed Geins call as a category, never the upstream text', async () => {
+    mockPasswordRequestReset.mockRejectedValueOnce(
+      Object.assign(
+        new Error(
+          'Variable email "user@example.com" rejected at https://api.example/x?token=s3cret, Bearer abc.def',
+        ),
+        {
+          networkError: {
+            statusCode: 401,
+            result: { echo: 'user@example.com' },
+          },
+          data: { originalMessage: 'user@example.com' },
+        },
+      ),
+    );
     const handler = (
       await import('../../../../server/api/auth/forgot-password.post')
     ).default;
-    await handler(mockEvent);
+    const result = await handler(mockEvent);
+    expect(result).toEqual({ success: true });
     expect(mockLogger.warn).toHaveBeenCalledWith(
       'Password reset request failed',
-      expect.objectContaining({ errorMessage: 'Geins down' }),
+      {
+        tenantId: undefined,
+        category: 'network',
+        errorName: 'Error',
+        httpStatus: 401,
+      },
     );
-    expect(JSON.stringify(mockLogger.warn.mock.calls)).not.toContain(
-      'user@example.com',
-    );
-  });
-
-  it('redacts an address echoed in upstream error text', async () => {
-    mockPasswordRequestReset.mockRejectedValueOnce(
-      Object.assign(new Error('Variable email "user@example.com" rejected'), {
-        data: { originalMessage: 'unknown user@example.com' },
-      }),
-    );
-    const handler = (
-      await import('../../../../server/api/auth/forgot-password.post')
-    ).default;
-    await handler(mockEvent);
     const logged = JSON.stringify(mockLogger.warn.mock.calls);
-    expect(logged).not.toContain('user@example.com');
-    expect(logged).toContain('[redacted]');
+    for (const secret of [
+      'user@example.com',
+      's3cret',
+      'Bearer',
+      'https://',
+      '127.0.0.1',
+    ]) {
+      expect(logged).not.toContain(secret);
+    }
   });
 
   it('logs when Geins accepts the request', async () => {
