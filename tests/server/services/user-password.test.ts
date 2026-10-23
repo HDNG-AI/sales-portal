@@ -56,6 +56,17 @@ describe('requestPasswordReset', () => {
     );
     expect(result).toEqual({ succeeded: true });
   });
+
+  it('passes SDK failures through raw, not via wrapServiceCall', async () => {
+    // wrapServiceCall would log the upstream text through createAppError;
+    // the forgot-password handler logs a safe summary instead.
+    const upstream = new Error('upstream text');
+    mockRequestReset.mockRejectedValueOnce(upstream);
+    await expect(
+      user.requestPasswordReset('user@example.com', mockEvent),
+    ).rejects.toBe(upstream);
+    expect(wrapServiceCall).not.toHaveBeenCalled();
+  });
 });
 
 describe('commitPasswordReset', () => {
