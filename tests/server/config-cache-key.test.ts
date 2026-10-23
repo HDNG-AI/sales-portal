@@ -12,6 +12,7 @@ let query: Record<string, unknown> = {};
 const getQueryMock = vi.fn(() => query);
 
 vi.stubGlobal('defineCachedEventHandler', (fn: unknown) => fn);
+vi.stubGlobal('defineEventHandler', (fn: unknown) => fn);
 vi.stubGlobal('withErrorHandling', (fn: () => unknown) => fn());
 vi.stubGlobal('getQuery', getQueryMock);
 
