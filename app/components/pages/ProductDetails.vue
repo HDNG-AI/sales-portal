@@ -101,7 +101,24 @@ watch(product, (p) => setAlternates(p?.alternativeUrls, { type: 'product' }), {
   immediate: true,
 });
 
+// A product sold in several SKUs of its own is bought in the one the buyer
+// picks, and nothing is added before a pick. Geins sends that choice only in
+// `skus`; its variant dimension is the internal `DefaultProduct`.
+const skuOptions = computed(() => {
+  const skus = product.value?.skus ?? [];
+  return skus.length > 1 ? skus : [];
+});
+const selectedSkuId = ref<number | null>(null);
+watch(product, () => {
+  selectedSkuId.value = null;
+});
+
 const resolvedSku = computed(() => {
+  if (skuOptions.value.length) {
+    return (
+      skuOptions.value.find((s) => s.skuId === selectedSkuId.value) ?? null
+    );
+  }
   if (!product.value?.variantGroup?.variants?.length) {
     return product.value?.skus?.[0] ?? null;
   }
@@ -114,6 +131,17 @@ const resolvedSku = computed(() => {
   if (!variant) return product.value.skus?.[0] ?? null;
   return product.value.skus?.find((s) => s.skuId === variant.variantId) ?? null;
 });
+const needsSkuPick = computed(
+  () => skuOptions.value.length > 0 && !resolvedSku.value,
+);
+
+// The picked SKU's own stock. Before a pick, and on a product sold in one SKU,
+// the product's total.
+const displayStock = computed(
+  () =>
+    (skuOptions.value.length ? resolvedSku.value?.stock : null) ??
+    product.value?.totalStock,
+);
 
 const quantity = ref(1);
 
@@ -126,7 +154,7 @@ const canPurchase = computed(
   () => canAccess('orderPlacement') && !isCatalogMode.value,
 );
 const isOutOfStock = computed(() => {
-  const stock = product.value?.totalStock;
+  const stock = displayStock.value;
   if (!stock) return false;
   return getStockStatus(stock) === 'out-of-stock';
 });
@@ -143,7 +171,7 @@ const cartQtyForSelectedSku = computed(() => {
 // the user cannot push the cart past the available stock. Oversellable and
 // static (on-demand) products are not stock-limited.
 const stockThreshold = computed(() => {
-  const stock = product.value?.totalStock;
+  const stock = displayStock.value;
   if (!stock) return Number.POSITIVE_INFINITY;
   if (stock.oversellable > 0 || stock.static > 0) {
     return Number.POSITIVE_INFINITY;
@@ -154,6 +182,10 @@ const maxQuantity = computed(() => {
   const threshold = stockThreshold.value;
   if (!Number.isFinite(threshold)) return 99;
   return Math.max(1, threshold);
+});
+// A pick can lower the cap below a quantity chosen before it.
+watch(maxQuantity, (max) => {
+  if (quantity.value > max) quantity.value = max;
 });
 const cartIsFull = computed(
   () => Number.isFinite(stockThreshold.value) && stockThreshold.value === 0,
@@ -226,6 +258,7 @@ const { latestOrder, formattedDate: latestOrderDate } =
 // the current product's `skus` stays at 1 but `variantGroup.variants`
 // carries the siblings.
 const showVariantSelector = computed(() => {
+  if (skuOptions.value.length) return true;
   const dims = product.value?.variantDimensions ?? [];
   if (!dims.length) return false;
   const skuCount = product.value?.skus?.length ?? 0;
@@ -337,7 +370,15 @@ const { data: pdpCmsArea } = useFetch<ContentAreaType>('/api/cms/area', {
   lazy: true,
 });
 
+const variantSelector = useTemplateRef<{ openSkuSheet: () => void }>(
+  'variantSelector',
+);
+
 async function addToCart() {
+  if (needsSkuPick.value) {
+    variantSelector.value?.openSkuSheet();
+    return;
+  }
   if (!resolvedSku.value?.skuId) return;
   await cartStore.addItem(resolvedSku.value.skuId, quantity.value);
 }
@@ -443,7 +484,9 @@ useProductSeo({
   localeAlternates,
   // The article number, which is what a buyer searches for; skuId is internal.
   sku: () =>
-    resolvedSku.value?.articleNumber ?? product.value?.articleNumber ?? '',
+    (resolvedSku.value ?? product.value?.skus?.[0])?.articleNumber ??
+    product.value?.articleNumber ??
+    '',
   // A getter, not `true`: this fork hides prices from unauthenticated
   // buyers, and an offers block for a price the page does not show would
   // be a schema.org claim the page cannot back up.
@@ -461,7 +504,12 @@ useProductSeo({
       <!-- Breadcrumbs -->
       <AppBreadcrumbs v-if="breadcrumbItems.length" :items="breadcrumbItems" />
 
-      <ProductTopArea :product="product">
+      <ProductTopArea
+        :product="product"
+        :article-number="
+          skuOptions.length ? resolvedSku?.articleNumber : undefined
+        "
+      >
         <template #info>
           <!-- Price: sits above the long-form description so the dominant
              commerce signal anchors the column. -->
@@ -513,8 +561,8 @@ useProductSeo({
           </div>
 
           <!-- Stock -->
-          <div v-if="product.totalStock && showStock" data-testid="stock-badge">
-            <StockBadge :stock="product.totalStock" />
+          <div v-if="displayStock && showStock" data-testid="stock-badge">
+            <StockBadge :stock="displayStock" />
           </div>
 
           <!-- Variant selector — pass product-level data through so each
@@ -523,7 +571,10 @@ useProductSeo({
              same on every row). -->
           <VariantSelector
             v-if="showVariantSelector"
+            ref="variantSelector"
             v-model="selectedVariants"
+            v-model:sku-id="selectedSkuId"
+            :sku-options="skuOptions"
             :variant-dimensions="product.variantDimensions ?? []"
             :variants="product.variantGroup?.variants ?? []"
             :skus="product.skus ?? []"
@@ -569,9 +620,11 @@ useProductSeo({
               >
                 <ShoppingCart class="size-4" />
                 {{
-                  cartIsFull
-                    ? $t('product.max_in_cart')
-                    : $t('product.add_to_cart')
+                  needsSkuPick
+                    ? $t('product.choose_variant')
+                    : cartIsFull
+                      ? $t('product.max_in_cart')
+                      : $t('product.add_to_cart')
                 }}
               </Button>
             </div>

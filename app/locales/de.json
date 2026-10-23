@@ -299,6 +299,8 @@
     "search_filters": "Filter durchsuchen",
     "select_variant": "Variante auswählen",
     "select_variant_placeholder": "Auswählen",
+    "variant_heading": "Variante",
+    "choose_variant": "Variante wählen",
     "show_results": "Ergebnisse anzeigen",
     "sort_by": "Sortieren nach",
     "sort_name_asc": "Name: A-Z",
