@@ -165,6 +165,7 @@ const maxQuantity = computed(() => {
       >
         <PriceDisplay
           :price="item.totalPrice"
+          :quantity="item.quantity"
           testid="cart-item-total-price"
           class="text-sm font-semibold"
         />
