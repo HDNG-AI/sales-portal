@@ -1,3 +1,4 @@
+import type { FormEndpoint } from '#shared/utils/form-post';
 import type { ContentContainerType, ContentAreaType } from '@geins/types';
 
 export type {
@@ -149,7 +150,9 @@ export interface FormWidgetField {
 }
 
 export interface FormWidgetData {
-  sendFormToEmail: string;
+  /** Safe named server receiver; absence keeps the old mailto behavior. */
+  formEndpoint?: FormEndpoint;
+  sendFormToEmail?: string;
   fields: FormWidgetField[];
   /**
    * Email subject for the mailto. Supports `{fieldName}` placeholders that are

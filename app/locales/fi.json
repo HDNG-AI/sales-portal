@@ -981,6 +981,8 @@
     "field_required": "Tämä kenttä on pakollinen.",
     "invalid_email": "Anna kelvollinen sähköpostiosoite.",
     "select_placeholder": "Valitse...",
-    "submit": "Lähetä"
+    "submit": "Lähetä",
+    "submit_success": "Kiitos — viestisi on lähetetty.",
+    "submit_failed": "Jokin meni pieleen. Yritä uudelleen tai ota yhteyttä puhelimitse."
   }
 }
