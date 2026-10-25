@@ -103,7 +103,10 @@ watch(product, (p) => setAlternates(p?.alternativeUrls, { type: 'product' }), {
 
 // A product sold in several SKUs of its own is bought in the one the buyer
 // picks, and nothing is added before a pick. Geins sends that choice only in
-// `skus`; its variant dimension is the internal `DefaultProduct`.
+// `skus`; its variant dimension is the internal `DefaultProduct`. When the
+// product also has siblings, their dimensions only ever switch to the sibling's
+// own page (see `switchVariant`), so the SKU pick always belongs to the product
+// on screen.
 const skuOptions = computed(() => {
   const skus = product.value?.skus ?? [];
   return skus.length > 1 ? skus : [];
@@ -379,7 +382,7 @@ async function addToCart() {
     variantSelector.value?.openSkuSheet();
     return;
   }
-  if (!resolvedSku.value?.skuId) return;
+  if (switchingVariant.value || !resolvedSku.value?.skuId) return;
   await cartStore.addItem(resolvedSku.value.skuId, quantity.value);
 }
 
@@ -389,6 +392,32 @@ async function addToCart() {
 // state in place. Keeps the path prefix segments (e.g. /material/grenror)
 // and swaps the last segment for the picked variant's alias.
 const route = useRoute();
+
+// The picked variant's URL commits before its page has its data, and this page
+// stays on screen until then, its selector already showing the pick and
+// `resolvedSku` still on this product's own SKU, the buyer's SKU pick
+// included. Add-to-cart waits it out. A switch that lands brings the sibling's
+// product, which clears the SKU pick; one that fails hands this page back,
+// unless a newer pick is still under way.
+const switchingVariant = ref(false);
+let switchId = 0;
+async function switchVariant(path: string) {
+  const id = ++switchId;
+  switchingVariant.value = true;
+  let failed = true;
+  try {
+    failed = !!(await navigateTo(path));
+  } finally {
+    if (failed && id === switchId) {
+      switchingVariant.value = false;
+      selectedVariants.value = currentVariantSelection(product.value) ?? {};
+    }
+  }
+}
+watch(product, () => {
+  switchingVariant.value = false;
+});
+
 watch(
   selectedVariants,
   async (sel) => {
@@ -414,7 +443,7 @@ watch(
     const segs = Array.isArray(raw) ? [...raw] : raw ? [raw as string] : [];
     if (segs.length) segs[segs.length - 1] = picked.alias;
     else segs.push(picked.alias);
-    await navigateTo(localePath(buildProductPath(`/${segs.join('/')}`)));
+    await switchVariant(localePath(buildProductPath(`/${segs.join('/')}`)));
   },
   { deep: true },
 );
@@ -608,14 +637,14 @@ useProductSeo({
                 v-model="quantity"
                 :min="1"
                 :max="maxQuantity"
-                :disabled="cartIsFull"
+                :disabled="cartIsFull || switchingVariant"
                 class="h-9 shrink-0"
               />
               <Button
                 variant="purchase"
                 data-testid="add-to-cart-button"
                 class="h-9 flex-1 gap-2 px-4"
-                :disabled="cartIsFull"
+                :disabled="cartIsFull || switchingVariant"
                 @click="addToCart"
               >
                 <ShoppingCart class="size-4" />

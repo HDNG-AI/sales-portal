@@ -7,7 +7,7 @@ import {
   afterEach,
   assert,
 } from 'vitest';
-import { ref, defineComponent, h, Suspense } from 'vue';
+import { ref, reactive, defineComponent, h, Suspense } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { mountComponent, type MountOptionsFor } from '../../utils/component';
 import ProductDetails from '../../../app/components/pages/ProductDetails.vue';
@@ -1183,6 +1183,217 @@ describe('ProductDetails', () => {
       expect(addButton(wrapper).text()).toBe('product.add_to_cart');
       await addButton(wrapper).trigger('click');
       expect(mockAddItem).toHaveBeenCalledWith(101, 1);
+    });
+  });
+
+  // Live shape of a product sold in several SKUs that also has sibling
+  // products: the sibling dimension sits on the level-1 product nodes, which
+  // carry the alias, and the SKUs hang below them as level-0 `DefaultSku`
+  // leaves. The SKU pick belongs to the product on screen; a sibling pick
+  // leaves this page for the sibling's own, where a new SKU pick is needed.
+  describe('a product sold in several SKUs that has sibling products', () => {
+    const stock = (totalStock: number) => ({
+      inStock: totalStock,
+      oversellable: 0,
+      totalStock,
+      static: 0,
+    });
+    const skuLeaf = (skuId: number, value: string) => ({
+      dimension: 'DefaultSku',
+      value,
+      level: 0,
+      alias: null,
+      skuId,
+    });
+    const variantGroup = {
+      variants: [
+        {
+          dimension: 'Färg',
+          value: 'klar',
+          label: 'Klar',
+          level: 1,
+          alias: 'skyddsglasogon-klar',
+          productId: 1099,
+          variants: [skuLeaf(1113, 's'), skuLeaf(1114, 'm')],
+        },
+        {
+          dimension: 'Färg',
+          value: 'tonad',
+          label: 'Tonad',
+          level: 1,
+          alias: 'skyddsglasogon-tonad',
+          productId: 1200,
+          variants: [skuLeaf(1213, 's'), skuLeaf(1214, 'm')],
+        },
+      ],
+    };
+    const clear = makeProduct({
+      productId: 1099,
+      alias: 'skyddsglasogon-klar',
+      canonicalUrl: '/se/sv/p/skyddsglasogon-klar',
+      skus: [
+        { skuId: 1113, name: 'S', stock: stock(5) },
+        { skuId: 1114, name: 'M', stock: stock(7) },
+      ],
+      variantDimensions: [{ dimension: 'Färg', value: 'klar', level: 1 }],
+      variantGroup,
+    });
+    const tinted = makeProduct({
+      productId: 1200,
+      alias: 'skyddsglasogon-tonad',
+      canonicalUrl: '/se/sv/p/skyddsglasogon-tonad',
+      skus: [
+        { skuId: 1213, name: 'S', stock: stock(3) },
+        { skuId: 1214, name: 'M', stock: stock(4) },
+      ],
+      variantDimensions: [{ dimension: 'Färg', value: 'tonad', level: 1 }],
+      variantGroup,
+    });
+
+    const openSkuSheet = vi.fn();
+    const Selector = defineComponent({
+      props: ['modelValue', 'skuOptions', 'skuId'],
+      emits: ['update:modelValue', 'update:skuId'],
+      setup(p, { emit, expose }) {
+        expose({ openSkuSheet });
+        return () =>
+          h('div', [
+            h('span', { 'data-testid': 'selection' }, [
+              JSON.stringify(p.modelValue),
+            ]),
+            h('span', { 'data-testid': 'sku-id' }, [String(p.skuId)]),
+            ...((p.skuOptions as { skuId: number }[]) ?? []).map(({ skuId }) =>
+              h('button', {
+                'data-testid': `pick-sku-${skuId}`,
+                onClick: () => emit('update:skuId', skuId),
+              }),
+            ),
+            ...['klar', 'tonad'].map((value) =>
+              h('button', {
+                'data-testid': `pick-${value}`,
+                onClick: () => emit('update:modelValue', { Färg: value }),
+              }),
+            ),
+          ]);
+      },
+    });
+
+    const errorHandler = vi.fn();
+
+    async function mountClear() {
+      const props = reactive({ product: clear, alias: clear.alias });
+      const wrapper = await mountProductDetails(props, {
+        global: {
+          stubs: { ...defaultStubs, VariantSelector: Selector },
+          config: { errorHandler },
+        },
+      });
+      return { wrapper, props };
+    }
+
+    async function click(
+      wrapper: Awaited<ReturnType<typeof mountClear>>['wrapper'],
+      testId: string,
+    ) {
+      await wrapper.find(`[data-testid="${testId}"]`).trigger('click');
+      await flushPromises();
+    }
+
+    const addButton = (
+      wrapper: Awaited<ReturnType<typeof mountClear>>['wrapper'],
+    ) => wrapper.find('[data-testid="add-to-cart-button"]');
+
+    beforeEach(() => {
+      mockAddItem.mockClear();
+      openSkuSheet.mockClear();
+      errorHandler.mockClear();
+      pdpRoute.params = { alias: ['skyddsglasogon-klar'] };
+    });
+
+    afterEach(() => {
+      navigateToMock.mockImplementation(() => Promise.resolve());
+      pdpRoute.params = {};
+    });
+
+    it("keeps the SKU pick when the product's own variant value is picked", async () => {
+      const { wrapper } = await mountClear();
+      await click(wrapper, 'pick-sku-1114');
+      await click(wrapper, 'pick-klar');
+
+      expect(navigateToMock).not.toHaveBeenCalled();
+      await addButton(wrapper).trigger('click');
+      expect(mockAddItem).toHaveBeenCalledWith(1114, 1);
+    });
+
+    it('adds nothing while a sibling pick is on its way, whatever SKU was picked', async () => {
+      navigateToMock.mockImplementation(() => new Promise(() => {}));
+      const { wrapper } = await mountClear();
+      await click(wrapper, 'pick-sku-1114');
+      await click(wrapper, 'pick-tonad');
+
+      expect(navigateToMock).toHaveBeenCalledOnce();
+      expect(addButton(wrapper).attributes('disabled')).toBeDefined();
+      await addButton(wrapper).trigger('click');
+      expect(mockAddItem).not.toHaveBeenCalled();
+    });
+
+    it("drops the SKU pick once the sibling's page arrives and asks for a new one", async () => {
+      navigateToMock.mockImplementation(() => new Promise(() => {}));
+      const { wrapper, props } = await mountClear();
+      await click(wrapper, 'pick-sku-1114');
+      await click(wrapper, 'pick-tonad');
+
+      // Same component, next product: what a sibling switch looks like when
+      // the page reuses the instance instead of remounting it.
+      props.product = tinted;
+      props.alias = tinted.alias;
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="selection"]').text()).toBe(
+        JSON.stringify({ Färg: 'tonad' }),
+      );
+      expect(wrapper.find('[data-testid="sku-id"]').text()).toBe('null');
+      expect(addButton(wrapper).text()).toBe('product.choose_variant');
+      await addButton(wrapper).trigger('click');
+      expect(openSkuSheet).toHaveBeenCalledOnce();
+      expect(mockAddItem).not.toHaveBeenCalled();
+    });
+
+    it('puts the selection back on this product and keeps its SKU when the switch fails', async () => {
+      navigateToMock.mockImplementation(() =>
+        Promise.resolve({ type: 4 } as never),
+      );
+      const { wrapper } = await mountClear();
+      await click(wrapper, 'pick-sku-1114');
+      await click(wrapper, 'pick-tonad');
+
+      expect(wrapper.find('[data-testid="selection"]').text()).toBe(
+        JSON.stringify({ Färg: 'klar' }),
+      );
+      expect(addButton(wrapper).attributes('disabled')).toBeUndefined();
+      await addButton(wrapper).trigger('click');
+      expect(mockAddItem).toHaveBeenCalledWith(1114, 1);
+    });
+
+    it('keeps add to cart off when an earlier switch fails under a newer one', async () => {
+      let failFirst!: () => void;
+      navigateToMock
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              failFirst = () => resolve({ type: 8 } as never);
+            }),
+        )
+        .mockImplementationOnce(() => new Promise(() => {}));
+      const { wrapper } = await mountClear();
+      await click(wrapper, 'pick-sku-1114');
+      await click(wrapper, 'pick-tonad');
+      await click(wrapper, 'pick-klar');
+      await click(wrapper, 'pick-tonad');
+      failFirst();
+      await flushPromises();
+
+      expect(addButton(wrapper).attributes('disabled')).toBeDefined();
     });
   });
 
