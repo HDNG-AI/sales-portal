@@ -168,6 +168,45 @@ describe('CheckoutCartItems', () => {
     expect(prices[0]?.text()).toContain('100.00 SEK');
   });
 
+  it('passes the line quantity with the total', () => {
+    const item = createItem();
+    const wrapper = mountComponent(CheckoutCartItems, {
+      props: { items: [item] },
+      global: {
+        stubs: {
+          ...stubs,
+          PriceDisplay: {
+            template:
+              '<span :data-testid="testid" :data-quantity="quantity" />',
+            props: ['price', 'quantity', 'testid'],
+          },
+        },
+      },
+    });
+    const total = wrapper.find('[data-testid="checkout-line-total"]');
+    expect(total.attributes('data-quantity')).toBe(String(item.quantity));
+  });
+
+  it('shows no discount percentage or sale label on either checkout line price', () => {
+    const wrapper = mountComponent(CheckoutCartItems, {
+      props: { items: [createItem()] },
+      global: {
+        stubs: {
+          ...stubs,
+          PriceDisplay: {
+            template:
+              '<span data-testid="price-stub" :data-badges="String(discountBadges)" />',
+            props: ['price', 'quantity', 'testid', 'discountBadges'],
+          },
+        },
+      },
+    });
+    const badges = wrapper
+      .findAll('[data-testid="price-stub"]')
+      .map((p) => p.attributes('data-badges'));
+    expect(badges).toEqual(['false', 'false']);
+  });
+
   it('handles item with missing product data gracefully', () => {
     const item = createItem({
       product: undefined as unknown as CartItemType['product'],

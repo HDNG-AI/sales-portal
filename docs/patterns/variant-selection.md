@@ -11,12 +11,14 @@ One product, several SKUs. The variant axis lives entirely within the
 current product:
 
 - `product.skus.length > 1`
-- `product.variantDimensions` carries one row per (dimension, value)
-  combination across the SKUs
-- `product.variantGroup` is absent or carries this single product
+- `product.variantDimensions` carries the product's own row, on the
+  internal `DefaultProduct` dimension when it has no siblings
+- `product.variantGroup` carries this product's node, its SKUs below it
+  as `DefaultSku` leaves
 
-Selecting a variant value just picks a different SKU on the same
-product page. No navigation.
+The SKUs are offered as their own group (`skuOptions` / `skuId`), apart
+from the dimension selection. Picking one stays on the page, and add to
+cart asks for a pick before it adds anything.
 
 ### Sibling-variant products
 
@@ -31,6 +33,16 @@ the `variantGroup`:
   products with their `alias`, `dimension`, `label`, `value`
 
 Selecting a variant value navigates to the sibling product's alias.
+
+### Both at once
+
+A product sold in several SKUs can also have siblings. The selector then
+shows the sibling dimension and the SKU group together. They never
+combine: a dimension pick either keeps this product (its own value) or
+leaves for the sibling's page, and the SKU pick always belongs to the
+product on screen. Add to cart is disabled while a sibling switch loads,
+the sibling's product clears the SKU pick, and a failed switch puts the
+selection back on this product.
 
 ## Where the data merges
 
@@ -53,6 +65,7 @@ shape:
 
 ```ts
 const showVariantSelector = computed(() => {
+  if (skuOptions.value.length) return true;
   const dims = product.value?.variantDimensions ?? [];
   if (!dims.length) return false;
   const skuCount = product.value?.skus?.length ?? 0;
