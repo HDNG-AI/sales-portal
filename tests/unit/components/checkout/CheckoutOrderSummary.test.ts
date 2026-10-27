@@ -15,6 +15,13 @@ vi.stubGlobal('useI18n', () => ({
   locale: ref('en'),
 }));
 
+vi.mock('../../../../app/composables/useVatDisplay', () => ({
+  useVatDisplay: () => ({
+    showIncVat: ref(false),
+  }),
+}));
+
+
 vi.mock('~/composables/usePriceVisibility', () => ({
   usePriceVisibility: () => ({ showPrice: ref(true) }),
 }));

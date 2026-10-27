@@ -1,5 +1,9 @@
 {
   "common": {
+    "shipping_may_apply": "Saatetaan lisätä",
+    "to_pay_inc_vat": "Maksettava sis. ALV",
+    "vat": "ALV",
+    "vat_included": "Sisältää ALV:n",
     "loading": "Ladataan…",
     "error": "Virhe",
     "not_found": "Ei löytynyt",
@@ -604,7 +608,13 @@
         "delivered": "Toimitettu",
         "processing": "Käsitellään",
         "shipped": "Lähetetty",
-        "cancelled": "Peruutettu"
+        "cancelled": "Peruutettu",
+        "on_hold": "Pidossa",
+        "inactive": "Ei aktiivinen",
+        "refunded": "Hyvitetty",
+        "partial": "Osittain toimitettu",
+        "backorder": "Jälkitoimitus",
+        "completed": "Valmis"
       },
       "view": "Näytä",
       "type_web": "Verkkotilaus",

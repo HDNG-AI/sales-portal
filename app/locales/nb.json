@@ -1,5 +1,9 @@
 {
   "common": {
+    "shipping_may_apply": "Kan komme i tillegg",
+    "to_pay_inc_vat": "Å betale inkl. mva.",
+    "vat": "Mva.",
+    "vat_included": "Herav mva.",
     "loading": "Laster…",
     "error": "Feil",
     "not_found": "Ikke funnet",
@@ -604,7 +608,13 @@
         "delivered": "Levert",
         "processing": "Behandles",
         "shipped": "Sendt",
-        "cancelled": "Kansellert"
+        "cancelled": "Kansellert",
+        "on_hold": "Pauset",
+        "inactive": "Inaktiv",
+        "refunded": "Refundert",
+        "partial": "Delvis levert",
+        "backorder": "Restordre",
+        "completed": "Fullført"
       },
       "view": "Vis",
       "type_web": "Nettordre",

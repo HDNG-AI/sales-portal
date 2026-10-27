@@ -2,6 +2,7 @@
 import type { ShippingOptionType } from '#shared/types/commerce';
 
 const { t } = useI18n();
+const { showIncVat } = useVatDisplay();
 const { byAgreement, optionName } = useShippingTerms();
 
 const props = defineProps<{
@@ -16,6 +17,17 @@ const emit = defineEmits<{
 
 function selectOption(id: number) {
   emit('update:modelValue', id);
+}
+
+function fee(option: ShippingOptionType): number | undefined {
+  return showIncVat.value ? option.feeIncVat : option.feeExVat;
+}
+
+function feeFormatted(option: ShippingOptionType): string {
+  return (
+    (showIncVat.value ? option.feeIncVatFormatted : option.feeExVatFormatted) ??
+    ''
+  );
 }
 </script>
 
@@ -55,11 +67,11 @@ function selectOption(id: number) {
               <template v-if="byAgreement && option.feeIncVat === 0">
                 {{ t('checkout.shipping_invoiced_separately') }}
               </template>
-              <template v-else-if="option.feeIncVat === 0">
+              <template v-else-if="fee(option) === 0">
                 {{ t('checkout.free_shipping') }}
               </template>
               <template v-else>
-                {{ option.feeIncVatFormatted }}
+                {{ feeFormatted(option) || t('common.shipping_may_apply') }}
               </template>
             </span>
           </div>

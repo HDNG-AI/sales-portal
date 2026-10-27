@@ -5,6 +5,7 @@ import { Button } from '~/components/ui/button';
 
 const { t } = useI18n();
 const { showPrice } = usePriceVisibility();
+const { showIncVat } = useVatDisplay();
 
 const props = defineProps<{
   itemCount: number;
@@ -13,6 +14,7 @@ const props = defineProps<{
   tax: string | null;
   total: string;
   discount?: string;
+  toPayIncVat?: string;
   canPlaceOrder: boolean;
   isPlacingOrder: boolean;
   termsAccepted: boolean;
@@ -65,14 +67,19 @@ const emit = defineEmits<{
           {{ t('checkout.shipping') }}
         </span>
         <span data-testid="checkout-summary-shipping">
-          {{ props.shippingFee }}
+          <template v-if="props.shippingFee">
+            {{ props.shippingFee }}
+          </template>
+          <span v-else class="text-muted-foreground">
+            {{ t('common.shipping_may_apply') }}
+          </span>
         </span>
       </div>
 
       <!-- Tax -->
       <div class="flex items-center justify-between text-sm">
         <span class="text-muted-foreground">
-          {{ t('checkout.tax') }}
+          {{ t(showIncVat ? 'common.vat_included' : 'common.vat') }}
         </span>
         <span data-testid="checkout-summary-tax">
           {{ props.tax }}
@@ -91,6 +98,15 @@ const emit = defineEmits<{
       <span data-testid="checkout-summary-total">
         {{ props.total || '--' }}
       </span>
+    </div>
+
+    <div
+      v-if="showPrice && !showIncVat && props.toPayIncVat"
+      class="text-muted-foreground flex items-center justify-between text-sm"
+      data-testid="checkout-summary-to-pay"
+    >
+      <span>{{ t('common.to_pay_inc_vat') }}</span>
+      <span>{{ props.toPayIncVat }}</span>
     </div>
 
     <!-- Terms agreement gates the button, so it sits directly above the CTA.

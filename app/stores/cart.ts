@@ -92,6 +92,18 @@ export const useCartStore = defineStore('cart', () => {
     }
   }
 
+  // Keep configurable lines out of ordinary bulk adds: their selected options
+  // cannot be reconstructed from a SKU alone.
+  const skippedConfigurable = ref(0);
+
+  async function addItems(lines: { skuId: number; quantity: number }[], skipped: number) {
+    skippedConfigurable.value = skipped;
+    for (const line of lines) {
+      await addItem(line.skuId, line.quantity);
+    }
+    if (skipped > 0) isOpen.value = true;
+  }
+
   async function updateQuantity(itemId: string, quantity: number) {
     if (!cartId.value) return;
     isLoading.value = true;
@@ -171,6 +183,8 @@ export const useCartStore = defineStore('cart', () => {
     visibleCartCampaigns,
     fetchCart,
     addItem,
+    addItems,
+    skippedConfigurable,
     updateQuantity,
     removeItem,
     applyPromoCode,

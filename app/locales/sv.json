@@ -26,7 +26,11 @@
     "vat_display": "Moms",
     "change_vat_display": "Ändra momsvisning",
     "vat_incl": "Inkl. moms",
-    "vat_excl": "Exkl. moms"
+    "vat_excl": "Exkl. moms",
+    "to_pay_inc_vat": "Att betala inkl. moms",
+    "vat": "Moms",
+    "vat_included": "Varav moms",
+    "shipping_may_apply": "Kan tillkomma"
   },
   "auth": {
     "already_have_account": "Har du redan ett konto?",
@@ -604,7 +608,13 @@
         "delivered": "Levererad",
         "processing": "Behandlas",
         "shipped": "Skickad",
-        "cancelled": "Avbruten"
+        "cancelled": "Avbruten",
+        "on_hold": "Pausad",
+        "inactive": "Inaktiv",
+        "refunded": "Återbetald",
+        "partial": "Delvis levererad",
+        "backorder": "Restorder",
+        "completed": "Slutförd"
       },
       "view": "Visa",
       "type_web": "Webbeställning",
