@@ -112,6 +112,24 @@ describe('StockBadge', () => {
     expect(wrapper.text()).toContain('product.low_stock');
   });
 
+  it('renders a status the server already derived, without stock figures', () => {
+    const wrapper = mountComponent(StockBadge, {
+      props: { status: 'backorder' },
+      global: { stubs },
+    });
+    expect(wrapper.text()).toContain('product.backorder');
+    expect(wrapper.find('.badge').classes()).toContain('text-info');
+  });
+
+  it('hides a derived status from a buyer who may not see stock', () => {
+    setFeatures({ stockStatus: { enabled: false } });
+    const wrapper = mountComponent(StockBadge, {
+      props: { status: 'in-stock' },
+      global: { stubs },
+    });
+    expect(wrapper.text()).toBe('');
+  });
+
   it('renders nothing when stock is undefined', () => {
     const wrapper = mountComponent(StockBadge, {
       props: { stock: undefined },

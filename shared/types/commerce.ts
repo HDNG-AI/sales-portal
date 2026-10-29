@@ -89,6 +89,21 @@ export function getStockStatus(
 }
 
 /**
+ * How many more units of a SKU may go into the cart, given what it already
+ * holds. Oversellable and static (on-demand) stock is not limited, so those
+ * answer Infinity; otherwise it is `totalStock` less the cart's quantity.
+ */
+export function purchasableQuantity(
+  stock: { totalStock: number; oversellable?: number; static?: number },
+  alreadyInCart = 0,
+): number {
+  if ((stock.oversellable ?? 0) > 0 || (stock.static ?? 0) > 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.max(0, (stock.totalStock ?? 0) - alreadyInCart);
+}
+
+/**
  * Format a raw price number using Intl.NumberFormat.
  * Fallback when API-formatted strings are missing.
  */

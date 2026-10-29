@@ -1,5 +1,29 @@
 import { describe, it, expect } from 'vitest';
-import { getStockStatus, formatPrice } from '../../shared/types/commerce';
+import {
+  getStockStatus,
+  formatPrice,
+  purchasableQuantity,
+} from '../../shared/types/commerce';
+
+describe('purchasableQuantity', () => {
+  const stock = (totalStock: number, oversellable = 0, staticStock = 0) => ({
+    totalStock,
+    inStock: totalStock,
+    oversellable,
+    static: staticStock,
+  });
+
+  it('is what is left of total stock after what the cart holds', () => {
+    expect(purchasableQuantity(stock(10))).toBe(10);
+    expect(purchasableQuantity(stock(10), 4)).toBe(6);
+    expect(purchasableQuantity(stock(3), 5)).toBe(0);
+  });
+
+  it('is unlimited for oversellable and static stock', () => {
+    expect(purchasableQuantity(stock(1000, 1000), 999)).toBe(Infinity);
+    expect(purchasableQuantity(stock(0, 0, 5))).toBe(Infinity);
+  });
+});
 
 describe('getStockStatus', () => {
   it('returns in-stock when totalStock > threshold', () => {

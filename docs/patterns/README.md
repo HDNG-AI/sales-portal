@@ -191,6 +191,9 @@ The storefront recognises the following keys from `appSettings.features` on the 
 | `productComparison` | `enabled` only       | Reserved for a compare feature (not yet implemented)              |
 | `mfa`               | `enabled` only       | Reserved for multi-factor login (not yet implemented)             |
 | `analytics`         | `enabled` only       | Tenant analytics plugin and CookieBanner consent gate             |
+| `cartFileImport`    | `enabled` + `access` | "Upload file" on `/cart`, `/api/cart/import/*` (off when absent)  |
+
+`cartFileImport` always also requires a signed-in buyer and `orderPlacement`, whatever its `access` says. It has no seeded default, so a tenant without the key never sees it. See [Cart file import](./cart-file-import.md).
 
 Three of these (`priceVisibility`, `orderPlacement`, `stockStatus`) are the canonical defaults the platform team backs with hard-coded fallbacks. The rest still come from the live API response and must be honored when present.
 
@@ -503,6 +506,7 @@ export default defineEventHandler(async (event) => {
 
 ## Further Reading
 
+- [Cart file import](./cart-file-import.md) — reading an Excel or CSV order file, matching article numbers to SKUs and adding them to the cart.
 - [CMS Menu](./cms-menu.md) — how navigation menus are fetched from the Geins CMS and rendered.
 - [Color Coercion](./color-coercion.md): how arbitrary CSS color strings from the merchant admin are coerced to canonical OKLCH and how the resilient parser keeps tenants alive.
 - [Sidebar Info Card](./sidebar-info-card.md) — canonical class set for the bordered label-and-value cards used on portal detail pages.

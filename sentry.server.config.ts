@@ -59,6 +59,12 @@ if (dsn) {
           }
         });
       }
+      // The cart file import posts the buyer's order file and article list.
+      // Sentry attaches request bodies up to 10 kB by default, which is a
+      // whole small CSV; none of it may leave the request.
+      if (event.request?.url?.includes('/api/cart/import/')) {
+        delete event.request.data;
+      }
       return event;
     },
   });

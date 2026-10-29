@@ -193,6 +193,69 @@ describe('useCartStore', () => {
     });
   });
 
+  describe('importItems', () => {
+    const items = [
+      { skuId: 100, quantity: 2, articleNumber: 'ART-001' },
+      { skuId: 300, quantity: 1, articleNumber: 'ART-003' },
+    ];
+
+    it('posts the lines with the cart id and takes the cart the server answers with', async () => {
+      mockCartIdRef.value = 'cart-123';
+      mockFetch.mockResolvedValueOnce({
+        cart: mockCart,
+        added: [items[0]],
+        failed: [{ ...items[1], reason: 'rejected' }],
+      });
+
+      const store = useCartStore();
+      const outcome = await store.importItems(items);
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/cart/import/add', {
+        method: 'POST',
+        body: { cartId: 'cart-123', items },
+      });
+      expect(store.cart).toEqual(mockCart);
+      expect(outcome).toEqual({
+        added: [items[0]],
+        failed: [{ ...items[1], reason: 'rejected' }],
+      });
+      expect(store.isLoading).toBe(false);
+    });
+
+    it('keeps the cart id of a cart the server had to create', async () => {
+      mockFetch.mockResolvedValueOnce({
+        cart: { ...mockCart, id: 'created-cart' },
+        added: items,
+        failed: [],
+      });
+
+      const store = useCartStore();
+      await store.importItems(items);
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/cart/import/add', {
+        method: 'POST',
+        body: { cartId: undefined, items },
+      });
+      expect(mockCartIdRef.value).toBe('created-cart');
+    });
+
+    it('reloads the cart and rethrows when the request fails', async () => {
+      mockCartIdRef.value = 'cart-123';
+      mockFetch
+        .mockRejectedValueOnce(new Error('502'))
+        .mockResolvedValueOnce(mockCart);
+
+      const store = useCartStore();
+      await expect(store.importItems(items)).rejects.toThrow('502');
+
+      expect(mockFetch).toHaveBeenLastCalledWith('/api/cart', {
+        query: { cartId: 'cart-123' },
+      });
+      expect(store.cart).toEqual(mockCart);
+      expect(store.isLoading).toBe(false);
+    });
+  });
+
   describe('updateQuantity', () => {
     it('calls DELETE when quantity is 0', async () => {
       mockCartIdRef.value = 'cart-123';

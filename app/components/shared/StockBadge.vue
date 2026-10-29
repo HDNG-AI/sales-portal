@@ -5,6 +5,8 @@ import { getStockStatus } from '#shared/types/commerce';
 const props = withDefaults(
   defineProps<{
     stock?: StockType;
+    /** A status the server already derived on the tenant's basis. */
+    status?: StockStatus;
     threshold?: number;
     size?: 'default' | 'sm';
   }>(),
@@ -15,6 +17,7 @@ const { t } = useI18n();
 const { showStock, stockLevelBasis } = useStockVisibility();
 
 const status = computed<StockStatus | null>(() => {
+  if (props.status) return props.status;
   if (!props.stock) return null;
   return getStockStatus(props.stock, props.threshold, stockLevelBasis.value);
 });

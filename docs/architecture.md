@@ -137,6 +137,7 @@ The Sales Portal is a multi-tenant storefront application built on Nuxt 4, desig
 │   │   ├── user.ts             # CRM user (profile, register)
 │   │   ├── cms.ts              # CMS (menu, pages, areas) — language fallback, displaySetting, preview
 │   │   ├── cart.ts             # OMS cart operations
+│   │   ├── cart-import.ts      # Order-file lines → SKUs, added via cart.ts
 │   │   ├── checkout.ts         # OMS checkout + orders
 │   │   ├── orders.ts           # OMS order lookup
 │   │   ├── products.ts         # Direct GraphQL (no SDK PIM yet)
@@ -183,6 +184,7 @@ The Sales Portal is a multi-tenant storefront application built on Nuxt 4, desig
 │   │   ├── sanitize.ts         # CSS/HTML/URL sanitization (tenant CSS, HTML attrs)
 │   │   ├── rate-limiter.ts     # Per-endpoint rate limiters (login, register, refresh, error-batch)
 │   │   ├── auth.ts             # Auth token validation helpers
+│   │   ├── cart-import/        # Order-file reading (XLSX/CSV) + route guard
 │   │   ├── locale.ts           # getRequestLocale, getRequestMarket (cookie-based)
 │   │   ├── seo.ts              # SEO utilities (buildSiteUrl, isIndexable)
 │   │   ├── feature-access.ts   # Server-side feature gating (canAccessFeatureServer, assertFeatureAccess)

@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { ShoppingCart, Tag, X } from 'lucide-vue-next';
+import { FileUp, ShoppingCart, Tag, X } from 'lucide-vue-next';
 import { Button } from '~/components/ui/button';
+import { useAuthStore } from '~/stores/auth';
 import { useCartStore } from '~/stores/cart';
 import { formatPrice } from '#shared/types/commerce';
 import { formatCartSummaryAmount } from '#shared/utils/cart-summary-price';
 
 const cartStore = useCartStore();
+const authStore = useAuthStore();
 const router = useRouter();
 const { formatLocale } = useFormatLocale();
 const { localePath } = useLocaleMarket();
 const { showPrice } = usePriceVisibility();
 const { showIncVat } = useVatDisplay();
+const { canAccess } = useFeatureAccess();
+
+// Signed-in buyers only, whatever access rule the tenant set on the flag.
+const canImportFile = computed(
+  () => authStore.isAuthenticated && canAccess('cartFileImport'),
+);
+const importOpen = ref(false);
 
 // Fetch cart on mount if we have a cartId but no cart data
 onMounted(() => {
@@ -71,23 +80,38 @@ function goToCheckout() {
   <div class="px-4 py-8 lg:px-6">
     <div class="mx-auto max-w-7xl" data-testid="cart-page">
       <!-- Header row -->
-      <div class="mb-6 flex items-start justify-between">
+      <div class="mb-6 flex items-start justify-between gap-4">
         <h1 class="text-2xl font-bold" data-testid="cart-page-title">
           {{ $t('cart.shopping_cart') }}
           <span v-if="cartStore.itemCount > 0" class="font-bold">
             ({{ $t('cart.item_count', { count: cartStore.itemCount }) }})
           </span>
         </h1>
-        <Button
-          variant="outline"
-          size="icon"
-          :aria-label="$t('common.close')"
-          data-testid="cart-page-close"
-          @click="onClose"
-        >
-          <X class="size-5" />
-        </Button>
+        <div class="flex items-center gap-2">
+          <Button
+            v-if="canImportFile && !cartStore.isEmpty"
+            variant="outline"
+            data-testid="cart-file-import-open"
+            @click="importOpen = true"
+          >
+            <FileUp class="size-4" aria-hidden="true" />
+            {{ $t('cart.file_import.open') }}
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            :aria-label="$t('common.close')"
+            data-testid="cart-page-close"
+            @click="onClose"
+          >
+            <X class="size-5" />
+          </Button>
+        </div>
       </div>
+
+      <!-- One dialog for both triggers, outside the empty/filled branches so
+           it stays open when an import fills an empty cart. -->
+      <CartFileImportDialog v-if="canImportFile" v-model:open="importOpen" />
 
       <!-- Loading state -->
       <CartPageSkeleton
@@ -114,6 +138,15 @@ function goToCheckout() {
         >
           {{ $t('cart.continue_shopping') }}
         </NuxtLink>
+        <Button
+          v-if="canImportFile"
+          variant="outline"
+          data-testid="cart-file-import-open-empty"
+          @click="importOpen = true"
+        >
+          <FileUp class="size-4" aria-hidden="true" />
+          {{ $t('cart.file_import.open') }}
+        </Button>
       </div>
 
       <!-- Cart content: items + summary -->
