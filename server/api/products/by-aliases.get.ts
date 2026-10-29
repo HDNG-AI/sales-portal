@@ -1,4 +1,6 @@
 import { protectProductPrices } from '../../utils/price-response';
+import { guestHiddenBrandIds } from '../../utils/guest-hidden-brands';
+import { withoutHiddenBrandProducts } from '../../utils/hidden-brands';
 import { z } from 'zod';
 import { getProductsByAliases } from '../../services/products';
 
@@ -39,11 +41,15 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      const products = await getProductsByAliases(
-        { aliases, userToken: auth?.authToken },
-        event,
-      );
-      return protectProductPrices(event, auth, { products });
+      const [products, hidden] = await Promise.all([
+        getProductsByAliases({ aliases, userToken: auth?.authToken }, event),
+        guestHiddenBrandIds(event, auth),
+      ]);
+      // Lookups by alias take no filter: brands hidden from guests are
+      // checked product by product.
+      return protectProductPrices(event, auth, {
+        products: withoutHiddenBrandProducts(products, hidden),
+      });
     },
     { operation: 'products.by-aliases' },
   );

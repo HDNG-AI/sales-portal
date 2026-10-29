@@ -17,6 +17,9 @@ query productsByIds(
       alias
       name
       articleNumber
+      brand {
+        brandId
+      }
       unitPrice {
         sellingPriceIncVatFormatted
         sellingPriceExVatFormatted

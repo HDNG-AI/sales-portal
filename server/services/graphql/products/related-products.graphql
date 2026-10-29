@@ -13,6 +13,7 @@ query relatedProducts(
     alias
     name
     brand {
+      brandId
       name
     }
     canonicalUrl

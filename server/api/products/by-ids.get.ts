@@ -1,4 +1,6 @@
 import { protectProductPrices } from '../../utils/price-response';
+import { guestHiddenBrandIds } from '../../utils/guest-hidden-brands';
+import { withoutHiddenBrandProducts } from '../../utils/hidden-brands';
 import { z } from 'zod';
 import { getProductsByIds } from '../../services/products';
 
@@ -37,11 +39,20 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      const products = await getProductsByIds(
-        { productIds: ids, userToken: auth?.authToken },
+      const [products, hidden] = await Promise.all([
+        getProductsByIds(
+          { productIds: ids, userToken: auth?.authToken },
+          event,
+        ),
+        guestHiddenBrandIds(event, auth),
+      ]);
+      // A productIds lookup makes Geins ignore every other filter field, so
+      // brands hidden from guests are checked product by product instead.
+      return protectProductPrices(
         event,
+        auth,
+        withoutHiddenBrandProducts(products, hidden),
       );
-      return protectProductPrices(event, auth, products);
     },
     { operation: 'products.by-ids' },
   );

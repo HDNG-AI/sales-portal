@@ -10,6 +10,8 @@ import {
   mergeCmsConfig,
   setTenantOperatingTimezone,
   setTenantProductTextPlacement,
+  setTenantGuestHiddenBrands,
+  getTenantGuestHiddenBrands,
 } from '../../server/utils/tenant-crud';
 import {
   tenantConfigKey,
@@ -848,8 +850,9 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
   it('re-fetches an expired published theme and busts the /api/config cache', async () => {
     await seedCachedInter();
     cacheStore.set('nitro/handlers:_:tenantconfigodelco.json', { old: true });
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(remotePayload()), { status: 200 }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(JSON.stringify(remotePayload()), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetcher);
 
@@ -861,7 +864,9 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
       timezone: 'Europe/Stockholm',
       theme: { typography: { fontFamily: 'Geist' } },
     });
-    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(false);
+    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(
+      false,
+    );
     expect(mockClearSdkCache).toHaveBeenCalledWith(tenantId);
     expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
       source: 'remote',
@@ -874,7 +879,12 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
 
   it('serves last known good config on transient Geins transport failure', async () => {
     await seedCachedInter();
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
 
     const result = await resolveTenant(hostname);
 
@@ -886,8 +896,9 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
 
   it('does not overwrite a locally administered tenant with Geins data', async () => {
     await seedCachedInter('local');
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(remotePayload()), { status: 200 }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(JSON.stringify(remotePayload()), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetcher);
 
@@ -899,27 +910,34 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
 
   it('fails closed when a previously remote tenant disappears from Geins', async () => {
     await seedCachedInter();
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response('not found', { status: 404 }),
-    ));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not found', { status: 404 })),
+    );
 
     expect(await resolveTenant(hostname)).toBeNull();
   });
 
   it('treats a legacy, unstamped cached tenant as requiring a provenance check', () => {
     expect(isTenantRefreshFresh(null)).toBe(false);
-    expect(isTenantRefreshFresh({
-      checkedAt: Date.now() - TENANT_REMOTE_REFRESH_MS - 1,
-      source: 'remote',
-    })).toBe(false);
-    expect(isTenantRefreshFresh({
-      checkedAt: Date.now(),
-      source: 'remote',
-    })).toBe(true);
-    expect(isTenantRefreshFresh({
-      checkedAt: 0,
-      source: 'local',
-    })).toBe(true);
+    expect(
+      isTenantRefreshFresh({
+        checkedAt: Date.now() - TENANT_REMOTE_REFRESH_MS - 1,
+        source: 'remote',
+      }),
+    ).toBe(false);
+    expect(
+      isTenantRefreshFresh({
+        checkedAt: Date.now(),
+        source: 'remote',
+      }),
+    ).toBe(true);
+    expect(
+      isTenantRefreshFresh({
+        checkedAt: 0,
+        source: 'local',
+      }),
+    ).toBe(true);
   });
 });
 
@@ -950,7 +968,9 @@ describe('approved Odelco operating timezone', () => {
       tenantId: 'odelco',
       hostname: 'staging-odelco.hdng.ai',
       cms: {
-        slots: { frontpage_content: { family: 'Frontpage', areaName: 'Content' } },
+        slots: {
+          frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+        },
         menus: { header_main: { menuLocationId: 'main' } },
       },
     } as TenantConfig;
@@ -959,7 +979,9 @@ describe('approved Odelco operating timezone', () => {
     });
     expect(result.timezone).toBe('Europe/Stockholm');
     expect(result.cms?.slots).toEqual(base.cms?.slots);
-    expect(result.cms?.menus?.header_main).toEqual({ menuLocationId: 'main-desktop' });
+    expect(result.cms?.menus?.header_main).toEqual({
+      menuLocationId: 'main-desktop',
+    });
   });
 
   it('does not assign a timezone to any other tenant', () => {
@@ -969,20 +991,27 @@ describe('approved Odelco operating timezone', () => {
       timezone: undefined,
     } as TenantConfig;
     expect(mergeTenantPortalOverrides(base, null)).toBe(base);
-    expect(mergeTenantPortalOverrides({ ...base, timezone: 'UTC' }, undefined).timezone).toBe('UTC');
+    expect(
+      mergeTenantPortalOverrides({ ...base, timezone: 'UTC' }, undefined)
+        .timezone,
+    ).toBe('UTC');
   });
 
   it('applies the same approved timezone to the Geins preview lookup without writing KV', async () => {
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify({
-        ...partialPayloadFixture,
-        tenantId: 'odelco',
-        geinsSettings: {
-          ...partialPayloadFixture.geinsSettings,
-          defaultHostName: 'staging-odelco.example.com',
-        },
-        appSettings: partialPayloadFixture.appSettings,
-      }), { status: 200 }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...partialPayloadFixture,
+            tenantId: 'odelco',
+            geinsSettings: {
+              ...partialPayloadFixture.geinsSettings,
+              defaultHostName: 'staging-odelco.example.com',
+            },
+            appSettings: partialPayloadFixture.appSettings,
+          }),
+          { status: 200 },
+        ),
     );
     vi.stubGlobal('fetch', fetcher);
     try {
@@ -1056,7 +1085,9 @@ describe('persistent operating timezone overrides', () => {
       source: 'remote',
       checkedAt: 0,
     });
-    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(false);
+    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(
+      false,
+    );
     expect(kvStore.get(tenantConfigKey(tenantId))).toMatchObject({
       theme: { typography: { fontFamily: 'Inter' } },
     });
@@ -1065,8 +1096,8 @@ describe('persistent operating timezone overrides', () => {
   it('re-fetches after the admin write and preserves both Studio theme and portal timezone', async () => {
     await seedRemotelyManagedTenant();
     await setTenantOperatingTimezone(hostname, 'Europe/Stockholm');
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(merchantData()), { status: 200 }),
+    const fetcher = vi.fn(
+      async () => new Response(JSON.stringify(merchantData()), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetcher);
     try {
@@ -1091,29 +1122,47 @@ describe('persistent operating timezone overrides', () => {
       tenantId,
       timezone: 'Europe/London',
     } as TenantConfig;
-    expect(mergeTenantPortalOverrides(base, {
-      timezone: 'Europe/Stockholm',
-    }).timezone).toBe('Europe/London');
-    expect(mergeTenantPortalOverrides(base, undefined).timezone).toBe('Europe/London');
-    expect(mergeTenantPortalOverrides({
-      ...base,
-      timezone: 'UTC',
-    }, { timezone: 'Europe/Stockholm' }).timezone).toBe('Europe/Stockholm');
-    expect(mergeTenantPortalOverrides({
-      ...base,
-      timezone: undefined,
-    }, { timezone: 'Europe/Stockholm' }).timezone).toBe('Europe/Stockholm');
+    expect(
+      mergeTenantPortalOverrides(base, {
+        timezone: 'Europe/Stockholm',
+      }).timezone,
+    ).toBe('Europe/London');
+    expect(mergeTenantPortalOverrides(base, undefined).timezone).toBe(
+      'Europe/London',
+    );
+    expect(
+      mergeTenantPortalOverrides(
+        {
+          ...base,
+          timezone: 'UTC',
+        },
+        { timezone: 'Europe/Stockholm' },
+      ).timezone,
+    ).toBe('Europe/Stockholm');
+    expect(
+      mergeTenantPortalOverrides(
+        {
+          ...base,
+          timezone: undefined,
+        },
+        { timezone: 'Europe/Stockholm' },
+      ).timezone,
+    ).toBe('Europe/Stockholm');
   });
 
   it('ignores an invalid persisted timezone and retains safe legacy fallback', () => {
     const base = { tenantId, timezone: undefined } as TenantConfig;
-    expect(mergeTenantPortalOverrides(base, {
-      timezone: '+02:00',
-    }).timezone).toBe('Europe/Stockholm');
+    expect(
+      mergeTenantPortalOverrides(base, {
+        timezone: '+02:00',
+      }).timezone,
+    ).toBe('Europe/Stockholm');
     const other = { ...base, tenantId: 'other-merchant' };
-    expect(mergeTenantPortalOverrides(other, {
-      timezone: '+02:00',
-    })).toBe(other);
+    expect(
+      mergeTenantPortalOverrides(other, {
+        timezone: '+02:00',
+      }),
+    ).toBe(other);
   });
 
   it('allows local-only tenants to update without touching other settings', async () => {
@@ -1160,8 +1209,8 @@ describe('persistent operating timezone overrides', () => {
 
   it('reads the same saved portal timezone for preview without writing to KV', async () => {
     kvStore.set(tenantOverrideKey(tenantId), { timezone: 'Europe/Oslo' });
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(merchantData()), { status: 200 }),
+    const fetcher = vi.fn(
+      async () => new Response(JSON.stringify(merchantData()), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetcher);
     try {
@@ -1178,7 +1227,9 @@ describe('persistent operating timezone overrides', () => {
 
   it('does not persist an invalid timezone or alter tenant configuration', async () => {
     await seedRemotelyManagedTenant();
-    await expect(setTenantOperatingTimezone(hostname, 'GMT+2')).rejects.toThrow();
+    await expect(
+      setTenantOperatingTimezone(hostname, 'GMT+2'),
+    ).rejects.toThrow();
     expect(kvStore.has(tenantOverrideKey(tenantId))).toBe(false);
     expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
       source: 'remote',
@@ -1201,7 +1252,9 @@ describe('portal-owned product text placement (Odelco Victron)', () => {
       productTextPlacement: 'semantic',
     });
     expect(base.layout?.productTextPlacement).toBe('legacy');
-    expect(mergeTenantPortalOverrides(base, null).layout?.productTextPlacement).toBe('legacy');
+    expect(
+      mergeTenantPortalOverrides(base, null).layout?.productTextPlacement,
+    ).toBe('legacy');
   });
 
   it('ignores malformed saved KV opt-ins, keeping the legacy mode', () => {
@@ -1210,9 +1263,11 @@ describe('portal-owned product text placement (Odelco Victron)', () => {
       layout: { productTextPlacement: 'legacy' },
       timezone: 'Europe/Stockholm',
     } as TenantConfig;
-    expect(mergeTenantPortalOverrides(base, {
-      layout: { productTextPlacement: 'bogus' as 'semantic' },
-    }).layout?.productTextPlacement).toBe('legacy');
+    expect(
+      mergeTenantPortalOverrides(base, {
+        layout: { productTextPlacement: 'bogus' as 'semantic' },
+      }).layout?.productTextPlacement,
+    ).toBe('legacy');
   });
 
   it('persists the admin opt-in separately for a remote Geins tenant', async () => {
@@ -1244,7 +1299,8 @@ describe('portal-owned product text placement (Odelco Victron)', () => {
       layout: { productTextPlacement: 'semantic' },
     });
     expect(kvStore.get(tenantRefreshStateKey('odelco'))).toMatchObject({
-      source: 'remote', checkedAt: 0,
+      source: 'remote',
+      checkedAt: 0,
     });
     const merged = mergeTenantPortalOverrides(
       kvStore.get(tenantConfigKey('odelco')) as TenantConfig,
@@ -1265,10 +1321,221 @@ describe('portal-owned product text placement (Odelco Victron)', () => {
       tenantId: 'odelco',
       config: { isActive: true, geinsSettings: GEINS_SETTINGS },
     });
-    await expect(setTenantProductTextPlacement(
-      'staging-odelco.example.com',
-      'unsupported' as 'semantic',
-    )).rejects.toThrow();
+    await expect(
+      setTenantProductTextPlacement(
+        'staging-odelco.example.com',
+        'unsupported' as 'semantic',
+      ),
+    ).rejects.toThrow();
     expect(kvStore.has(tenantOverrideKey('odelco'))).toBe(false);
+  });
+});
+
+describe('portal-owned guest-hidden brands', () => {
+  const hostname = 'staging-shop.example.com';
+  const alias = 'shop-alias.example.com';
+  const tenantId = 'shop';
+
+  async function seedRemoteTenant() {
+    await createTenant({
+      hostname,
+      tenantId,
+      config: {
+        isActive: true,
+        aliases: [alias],
+        geinsSettings: GEINS_SETTINGS,
+      },
+    });
+    kvStore.set(tenantRefreshStateKey(tenantId), {
+      checkedAt: Date.now(),
+      source: 'remote',
+    });
+  }
+
+  function merchantData() {
+    return {
+      ...partialPayloadFixture,
+      tenantId,
+      geinsSettings: {
+        ...partialPayloadFixture.geinsSettings,
+        defaultHostName: hostname,
+        additionalHostNames: [alias],
+      },
+    };
+  }
+
+  it('stores the list as an override for a remote tenant, keeping every other override', async () => {
+    await seedRemoteTenant();
+    kvStore.set(tenantOverrideKey(tenantId), {
+      timezone: 'Europe/Stockholm',
+      cms: { menus: { header_main: { menuLocationId: 'primary' } } },
+      layout: { productTextPlacement: 'semantic' },
+    });
+    cacheStore.set('nitro/handlers:_:tenantconfigshop.json', { old: true });
+
+    const result = await setTenantGuestHiddenBrands(hostname, [7, 9]);
+
+    expect(result).toEqual({ tenantId, guestHiddenBrandIds: [7, 9] });
+    expect(kvStore.get(tenantOverrideKey(tenantId))).toEqual({
+      timezone: 'Europe/Stockholm',
+      cms: { menus: { header_main: { menuLocationId: 'primary' } } },
+      layout: { productTextPlacement: 'semantic' },
+      catalog: { guestHiddenBrandIds: [7, 9] },
+    });
+    // Only expiry changes: a Geins tenant must not be relabelled as local.
+    expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
+      source: 'remote',
+      checkedAt: 0,
+    });
+    expect(cacheStore.has('nitro/handlers:_:tenantconfigshop.json')).toBe(
+      false,
+    );
+    const merged = mergeTenantPortalOverrides(
+      kvStore.get(tenantConfigKey(tenantId)) as TenantConfig,
+      kvStore.get(tenantOverrideKey(tenantId)) as never,
+    );
+    expect(merged.catalog?.guestHiddenBrandIds).toEqual([7, 9]);
+    expect(merged.layout?.productTextPlacement).toBe('semantic');
+  });
+
+  it('survives the Geins refresh that follows the write', async () => {
+    await seedRemoteTenant();
+    await setTenantGuestHiddenBrands(hostname, [7]);
+    const fetcher = vi.fn(
+      async () => new Response(JSON.stringify(merchantData()), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    try {
+      const refreshed = await resolveTenant(hostname);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(refreshed?.catalog?.guestHiddenBrandIds).toEqual([7]);
+      expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
+        source: 'remote',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reads back the stored list through any hostname, even while Geins is down', async () => {
+    await seedRemoteTenant();
+    await setTenantGuestHiddenBrands(hostname, [7, 9]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
+    try {
+      await expect(getTenantGuestHiddenBrands(alias)).resolves.toEqual({
+        tenantId,
+        guestHiddenBrandIds: [7, 9],
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reads an empty list for a tenant that never set one', async () => {
+    await seedRemoteTenant();
+    await expect(getTenantGuestHiddenBrands(hostname)).resolves.toEqual({
+      tenantId,
+      guestHiddenBrandIds: [],
+    });
+  });
+
+  it('clears the list with an empty array, over a list the config still carries', async () => {
+    await seedRemoteTenant();
+    await setTenantGuestHiddenBrands(hostname, [7]);
+    kvStore.set(tenantRefreshStateKey(tenantId), {
+      checkedAt: Date.now(),
+      source: 'remote',
+    });
+    await setTenantGuestHiddenBrands(hostname, []);
+
+    expect(kvStore.get(tenantOverrideKey(tenantId))).toEqual({
+      catalog: { guestHiddenBrandIds: [] },
+    });
+    const stale = {
+      ...(kvStore.get(tenantConfigKey(tenantId)) as TenantConfig),
+      catalog: { guestHiddenBrandIds: [7] },
+    };
+    expect(
+      mergeTenantPortalOverrides(
+        stale,
+        kvStore.get(tenantOverrideKey(tenantId)) as never,
+      ).catalog?.guestHiddenBrandIds,
+    ).toEqual([]);
+  });
+
+  it('updates a KV-local tenant in place', async () => {
+    await createTenant({
+      hostname: 'local-shop.example.com',
+      tenantId: 'local-shop',
+      config: { isActive: true, geinsSettings: GEINS_SETTINGS },
+    });
+    await setTenantGuestHiddenBrands('local-shop.example.com', [3]);
+    expect(kvStore.get(tenantConfigKey('local-shop'))).toMatchObject({
+      catalog: { guestHiddenBrandIds: [3] },
+    });
+    expect(kvStore.get(tenantRefreshStateKey('local-shop'))).toMatchObject({
+      source: 'local',
+    });
+    const resolved = await resolveTenant('local-shop.example.com');
+    expect(resolved?.catalog?.guestHiddenBrandIds).toEqual([3]);
+  });
+
+  it('rejects an invalid list without writing anything', async () => {
+    await seedRemoteTenant();
+    for (const ids of [
+      [7, 7],
+      [0],
+      [-3],
+      [1.5],
+      Array.from({ length: 501 }, (_, i) => i + 1),
+    ]) {
+      await expect(setTenantGuestHiddenBrands(hostname, ids)).rejects.toThrow();
+    }
+    expect(kvStore.has(tenantOverrideKey(tenantId))).toBe(false);
+    expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
+      source: 'remote',
+    });
+  });
+
+  it('returns null for a hostname no tenant claims', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not found', { status: 404 })),
+    );
+    try {
+      await expect(
+        setTenantGuestHiddenBrands('nobody.example.com', [7]),
+      ).resolves.toBeNull();
+      await expect(
+        getTenantGuestHiddenBrands('nobody-else.example.com'),
+      ).resolves.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('leaves a tenant without the override untouched', () => {
+    const base = { tenantId: 'other' } as TenantConfig;
+    expect(mergeTenantPortalOverrides(base, null)).toBe(base);
+    expect(mergeTenantPortalOverrides(base, { catalog: {} })).toBe(base);
+  });
+
+  it('keeps valid stored ids and drops malformed ones on read', () => {
+    const base = { tenantId: 'other' } as TenantConfig;
+    expect(
+      mergeTenantPortalOverrides(base, {
+        catalog: { guestHiddenBrandIds: [7, '8', 0, 7] as never },
+      }).catalog?.guestHiddenBrandIds,
+    ).toEqual([7]);
+    expect(
+      mergeTenantPortalOverrides(base, {
+        catalog: { guestHiddenBrandIds: 'all' as never },
+      }),
+    ).toBe(base);
   });
 });

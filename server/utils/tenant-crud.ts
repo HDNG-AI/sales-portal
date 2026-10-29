@@ -18,10 +18,12 @@ import {
   invalidateTenantCaches,
   tenantOverrideKey,
   tenantRefreshStateKey,
+  mergeTenantPortalOverrides,
   type TenantRefreshState,
   type TenantPortalOverrides,
 } from './tenant';
 import { withoutUndefined } from './object';
+import { MAX_HIDDEN_BRAND_IDS, normalizeBrandIds } from './hidden-brands';
 import { TimezoneSchema } from '../schemas/store-settings';
 
 /**
@@ -167,9 +169,15 @@ export async function setTenantProductTextPlacement(
   hostname: string,
   placement: 'legacy' | 'semantic',
   event?: import('h3').H3Event,
-): Promise<{ tenantId: string; productTextPlacement: 'legacy' | 'semantic' } | null> {
+): Promise<{
+  tenantId: string;
+  productTextPlacement: 'legacy' | 'semantic';
+} | null> {
   if (placement !== 'legacy' && placement !== 'semantic') {
-    throw createAppError(ErrorCode.VALIDATION_ERROR, 'Invalid product text placement');
+    throw createAppError(
+      ErrorCode.VALIDATION_ERROR,
+      'Invalid product text placement',
+    );
   }
   const existing = await resolveTenant(hostname, event);
   if (!existing) return null;
@@ -205,6 +213,96 @@ export async function setTenantProductTextPlacement(
     useStorage('cache'),
   );
   return { tenantId: existing.tenantId, productTextPlacement: placement };
+}
+
+export interface TenantGuestHiddenBrands {
+  tenantId: string;
+  guestHiddenBrandIds: number[];
+}
+
+/**
+ * Brands hidden from visitors who are not signed in, as the portal-owned
+ * override stores them. Read through the stored override rather than only
+ * the resolved config: a remote tenant's config picks a new list up on its
+ * next Geins refresh, and the caller that just wrote one must read it back.
+ */
+export async function getTenantGuestHiddenBrands(
+  hostname: string,
+  event?: import('h3').H3Event,
+): Promise<TenantGuestHiddenBrands | null> {
+  const existing = await resolveTenant(hostname, event);
+  if (!existing) return null;
+
+  const overrides = await useStorage('kv').getItem<TenantPortalOverrides>(
+    tenantOverrideKey(existing.tenantId),
+  );
+  const effective = mergeTenantPortalOverrides(existing, overrides);
+  return {
+    tenantId: existing.tenantId,
+    guestHiddenBrandIds: normalizeBrandIds(
+      effective.catalog?.guestHiddenBrandIds,
+    ),
+  };
+}
+
+/**
+ * Narrow portal-owned catalogue rule: the Geins brand ids hidden from
+ * visitors who are not signed in. Same storage contract as
+ * setTenantProductTextPlacement: the list lives in tenant:override:<id>, so a
+ * Geins refresh cannot drop it, other overrides are preserved, a remote
+ * tenant keeps its provenance and is re-read from Geins on its next request,
+ * and a KV-local tenant is updated in place. The list is replaced, never
+ * merged; an empty list hides nothing.
+ */
+export async function setTenantGuestHiddenBrands(
+  hostname: string,
+  brandIds: readonly number[],
+  event?: import('h3').H3Event,
+): Promise<TenantGuestHiddenBrands | null> {
+  // Validated here as well as at the admin boundary, like the timezone:
+  // other code may call this directly.
+  const ids = normalizeBrandIds(brandIds);
+  if (
+    !Array.isArray(brandIds) ||
+    ids.length !== brandIds.length ||
+    ids.length > MAX_HIDDEN_BRAND_IDS
+  ) {
+    throw createAppError(ErrorCode.VALIDATION_ERROR, 'Invalid brand id list');
+  }
+  const existing = await resolveTenant(hostname, event);
+  if (!existing) return null;
+
+  const storage = useStorage('kv');
+  const key = tenantOverrideKey(existing.tenantId);
+  const previous = await storage.getItem<TenantPortalOverrides>(key);
+  await storage.setItem(key, {
+    ...(previous ?? {}),
+    catalog: {
+      ...(previous?.catalog ?? {}),
+      guestHiddenBrandIds: ids,
+    },
+  } satisfies TenantPortalOverrides);
+
+  const refreshKey = tenantRefreshStateKey(existing.tenantId);
+  const state = await storage.getItem<TenantRefreshState>(refreshKey);
+  if (state?.source === 'local') {
+    await storage.setItem(tenantConfigKey(existing.tenantId), {
+      ...existing,
+      catalog: { ...(existing.catalog ?? {}), guestHiddenBrandIds: ids },
+    });
+  } else {
+    await storage.setItem(refreshKey, {
+      checkedAt: 0,
+      source: state?.source ?? 'unknown',
+    } satisfies TenantRefreshState);
+  }
+
+  await invalidateTenantCaches(
+    existing.tenantId,
+    hostnamesToInvalidate(hostname, existing),
+    useStorage('cache'),
+  );
+  return { tenantId: existing.tenantId, guestHiddenBrandIds: ids };
 }
 
 /**

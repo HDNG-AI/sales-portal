@@ -158,6 +158,22 @@ export interface TenantConfig {
   // exactly as if this field didn't exist.
   productMediaParameters?: Record<string, 'video' | 'document'>;
 
+  /**
+   * Portal-owned catalogue visibility, set through the admin API and stored
+   * as a tenant portal override rather than in Geins (see
+   * setTenantGuestHiddenBrands in server/utils/tenant-crud.ts). Server-only:
+   * getPublicConfig does not pass it to the client.
+   */
+  catalog?: {
+    /**
+     * Geins brand ids hidden from visitors who are not signed in. Listings
+     * exclude them in the Geins query and their products answer 404; a
+     * signed-in buyer sees the catalogue unchanged. Absent or empty hides
+     * nothing.
+     */
+    guestHiddenBrandIds?: number[] | null;
+  } | null;
+
   // Optional sections
   seo?: {
     defaultTitle?: string | null;

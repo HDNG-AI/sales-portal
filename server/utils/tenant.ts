@@ -20,6 +20,7 @@ import { logger } from './logger';
 import { createTenantConfigInvalidError } from './errors';
 import { clearSdkCache } from '../services/_sdk';
 import { isDevMode } from './dev-mode';
+import { normalizeBrandIds } from './hidden-brands';
 import {
   createDefaultTheme,
   generateTenantCss,
@@ -202,7 +203,13 @@ export type TenantResolutionOutcome =
 export interface TenantResolutionTrace {
   hostname: string;
   /** `stale` is a hit whose config no longer claims the hostname; the lookup then falls through. */
-  kv: 'hit' | 'stale' | 'miss' | 'skipped' | 'expired' | 'stale-on-refresh-error';
+  kv:
+    | 'hit'
+    | 'stale'
+    | 'miss'
+    | 'skipped'
+    | 'expired'
+    | 'stale-on-refresh-error';
   /** The merchant API call, when one was made: its URL and status or error. */
   api?: { url: string; result: string };
   outcome: TenantResolutionOutcome;
@@ -321,6 +328,8 @@ export interface TenantPortalOverrides {
   timezone?: string;
   /** A portal-owned PDP presentation override; does not mutate Geins. */
   layout?: { productTextPlacement?: 'legacy' | 'semantic' };
+  /** Brands hidden from guests; a portal rule, Geins is not told. */
+  catalog?: { guestHiddenBrandIds?: number[] };
 }
 
 /**
@@ -346,20 +355,40 @@ export function mergeTenantPortalOverrides(
   const timezone =
     base.timezone && base.timezone !== 'UTC'
       ? base.timezone
-      : (portalZone ?? APPROVED_TENANT_TIMEZONES[base.tenantId] ?? base.timezone);
+      : (portalZone ??
+        APPROVED_TENANT_TIMEZONES[base.tenantId] ??
+        base.timezone);
   // Fail closed on malformed KV values. A tenant without the explicit
   // override retains Geins's placement (or the storefront's legacy default).
   const rawPlacement = overrides?.layout?.productTextPlacement;
-  const placement = rawPlacement === 'semantic' || rawPlacement === 'legacy'
-    ? rawPlacement
+  const placement =
+    rawPlacement === 'semantic' || rawPlacement === 'legacy'
+      ? rawPlacement
+      : undefined;
+  // A stored list replaces whatever the base carries, an empty one included:
+  // that is how an administrator clears it. Malformed entries are dropped
+  // rather than the whole list, so a bad KV value can only narrow it.
+  const rawHiddenBrands = overrides?.catalog?.guestHiddenBrandIds;
+  const guestHiddenBrandIds = Array.isArray(rawHiddenBrands)
+    ? normalizeBrandIds(rawHiddenBrands)
     : undefined;
-  if (!overrides?.cms && timezone === base.timezone && !placement) return base;
+  if (
+    !overrides?.cms &&
+    timezone === base.timezone &&
+    !placement &&
+    !guestHiddenBrandIds
+  ) {
+    return base;
+  }
 
   return {
     ...base,
     ...(timezone !== undefined ? { timezone } : {}),
     ...(placement
       ? { layout: { ...(base.layout ?? {}), productTextPlacement: placement } }
+      : {}),
+    ...(guestHiddenBrandIds
+      ? { catalog: { ...(base.catalog ?? {}), guestHiddenBrandIds } }
       : {}),
     ...(overrides?.cms
       ? {

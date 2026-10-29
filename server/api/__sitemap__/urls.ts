@@ -7,6 +7,7 @@ import { loadQuery } from '../../services/graphql/loader';
 import { unwrapGraphQL } from '../../services/graphql/unwrap';
 import { ErrorCode, isErrorCode } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { normalizeBrandIds } from '../../utils/hidden-brands';
 
 interface SitemapEntry {
   loc: string;
@@ -16,6 +17,7 @@ interface SitemapEntry {
 
 interface BrandNode {
   alias?: string;
+  brandId?: number;
 }
 
 /**
@@ -37,6 +39,9 @@ export default defineEventHandler(async (event) => {
   const markets = geinsSettings?.availableMarkets ?? ['se'];
   const availableLocales = geinsSettings?.availableLocales ?? ['en'];
   const locales = availableLocales.map((l) => l.split('-')[0]!);
+  const guestHiddenBrandIds = normalizeBrandIds(
+    config?.catalog?.guestHiddenBrandIds,
+  );
 
   const entries: SitemapEntry[] = [];
 
@@ -105,6 +110,14 @@ export default defineEventHandler(async (event) => {
         }
 
         for (const brand of brands) {
+          // Crawlers are guests: a brand hidden from guests answers 404 to
+          // them and must not be advertised.
+          if (
+            typeof brand.brandId === 'number' &&
+            guestHiddenBrandIds.includes(brand.brandId)
+          ) {
+            continue;
+          }
           if (brand.alias) {
             entries.push({
               loc: `/${market}/${locale}/b/${brand.alias}`,
