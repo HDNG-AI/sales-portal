@@ -48,7 +48,8 @@ export interface AdminCaller {
  * credential that can rewrite every tenant's config makes the blast radius
  * of losing that credential the whole estate. NUXT_ADMIN_READ_SECRET is
  * that narrower credential. The write secret still satisfies a read, being
- * the stronger of the two.
+ * the stronger of the two. A third, NUXT_ADMIN_CATALOG_SECRET, is never
+ * accepted here; see requireCatalogAdminAuth.
  *
  * This is a scope boundary, not a role model — there is still no per-tenant
  * authorization, so a read key reads *every* tenant. Narrowing that means
@@ -69,6 +70,28 @@ export async function requireAdminAuth(
   event: H3Event,
   required: AdminScope = 'write',
 ): Promise<AdminCaller> {
+  // The catalog key is matched too, for timing, and then ignored: it opens
+  // only the routes that call requireCatalogAdminAuth below.
+  const { matchesWrite, matchesRead } = await matchAdminKey(event);
+  return { scope: adminScope(matchesWrite, matchesRead, required) };
+}
+
+/** What the caller's key matched, after the rate limit. */
+interface AdminKeyMatch {
+  matchesWrite: boolean;
+  matchesRead: boolean;
+  matchesCatalog: boolean;
+  catalogHostnames: string[];
+}
+
+/**
+ * Rate limit, then compare the `x-admin-key` header against every configured
+ * secret. All comparisons are evaluated before any is acted on: returning as
+ * soon as the write secret matches would make a response to a read key
+ * measurably slower than one to a write key, which is exactly the signal the
+ * constant-time compare exists to suppress.
+ */
+async function matchAdminKey(event: H3Event): Promise<AdminKeyMatch> {
   const clientIp = getClientIp(event);
   const rateLimit = await adminAuthRateLimiter.check(clientIp);
   if (!rateLimit.allowed) {
@@ -77,20 +100,26 @@ export async function requireAdminAuth(
 
   const config = readAdminAuthConfig(event);
   const providedKey = getHeader(event, 'x-admin-key') ?? '';
+  const matches = (secret: string | undefined): boolean =>
+    !!secret && !!providedKey && timingSafeStringEqual(providedKey, secret);
 
-  // Both comparisons are evaluated before either is acted on. Returning as
-  // soon as the write secret matches would make a response to a read key
-  // measurably slower than one to a write key, which is exactly the signal
-  // the constant-time compare exists to suppress.
-  const matchesWrite =
-    !!config.adminSecret &&
-    !!providedKey &&
-    timingSafeStringEqual(providedKey, config.adminSecret);
-  const matchesRead =
-    !!config.adminReadSecret &&
-    !!providedKey &&
-    timingSafeStringEqual(providedKey, config.adminReadSecret);
+  const matchesWrite = matches(config.adminSecret);
+  const matchesRead = matches(config.adminReadSecret);
+  const matchesCatalog = matches(config.adminCatalogSecret);
+  return {
+    matchesWrite,
+    matchesRead,
+    matchesCatalog,
+    catalogHostnames: config.adminCatalogHostnames ?? [],
+  };
+}
 
+/** The scope of a write or read key, or the 401 for anything else. */
+function adminScope(
+  matchesWrite: boolean,
+  matchesRead: boolean,
+  required: AdminScope,
+): AdminScope {
   const scope: AdminScope | null = matchesWrite
     ? 'write'
     : matchesRead
@@ -109,5 +138,58 @@ export async function requireAdminAuth(
       'This key is read-only and cannot be used to write tenant config',
     );
   }
-  return { scope };
+  return scope;
+}
+
+export interface CatalogAdminCaller extends AdminCaller {
+  /** True when the narrow catalog key, not a full admin key, opened the route. */
+  catalog: boolean;
+}
+
+/**
+ * Gate for the guest-hidden-brands endpoints only, which a tenant-facing
+ * admin app calls. That app must not hold NUXT_ADMIN_SECRET, which rewrites
+ * every tenant's config, so these routes also accept NUXT_ADMIN_CATALOG_SECRET:
+ * a key that reads and writes this one setting and opens nothing else
+ * (requireAdminAuth never accepts it). With NUXT_ADMIN_CATALOG_HOSTNAMES set
+ * it is further limited to those hostnames, and any other answers 403.
+ *
+ * The write key opens both methods and the read key opens reads, exactly as
+ * on every other admin route. An unset catalog secret matches nothing, so the
+ * key simply does not exist. Same header, constant-time compare and rate
+ * limit as requireAdminAuth.
+ *
+ * `hostname` is the one named in the path, lowercased; it is compared as
+ * given, so an alias of an allowed tenant is not allowed unless listed.
+ */
+export async function requireCatalogAdminAuth(
+  event: H3Event,
+  required: AdminScope,
+  hostname: string,
+): Promise<CatalogAdminCaller> {
+  const { matchesWrite, matchesRead, matchesCatalog, catalogHostnames } =
+    await matchAdminKey(event);
+
+  if (matchesWrite || (matchesRead && required === 'read')) {
+    return {
+      scope: adminScope(matchesWrite, matchesRead, required),
+      catalog: false,
+    };
+  }
+  if (matchesCatalog) {
+    if (
+      catalogHostnames.length > 0 &&
+      !catalogHostnames.includes(hostname.trim().toLowerCase())
+    ) {
+      throw createAppError(
+        ErrorCode.FORBIDDEN,
+        'This key is not allowed for this hostname',
+      );
+    }
+    return { scope: required, catalog: true };
+  }
+  return {
+    scope: adminScope(matchesWrite, matchesRead, required),
+    catalog: false,
+  };
 }

@@ -7,6 +7,7 @@ import {
   TenantModeSchema,
   TimezoneSchema,
 } from './store-settings';
+import { MAX_HIDDEN_BRAND_IDS } from '../utils/hidden-brands';
 
 /**
  * Same shape as CmsConfigSchema (store-settings.ts) but slot/menu values
@@ -107,4 +108,21 @@ export const UpdateTenantTimezoneSchema = z
 /** Portal-owned copy presentation mode (not a Geins PIM mutation). */
 export const UpdateTenantProductTextPlacementSchema = z
   .object({ productTextPlacement: z.enum(['legacy', 'semantic']) })
+  .strict();
+
+/**
+ * The brands a tenant hides from visitors who are not signed in, as Geins
+ * brand ids. The whole list is replaced on every write; an empty list hides
+ * nothing. Duplicates are refused rather than collapsed, so a caller that
+ * sends the same id twice learns its list is not what it thinks.
+ */
+export const UpdateTenantGuestHiddenBrandsSchema = z
+  .object({
+    brandIds: z
+      .array(z.number().int().positive())
+      .max(MAX_HIDDEN_BRAND_IDS)
+      .refine((ids) => new Set(ids).size === ids.length, {
+        message: 'Brand ids must be unique',
+      }),
+  })
   .strict();

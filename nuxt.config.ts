@@ -289,6 +289,8 @@ export default defineNuxtConfig({
    * │ NUXT_HEALTH_CHECK_SECRET        │                                      │
    * │ NUXT_ADMIN_SECRET               │                                      │
    * │ NUXT_ADMIN_READ_SECRET          │                                      │
+   * │ NUXT_ADMIN_CATALOG_SECRET       │                                      │
+   * │ NUXT_ADMIN_CATALOG_HOSTNAMES    │                                      │
    * │ NUXT_EXTERNAL_API_BASE_URL      │                                      │
    * │ NUXT_SENTRY_DSN                 │                                      │
    * │ SENTRY_ENVIRONMENT              │                                      │
@@ -339,6 +341,15 @@ export default defineNuxtConfig({
     // satisfy a write. Leave unset to have no read-only credential at all.
     // Azure: NUXT_ADMIN_READ_SECRET=your-secret-here
     adminReadSecret: '',
+
+    // Narrow key for a tenant-facing admin app: it reads and writes only
+    // GET/PUT /api/admin/tenants/:hostname/guest-hidden-brands and opens no
+    // other admin route (see requireCatalogAdminAuth). Leave unset to have no
+    // such key. The hostname list, comma-separated, limits it further; empty
+    // means any hostname.
+    // Azure: NUXT_ADMIN_CATALOG_SECRET, NUXT_ADMIN_CATALOG_HOSTNAMES
+    adminCatalogSecret: '',
+    adminCatalogHostnames: '',
 
     // RSS thresholds for /api/health, in MB. Sized for the production
     // container; a different container size is the reason to change them.
