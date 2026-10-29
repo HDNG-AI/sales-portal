@@ -20,6 +20,7 @@ import { logger } from './logger';
 import { createTenantConfigInvalidError } from './errors';
 import { clearSdkCache } from '../services/_sdk';
 import { isDevMode } from './dev-mode';
+import { normalizeBrandIds } from './hidden-brands';
 import {
   createDefaultTheme,
   generateTenantCss,
@@ -327,6 +328,8 @@ export interface TenantPortalOverrides {
   timezone?: string;
   /** A portal-owned PDP presentation override; does not mutate Geins. */
   layout?: { productTextPlacement?: 'legacy' | 'semantic' };
+  /** Brands hidden from guests; a portal rule, Geins is not told. */
+  catalog?: { guestHiddenBrandIds?: number[] };
 }
 
 /**
@@ -362,13 +365,30 @@ export function mergeTenantPortalOverrides(
     rawPlacement === 'semantic' || rawPlacement === 'legacy'
       ? rawPlacement
       : undefined;
-  if (!overrides?.cms && timezone === base.timezone && !placement) return base;
+  // A stored list replaces whatever the base carries, an empty one included:
+  // that is how an administrator clears it. Malformed entries are dropped
+  // rather than the whole list, so a bad KV value can only narrow it.
+  const rawHiddenBrands = overrides?.catalog?.guestHiddenBrandIds;
+  const guestHiddenBrandIds = Array.isArray(rawHiddenBrands)
+    ? normalizeBrandIds(rawHiddenBrands)
+    : undefined;
+  if (
+    !overrides?.cms &&
+    timezone === base.timezone &&
+    !placement &&
+    !guestHiddenBrandIds
+  ) {
+    return base;
+  }
 
   return {
     ...base,
     ...(timezone !== undefined ? { timezone } : {}),
     ...(placement
       ? { layout: { ...(base.layout ?? {}), productTextPlacement: placement } }
+      : {}),
+    ...(guestHiddenBrandIds
+      ? { catalog: { ...(base.catalog ?? {}), guestHiddenBrandIds } }
       : {}),
     ...(overrides?.cms
       ? {

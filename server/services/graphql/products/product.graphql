@@ -23,6 +23,7 @@ query product(
     }
     name
     brand {
+      brandId
       name
       alias
       canonicalUrl

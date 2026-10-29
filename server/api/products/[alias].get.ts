@@ -1,4 +1,6 @@
 import { protectProductPrices } from '../../utils/price-response';
+import { guestHiddenBrandIds } from '../../utils/guest-hidden-brands';
+import { isHiddenBrandProduct } from '../../utils/hidden-brands';
 import type { CategoryNode } from '#shared/utils/breadcrumb-trail';
 import { ancestorsFromCategories } from '#shared/utils/breadcrumb-trail';
 import { ProductAliasSchema } from '../../schemas/api-input';
@@ -35,11 +37,16 @@ export default defineEventHandler(async (event) => {
 
   return withErrorHandling(
     async () => {
-      const product = await getProduct(
-        { alias: validatedAlias, userToken: auth?.authToken },
-        event,
-      );
-      if (!product) {
+      const [product, hidden] = await Promise.all([
+        getProduct(
+          { alias: validatedAlias, userToken: auth?.authToken },
+          event,
+        ),
+        guestHiddenBrandIds(event, auth),
+      ]);
+      // A product of a brand hidden from guests answers exactly like one that
+      // does not exist, so the two cannot be told apart from outside.
+      if (!product || isHiddenBrandProduct(product, hidden)) {
         // Don't let the CDN cache the 404. A freshly-published product would
         // otherwise stay 404 for the s-maxage window on every edge.
         setResponseHeader(event, 'Cache-Control', 'no-store');

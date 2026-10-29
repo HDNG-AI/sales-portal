@@ -1,5 +1,6 @@
 fragment ListProduct on ProductType {
   brand {
+    brandId
     name
   }
   name

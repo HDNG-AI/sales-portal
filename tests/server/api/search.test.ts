@@ -53,6 +53,7 @@ vi.stubGlobal(
   }),
 );
 vi.stubGlobal('defineEventHandler', (fn: AnyFn) => fn);
+vi.stubGlobal('setResponseHeader', vi.fn());
 vi.stubGlobal('optionalAuth', vi.fn().mockResolvedValue(null));
 vi.stubGlobal('wrapServiceCall', async (fn: () => Promise<unknown>) => fn());
 vi.stubGlobal('getRequestLocale', vi.fn().mockReturnValue(undefined));

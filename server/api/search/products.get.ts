@@ -1,4 +1,10 @@
 import { protectProductPrices } from '../../utils/price-response';
+import { guestHiddenBrandIds } from '../../utils/guest-hidden-brands';
+import {
+  isIdentityLookup,
+  withHiddenBrandsExcluded,
+  withoutHiddenBrandProducts,
+} from '../../utils/hidden-brands';
 import { SearchProductsSchema } from '../../schemas/api-input';
 import { searchProducts } from '../../services/search';
 
@@ -6,14 +12,22 @@ export default defineEventHandler(async (event) => {
   const validated = await getValidatedQuery(event, SearchProductsSchema.parse);
   const auth = await optionalAuth(event);
 
+  // A signed-in response carries what guests must not see (B2B prices,
+  // guest-hidden brands); keep it out of shared caches.
+  if (auth?.authToken) {
+    setResponseHeader(event, 'Cache-Control', 'private, no-cache');
+  }
+
   return withErrorHandling(
     async () => {
-      const filter: Record<string, unknown> = {
-        ...validated.filter,
-        searchText: validated.query,
-      };
+      // Brands hidden from guests are excluded in the Geins query itself.
+      const hidden = await guestHiddenBrandIds(event, auth);
+      const filter = withHiddenBrandsExcluded(
+        { ...validated.filter, searchText: validated.query },
+        hidden,
+      ) ?? { searchText: validated.query };
 
-      const products = await searchProducts(
+      const found = await searchProducts(
         {
           filter,
           skip: validated.skip,
@@ -22,6 +36,11 @@ export default defineEventHandler(async (event) => {
         },
         event,
       );
+      // Geins ignores every other filter field next to productIds or
+      // articleNumbers, the exclusion too, so such a lookup is checked by brand.
+      const products = isIdentityLookup(filter)
+        ? withoutHiddenBrandProducts(found, hidden)
+        : found;
       // Geins full-text search is configurable and may not index ArticleNumber
       // for this tenant. Use the documented exact-article filter as an
       // additional lookup ONLY when a SKU-like first-page query has no hits.
@@ -54,7 +73,12 @@ export default defineEventHandler(async (event) => {
           },
           event,
         );
-        return protectProductPrices(event, auth, exact);
+        // An article-number lookup is one Geins applies no exclusion to.
+        return protectProductPrices(
+          event,
+          auth,
+          withoutHiddenBrandProducts(exact, hidden),
+        );
       }
 
       return protectProductPrices(event, auth, products);

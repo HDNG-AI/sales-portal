@@ -66,8 +66,11 @@ const inFlight = new Map<string, Promise<boolean>>();
  * crm.user.get(authToken) makes a real authenticated network request and does
  * not refresh/rotate tokens. The JWT exp claim is an additional DENY/TTL
  * restriction only; it is never treated as proof of authentication.
+ *
+ * Also the definition of "signed in" for brands hidden from guests (see
+ * ./guest-hidden-brands.ts), so both rules agree on who a buyer is.
  */
-async function isVerifiedBuyer(
+export async function isVerifiedBuyer(
   event: H3Event,
   auth: AuthTokens | null,
 ): Promise<boolean> {
