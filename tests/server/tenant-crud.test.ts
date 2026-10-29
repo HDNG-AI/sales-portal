@@ -848,8 +848,9 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
   it('re-fetches an expired published theme and busts the /api/config cache', async () => {
     await seedCachedInter();
     cacheStore.set('nitro/handlers:_:tenantconfigodelco.json', { old: true });
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(remotePayload()), { status: 200 }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(JSON.stringify(remotePayload()), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetcher);
 
@@ -861,7 +862,9 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
       timezone: 'Europe/Stockholm',
       theme: { typography: { fontFamily: 'Geist' } },
     });
-    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(false);
+    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(
+      false,
+    );
     expect(mockClearSdkCache).toHaveBeenCalledWith(tenantId);
     expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
       source: 'remote',
@@ -874,7 +877,12 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
 
   it('serves last known good config on transient Geins transport failure', async () => {
     await seedCachedInter();
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
 
     const result = await resolveTenant(hostname);
 
@@ -886,8 +894,9 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
 
   it('does not overwrite a locally administered tenant with Geins data', async () => {
     await seedCachedInter('local');
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(remotePayload()), { status: 200 }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(JSON.stringify(remotePayload()), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetcher);
 
@@ -899,27 +908,34 @@ describe('Geins Store Settings freshness (missed Studio webhook)', () => {
 
   it('fails closed when a previously remote tenant disappears from Geins', async () => {
     await seedCachedInter();
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response('not found', { status: 404 }),
-    ));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('not found', { status: 404 })),
+    );
 
     expect(await resolveTenant(hostname)).toBeNull();
   });
 
   it('treats a legacy, unstamped cached tenant as requiring a provenance check', () => {
     expect(isTenantRefreshFresh(null)).toBe(false);
-    expect(isTenantRefreshFresh({
-      checkedAt: Date.now() - TENANT_REMOTE_REFRESH_MS - 1,
-      source: 'remote',
-    })).toBe(false);
-    expect(isTenantRefreshFresh({
-      checkedAt: Date.now(),
-      source: 'remote',
-    })).toBe(true);
-    expect(isTenantRefreshFresh({
-      checkedAt: 0,
-      source: 'local',
-    })).toBe(true);
+    expect(
+      isTenantRefreshFresh({
+        checkedAt: Date.now() - TENANT_REMOTE_REFRESH_MS - 1,
+        source: 'remote',
+      }),
+    ).toBe(false);
+    expect(
+      isTenantRefreshFresh({
+        checkedAt: Date.now(),
+        source: 'remote',
+      }),
+    ).toBe(true);
+    expect(
+      isTenantRefreshFresh({
+        checkedAt: 0,
+        source: 'local',
+      }),
+    ).toBe(true);
   });
 });
 
@@ -950,7 +966,9 @@ describe('approved Odelco operating timezone', () => {
       tenantId: 'odelco',
       hostname: 'staging-odelco.hdng.ai',
       cms: {
-        slots: { frontpage_content: { family: 'Frontpage', areaName: 'Content' } },
+        slots: {
+          frontpage_content: { family: 'Frontpage', areaName: 'Content' },
+        },
         menus: { header_main: { menuLocationId: 'main' } },
       },
     } as TenantConfig;
@@ -959,7 +977,9 @@ describe('approved Odelco operating timezone', () => {
     });
     expect(result.timezone).toBe('Europe/Stockholm');
     expect(result.cms?.slots).toEqual(base.cms?.slots);
-    expect(result.cms?.menus?.header_main).toEqual({ menuLocationId: 'main-desktop' });
+    expect(result.cms?.menus?.header_main).toEqual({
+      menuLocationId: 'main-desktop',
+    });
   });
 
   it('does not assign a timezone to any other tenant', () => {
@@ -969,20 +989,27 @@ describe('approved Odelco operating timezone', () => {
       timezone: undefined,
     } as TenantConfig;
     expect(mergeTenantPortalOverrides(base, null)).toBe(base);
-    expect(mergeTenantPortalOverrides({ ...base, timezone: 'UTC' }, undefined).timezone).toBe('UTC');
+    expect(
+      mergeTenantPortalOverrides({ ...base, timezone: 'UTC' }, undefined)
+        .timezone,
+    ).toBe('UTC');
   });
 
   it('applies the same approved timezone to the Geins preview lookup without writing KV', async () => {
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify({
-        ...partialPayloadFixture,
-        tenantId: 'odelco',
-        geinsSettings: {
-          ...partialPayloadFixture.geinsSettings,
-          defaultHostName: 'staging-odelco.example.com',
-        },
-        appSettings: partialPayloadFixture.appSettings,
-      }), { status: 200 }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...partialPayloadFixture,
+            tenantId: 'odelco',
+            geinsSettings: {
+              ...partialPayloadFixture.geinsSettings,
+              defaultHostName: 'staging-odelco.example.com',
+            },
+            appSettings: partialPayloadFixture.appSettings,
+          }),
+          { status: 200 },
+        ),
     );
     vi.stubGlobal('fetch', fetcher);
     try {
@@ -1056,7 +1083,9 @@ describe('persistent operating timezone overrides', () => {
       source: 'remote',
       checkedAt: 0,
     });
-    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(false);
+    expect(cacheStore.has('nitro/handlers:_:tenantconfigodelco.json')).toBe(
+      false,
+    );
     expect(kvStore.get(tenantConfigKey(tenantId))).toMatchObject({
       theme: { typography: { fontFamily: 'Inter' } },
     });
@@ -1065,8 +1094,8 @@ describe('persistent operating timezone overrides', () => {
   it('re-fetches after the admin write and preserves both Studio theme and portal timezone', async () => {
     await seedRemotelyManagedTenant();
     await setTenantOperatingTimezone(hostname, 'Europe/Stockholm');
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(merchantData()), { status: 200 }),
+    const fetcher = vi.fn(
+      async () => new Response(JSON.stringify(merchantData()), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetcher);
     try {
@@ -1091,29 +1120,47 @@ describe('persistent operating timezone overrides', () => {
       tenantId,
       timezone: 'Europe/London',
     } as TenantConfig;
-    expect(mergeTenantPortalOverrides(base, {
-      timezone: 'Europe/Stockholm',
-    }).timezone).toBe('Europe/London');
-    expect(mergeTenantPortalOverrides(base, undefined).timezone).toBe('Europe/London');
-    expect(mergeTenantPortalOverrides({
-      ...base,
-      timezone: 'UTC',
-    }, { timezone: 'Europe/Stockholm' }).timezone).toBe('Europe/Stockholm');
-    expect(mergeTenantPortalOverrides({
-      ...base,
-      timezone: undefined,
-    }, { timezone: 'Europe/Stockholm' }).timezone).toBe('Europe/Stockholm');
+    expect(
+      mergeTenantPortalOverrides(base, {
+        timezone: 'Europe/Stockholm',
+      }).timezone,
+    ).toBe('Europe/London');
+    expect(mergeTenantPortalOverrides(base, undefined).timezone).toBe(
+      'Europe/London',
+    );
+    expect(
+      mergeTenantPortalOverrides(
+        {
+          ...base,
+          timezone: 'UTC',
+        },
+        { timezone: 'Europe/Stockholm' },
+      ).timezone,
+    ).toBe('Europe/Stockholm');
+    expect(
+      mergeTenantPortalOverrides(
+        {
+          ...base,
+          timezone: undefined,
+        },
+        { timezone: 'Europe/Stockholm' },
+      ).timezone,
+    ).toBe('Europe/Stockholm');
   });
 
   it('ignores an invalid persisted timezone and retains safe legacy fallback', () => {
     const base = { tenantId, timezone: undefined } as TenantConfig;
-    expect(mergeTenantPortalOverrides(base, {
-      timezone: '+02:00',
-    }).timezone).toBe('Europe/Stockholm');
+    expect(
+      mergeTenantPortalOverrides(base, {
+        timezone: '+02:00',
+      }).timezone,
+    ).toBe('Europe/Stockholm');
     const other = { ...base, tenantId: 'other-merchant' };
-    expect(mergeTenantPortalOverrides(other, {
-      timezone: '+02:00',
-    })).toBe(other);
+    expect(
+      mergeTenantPortalOverrides(other, {
+        timezone: '+02:00',
+      }),
+    ).toBe(other);
   });
 
   it('allows local-only tenants to update without touching other settings', async () => {
@@ -1160,8 +1207,8 @@ describe('persistent operating timezone overrides', () => {
 
   it('reads the same saved portal timezone for preview without writing to KV', async () => {
     kvStore.set(tenantOverrideKey(tenantId), { timezone: 'Europe/Oslo' });
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(merchantData()), { status: 200 }),
+    const fetcher = vi.fn(
+      async () => new Response(JSON.stringify(merchantData()), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetcher);
     try {
@@ -1178,7 +1225,9 @@ describe('persistent operating timezone overrides', () => {
 
   it('does not persist an invalid timezone or alter tenant configuration', async () => {
     await seedRemotelyManagedTenant();
-    await expect(setTenantOperatingTimezone(hostname, 'GMT+2')).rejects.toThrow();
+    await expect(
+      setTenantOperatingTimezone(hostname, 'GMT+2'),
+    ).rejects.toThrow();
     expect(kvStore.has(tenantOverrideKey(tenantId))).toBe(false);
     expect(kvStore.get(tenantRefreshStateKey(tenantId))).toMatchObject({
       source: 'remote',
@@ -1201,7 +1250,9 @@ describe('portal-owned product text placement (Odelco Victron)', () => {
       productTextPlacement: 'semantic',
     });
     expect(base.layout?.productTextPlacement).toBe('legacy');
-    expect(mergeTenantPortalOverrides(base, null).layout?.productTextPlacement).toBe('legacy');
+    expect(
+      mergeTenantPortalOverrides(base, null).layout?.productTextPlacement,
+    ).toBe('legacy');
   });
 
   it('ignores malformed saved KV opt-ins, keeping the legacy mode', () => {
@@ -1210,9 +1261,11 @@ describe('portal-owned product text placement (Odelco Victron)', () => {
       layout: { productTextPlacement: 'legacy' },
       timezone: 'Europe/Stockholm',
     } as TenantConfig;
-    expect(mergeTenantPortalOverrides(base, {
-      layout: { productTextPlacement: 'bogus' as 'semantic' },
-    }).layout?.productTextPlacement).toBe('legacy');
+    expect(
+      mergeTenantPortalOverrides(base, {
+        layout: { productTextPlacement: 'bogus' as 'semantic' },
+      }).layout?.productTextPlacement,
+    ).toBe('legacy');
   });
 
   it('persists the admin opt-in separately for a remote Geins tenant', async () => {
@@ -1244,7 +1297,8 @@ describe('portal-owned product text placement (Odelco Victron)', () => {
       layout: { productTextPlacement: 'semantic' },
     });
     expect(kvStore.get(tenantRefreshStateKey('odelco'))).toMatchObject({
-      source: 'remote', checkedAt: 0,
+      source: 'remote',
+      checkedAt: 0,
     });
     const merged = mergeTenantPortalOverrides(
       kvStore.get(tenantConfigKey('odelco')) as TenantConfig,
@@ -1265,10 +1319,12 @@ describe('portal-owned product text placement (Odelco Victron)', () => {
       tenantId: 'odelco',
       config: { isActive: true, geinsSettings: GEINS_SETTINGS },
     });
-    await expect(setTenantProductTextPlacement(
-      'staging-odelco.example.com',
-      'unsupported' as 'semantic',
-    )).rejects.toThrow();
+    await expect(
+      setTenantProductTextPlacement(
+        'staging-odelco.example.com',
+        'unsupported' as 'semantic',
+      ),
+    ).rejects.toThrow();
     expect(kvStore.has(tenantOverrideKey('odelco'))).toBe(false);
   });
 });

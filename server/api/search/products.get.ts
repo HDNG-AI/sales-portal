@@ -30,8 +30,10 @@ export default defineEventHandler(async (event) => {
       const term = validated.query.trim();
       const isArticleCandidate =
         /^[a-z0-9][a-z0-9._-]{2,63}$/i.test(term) && /[0-9]/.test(term);
-      const emptyFirstPage = (validated.skip ?? 0) === 0 &&
-        products !== null && typeof products === 'object' &&
+      const emptyFirstPage =
+        (validated.skip ?? 0) === 0 &&
+        products !== null &&
+        typeof products === 'object' &&
         !Array.isArray(products) &&
         'products' in products &&
         Array.isArray(products.products) &&

@@ -202,7 +202,13 @@ export type TenantResolutionOutcome =
 export interface TenantResolutionTrace {
   hostname: string;
   /** `stale` is a hit whose config no longer claims the hostname; the lookup then falls through. */
-  kv: 'hit' | 'stale' | 'miss' | 'skipped' | 'expired' | 'stale-on-refresh-error';
+  kv:
+    | 'hit'
+    | 'stale'
+    | 'miss'
+    | 'skipped'
+    | 'expired'
+    | 'stale-on-refresh-error';
   /** The merchant API call, when one was made: its URL and status or error. */
   api?: { url: string; result: string };
   outcome: TenantResolutionOutcome;
@@ -346,13 +352,16 @@ export function mergeTenantPortalOverrides(
   const timezone =
     base.timezone && base.timezone !== 'UTC'
       ? base.timezone
-      : (portalZone ?? APPROVED_TENANT_TIMEZONES[base.tenantId] ?? base.timezone);
+      : (portalZone ??
+        APPROVED_TENANT_TIMEZONES[base.tenantId] ??
+        base.timezone);
   // Fail closed on malformed KV values. A tenant without the explicit
   // override retains Geins's placement (or the storefront's legacy default).
   const rawPlacement = overrides?.layout?.productTextPlacement;
-  const placement = rawPlacement === 'semantic' || rawPlacement === 'legacy'
-    ? rawPlacement
-    : undefined;
+  const placement =
+    rawPlacement === 'semantic' || rawPlacement === 'legacy'
+      ? rawPlacement
+      : undefined;
   if (!overrides?.cms && timezone === base.timezone && !placement) return base;
 
   return {

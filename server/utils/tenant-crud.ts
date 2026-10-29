@@ -167,9 +167,15 @@ export async function setTenantProductTextPlacement(
   hostname: string,
   placement: 'legacy' | 'semantic',
   event?: import('h3').H3Event,
-): Promise<{ tenantId: string; productTextPlacement: 'legacy' | 'semantic' } | null> {
+): Promise<{
+  tenantId: string;
+  productTextPlacement: 'legacy' | 'semantic';
+} | null> {
   if (placement !== 'legacy' && placement !== 'semantic') {
-    throw createAppError(ErrorCode.VALIDATION_ERROR, 'Invalid product text placement');
+    throw createAppError(
+      ErrorCode.VALIDATION_ERROR,
+      'Invalid product text placement',
+    );
   }
   const existing = await resolveTenant(hostname, event);
   if (!existing) return null;
