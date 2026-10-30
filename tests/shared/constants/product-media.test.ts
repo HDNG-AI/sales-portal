@@ -145,7 +145,7 @@ describe('classifyMediaParameter — multi-value parameters', () => {
       value:
         'https://www.youtube.com/watch?v=abc123|https://cdn.example.com/clip.mp4',
     });
-    expect(result[0]?.embedUrl).toBe('https://www.youtube.com/embed/abc123');
+    expect(result[0]?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/abc123');
     // A direct file has no embed URL — callers render it with <video>.
     expect(result[1]?.embedUrl).toBeNull();
   });
@@ -166,15 +166,15 @@ describe('resolveVideoEmbedUrl', () => {
   it('embeds a YouTube Shorts URL', () => {
     expect(
       resolveVideoEmbedUrl('https://www.youtube.com/shorts/Xz4Taqin0Io'),
-    ).toBe('https://www.youtube.com/embed/Xz4Taqin0Io');
+    ).toBe('https://www.youtube-nocookie.com/embed/Xz4Taqin0Io');
   });
 
   it('embeds the other YouTube and Vimeo forms', () => {
     expect(resolveVideoEmbedUrl('https://www.youtube.com/watch?v=abc123')).toBe(
-      'https://www.youtube.com/embed/abc123',
+      'https://www.youtube-nocookie.com/embed/abc123',
     );
     expect(resolveVideoEmbedUrl('https://youtu.be/abc123')).toBe(
-      'https://www.youtube.com/embed/abc123',
+      'https://www.youtube-nocookie.com/embed/abc123',
     );
     expect(resolveVideoEmbedUrl('https://vimeo.com/123456')).toBe(
       'https://player.vimeo.com/video/123456',
@@ -194,7 +194,7 @@ describe('classifyMediaParameter — how each entry should be displayed', () => 
       value: 'https://www.youtube.com/shorts/Xz4Taqin0Io',
     });
     expect(entry?.display).toBe('embed');
-    expect(entry?.embedUrl).toBe('https://www.youtube.com/embed/Xz4Taqin0Io');
+    expect(entry?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/Xz4Taqin0Io');
   });
 
   it('marks a direct video file as playable in a video element', () => {
