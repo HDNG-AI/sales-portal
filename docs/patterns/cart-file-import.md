@@ -78,9 +78,15 @@ for these routes, since Sentry would otherwise attach up to 10 kB of them.
 
 `server/utils/cart-import/` reads the file without a spreadsheet library:
 
-- **XLSX**: a small ZIP reader (`zip.ts`) over `node:zlib`, with a ceiling on
-  every inflated part, and a SpreadsheetML reader (`xlsx.ts`) for the first
-  sheet in workbook order. Only cached values are read; formulas are never
+- **XLSX**: a small ZIP reader (`zip.ts`) over `node:zlib` and a
+  SpreadsheetML reader (`xlsx.ts`) for the first visible sheet in workbook
+  order. All parts together may inflate to 8 MiB, and the relationships,
+  workbook and styles parts to 1 MiB each; an entry declared larger than
+  what is left is refused before it is inflated, and the inflate itself is
+  capped too, since a declared size can lie. The XML is scanned forward
+  only: an element whose end tag is missing makes the file unreadable
+  rather than being searched for again, so a crafted file cannot cost
+  quadratic time. Only cached values are read; formulas are never
   evaluated. Numbers come back as their stored digits rather than Excel's
   display text, and a zero-padding format such as `000000` is applied, so
   leading zeros survive. An integer of more than 15 digits, or a date, cannot
@@ -90,8 +96,10 @@ for these routes, since Sentry would otherwise attach up to 10 kB of them.
 - **CSV** (`csv.ts`): a byte-order mark decides the encoding (UTF-8,
   UTF-16); otherwise UTF-8 if it decodes, else Windows-1252. The delimiter is
   `;`, tab or `,`, whichever splits most sample lines into the same number of
-  fields; Excel's `sep=` first line wins. Text in scientific notation is
-  reported as altered.
+  fields; Excel's `sep=` first line wins. A value in the shape Excel gives a
+  long number (`1,23457E+13`: one digit, a fraction, a signed exponent of two
+  digits or more) is reported as altered; an article number such as `12E5`
+  is not.
 
 `parse.ts` then finds the heading row among the first 20 rows by alias
 (case, accents and punctuation ignored); without one, column A is the
