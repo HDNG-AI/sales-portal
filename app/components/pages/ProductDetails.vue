@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { DetailProduct, ListProduct } from '#shared/types/commerce';
-import { filterVisibleCampaigns, getStockStatus } from '#shared/types/commerce';
+import {
+  filterVisibleCampaigns,
+  getStockStatus,
+  purchasableQuantity,
+} from '#shared/types/commerce';
 import type { ContentAreaType } from '#shared/types/cms';
 import { CMS_SLOTS } from '#shared/types/cms-slots';
 import { BADGE_DESTRUCTIVE } from '~/lib/badge-styles';
@@ -176,10 +180,7 @@ const cartQtyForSelectedSku = computed(() => {
 const stockThreshold = computed(() => {
   const stock = displayStock.value;
   if (!stock) return Number.POSITIVE_INFINITY;
-  if (stock.oversellable > 0 || stock.static > 0) {
-    return Number.POSITIVE_INFINITY;
-  }
-  return Math.max(0, (stock.totalStock ?? 0) - cartQtyForSelectedSku.value);
+  return purchasableQuantity(stock, cartQtyForSelectedSku.value);
 });
 const maxQuantity = computed(() => {
   const threshold = stockThreshold.value;

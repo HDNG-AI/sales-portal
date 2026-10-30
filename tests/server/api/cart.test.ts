@@ -52,6 +52,10 @@ vi.mock('../../../server/utils/rate-limiter', () => ({
 // eslint-friendly callable type
 type AnyFn = (...args: unknown[]) => unknown;
 
+// No cart ownership key: creating a cart sets no proof cookie.
+vi.mock('../../../server/utils/cart-ownership-config', () => ({
+  readCartOwnerSecret: () => '',
+}));
 vi.stubGlobal('withErrorHandling', async (fn: () => Promise<unknown>) => fn());
 vi.stubGlobal(
   'createError',

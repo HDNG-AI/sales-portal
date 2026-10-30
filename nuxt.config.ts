@@ -363,6 +363,13 @@ export default defineNuxtConfig({
     // Azure: NUXT_WEBHOOK_SECRET=your-shared-secret-here
     webhookSecret: '',
 
+    // Key for the httpOnly cookie that proves a cart belongs to this browser
+    // and buyer (server/utils/cart-ownership.ts). The cart file import refuses
+    // to run without it. Changing it orphans every proof: buyers keep their
+    // carts but their next import goes into a new one.
+    // Azure: NUXT_CART_OWNER_SECRET=your-secret-here
+    cartOwnerSecret: '',
+
     // Logging configuration
     // Azure: NUXT_LOGGING_VERBOSE_REQUESTS=true
     logging: {

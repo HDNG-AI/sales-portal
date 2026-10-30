@@ -16,6 +16,45 @@ export async function getCart(
   );
 }
 
+/** Whether the SDK error, or one it wraps, says Geins has no such cart. */
+function isCartNotFound(error: unknown): boolean {
+  let current = error;
+  for (
+    let depth = 0;
+    depth < 5 && current && typeof current === 'object';
+    depth++
+  ) {
+    if ((current as { code?: unknown }).code === 'CART_NOT_FOUND') return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * The cart, or null when Geins has none by that id. Unlike a caller that reads
+ * every `getCart` failure as a missing cart, any other failure is thrown, so a
+ * Geins hiccup cannot pass for an empty cart.
+ */
+export async function findCart(
+  cartId: string,
+  event: H3Event,
+): Promise<CartType | null> {
+  const { oms } = await getTenantSDK(event);
+  const ctx = buildRequestContext(event);
+  return wrapServiceCall(
+    async () => {
+      try {
+        return (await oms.cart.get(cartId, false, ctx)) ?? null;
+      } catch (error) {
+        if (isCartNotFound(error)) return null;
+        throw error;
+      }
+    },
+    'cart',
+    CartError,
+  );
+}
+
 export async function createCart(event: H3Event): Promise<CartType> {
   const { oms } = await getTenantSDK(event);
   const ctx = buildRequestContext(event);

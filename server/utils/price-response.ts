@@ -51,11 +51,11 @@ function removePriceFields(value: unknown): unknown {
 // simultaneous CRM calls for the same token. Revocation visibility <=60 s.
 const TOKEN_VALIDITY_TTL_MS = 60_000;
 const CLOCK_SAFETY_MS = 5_000;
-const validatedTokens = new LRUCache<string, true>({
+const validatedTokens = new LRUCache<string, string>({
   max: 2048,
   ttl: TOKEN_VALIDITY_TTL_MS,
 });
-const inFlight = new Map<string, Promise<boolean>>();
+const inFlight = new Map<string, Promise<string | null>>();
 
 /**
  * Verify a signed-in buyer against the Geins Merchant API itself.
@@ -71,14 +71,26 @@ async function isVerifiedBuyer(
   event: H3Event,
   auth: AuthTokens | null,
 ): Promise<boolean> {
+  return (await verifiedBuyerId(event, auth)) !== null;
+}
+
+/**
+ * The Geins user id of the signed-in buyer, verified as `isVerifiedBuyer`
+ * describes, or null. Shares its cache, keyed by tenant and token, so a
+ * route that needs both asks Geins once.
+ */
+export async function verifiedBuyerId(
+  event: H3Event,
+  auth: AuthTokens | null,
+): Promise<string | null> {
   // Preview/login-as sessions have no refresh cookie: no private pricing.
-  if (!auth?.authToken || !auth.refreshToken) return false;
+  if (!auth?.authToken || !auth.refreshToken) return null;
 
   const exp = decodeJwtPayload(auth.authToken)?.exp;
-  if (typeof exp !== 'number' || !Number.isFinite(exp)) return false;
+  if (typeof exp !== 'number' || !Number.isFinite(exp)) return null;
   const now = Date.now();
   const untilExpiryMs = exp * 1000 - now - CLOCK_SAFETY_MS;
-  if (untilExpiryMs <= 0) return false;
+  if (untilExpiryMs <= 0) return null;
 
   const ttl = Math.min(TOKEN_VALIDITY_TTL_MS, untilExpiryMs);
   const tenantId =
@@ -86,7 +98,7 @@ async function isVerifiedBuyer(
     event.context.tenant?.config?.tenantId ??
     event.context.tenant?.hostname ??
     '';
-  if (!tenantId) return false;
+  if (!tenantId) return null;
 
   const key = createHash('sha256')
     .update(tenantId)
@@ -94,7 +106,8 @@ async function isVerifiedBuyer(
     .update(auth.authToken)
     .digest('hex');
 
-  if (validatedTokens.has(key)) return true;
+  const cached = validatedTokens.get(key);
+  if (cached !== undefined) return cached;
   const pending = inFlight.get(key);
   if (pending) return pending;
 
@@ -111,19 +124,22 @@ async function isVerifiedBuyer(
         identity.authenticated === false ||
         (typeof identity.id !== 'string' && typeof identity.id !== 'number')
       ) {
-        return false;
+        return null;
       }
+      const buyerId = String(identity.id);
+      if (!buyerId) return null;
 
       // Cap the cache lifetime again in case the SDK lookup took a while.
       const remaining = Math.min(
         ttl,
         exp * 1000 - Date.now() - CLOCK_SAFETY_MS,
       );
-      if (remaining > 0) validatedTokens.set(key, true, { ttl: remaining });
-      return remaining > 0;
+      if (remaining <= 0) return null;
+      validatedTokens.set(key, buyerId, { ttl: remaining });
+      return buyerId;
     } catch {
       // No private pricing on CRM/network/tenant config failure.
-      return false;
+      return null;
     }
   })();
   inFlight.set(key, verify);

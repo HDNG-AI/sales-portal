@@ -1,5 +1,9 @@
 import { defineStore } from 'pinia';
 import type { CartType } from '#shared/types/commerce';
+import type {
+  CartImportAddItem,
+  CartImportAddResult,
+} from '#shared/types/cart-import';
 import { filterVisibleCampaigns } from '#shared/types/commerce';
 import { COOKIE_NAMES } from '#shared/constants/storage';
 import { internalFetch } from '~/utils/internal-fetch';
@@ -123,6 +127,35 @@ export const useCartStore = defineStore('cart', () => {
     return updateQuantity(itemId, 0);
   }
 
+  /**
+   * Add the lines of an imported order file to the cart they were previewed
+   * against, or to a new cart when `previewedCartId` is undefined. The server
+   * adds them through the cart path and answers with the cart as it now
+   * stands, so the cart shown is the one Geins holds even when some lines were
+   * refused. Throws when the request itself fails; the cart is then fetched
+   * again rather than guessed.
+   */
+  async function importItems(
+    items: CartImportAddItem[],
+    previewedCartId: string | undefined,
+  ): Promise<Pick<CartImportAddResult, 'added' | 'failed'>> {
+    isLoading.value = true;
+    try {
+      const result = await $fetch<CartImportAddResult>('/api/cart/import/add', {
+        method: 'POST',
+        body: { cartId: previewedCartId, items },
+      });
+      cartId.value = result.cart.id;
+      setCart(result.cart);
+      return { added: result.added, failed: result.failed };
+    } catch (failure) {
+      await fetchCart();
+      throw failure;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   async function applyPromoCode(code: string) {
     if (!cartId.value) return;
     isLoading.value = true;
@@ -173,6 +206,7 @@ export const useCartStore = defineStore('cart', () => {
     addItem,
     updateQuantity,
     removeItem,
+    importItems,
     applyPromoCode,
     removePromoCode,
   };

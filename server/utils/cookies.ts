@@ -100,6 +100,18 @@ export function getCartCookie(event: H3Event) {
   return getCookie(event, COOKIE_NAMES.CART_ID);
 }
 
+/** Proof that the cart was handed to this browser (see ./cart-ownership.ts). */
+export function setCartOwnerCookie(event: H3Event, proof: string) {
+  setCookie(event, COOKIE_NAMES.CART_OWNER, proof, {
+    ...cookieDefaults(),
+    maxAge: 30 * 24 * 60 * 60, // 30 days, as long as the cart cookie
+  });
+}
+
+export function getCartOwnerCookie(event: H3Event) {
+  return getCookie(event, COOKIE_NAMES.CART_OWNER);
+}
+
 // --- Preview cookies ---
 
 /**

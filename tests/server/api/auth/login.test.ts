@@ -39,6 +39,11 @@ vi.mock('../../../../server/utils/rate-limiter', () => ({
   getClientIp: vi.fn().mockReturnValue('127.0.0.1'),
 }));
 
+const mockIssueCartProof = vi.fn();
+vi.mock('../../../../server/utils/cart-ownership', () => ({
+  issueCartProof: (...args: unknown[]) => mockIssueCartProof(...args),
+}));
+
 const mockSetAuthCookies = vi.fn();
 vi.stubGlobal('setAuthCookies', mockSetAuthCookies);
 
@@ -243,6 +248,11 @@ describe('POST /api/auth/login', () => {
       'access-token',
     );
     expect(mockSetCartCookie).toHaveBeenCalledWith(
+      mockEvent,
+      'authed-cart-456',
+    );
+    // So the buyer can import a file into the copied cart.
+    expect(mockIssueCartProof).toHaveBeenCalledWith(
       mockEvent,
       'authed-cart-456',
     );

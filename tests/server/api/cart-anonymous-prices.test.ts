@@ -46,6 +46,10 @@ const routeInput = {
   promoCode: 'PILOT',
 };
 
+// No cart ownership key: creating a cart sets no proof cookie.
+vi.mock('../../../server/utils/cart-ownership-config', () => ({
+  readCartOwnerSecret: () => '',
+}));
 vi.stubGlobal('withErrorHandling', async (fn: () => Promise<unknown>) => fn());
 vi.stubGlobal('wrapServiceCall', async (fn: () => Promise<unknown>) => fn());
 vi.stubGlobal('defineEventHandler', (fn: AnyFn) => fn);

@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  CART_IMPORT_MAX_FILE_BYTES,
+  CART_IMPORT_MAX_QUANTITY,
+  CART_IMPORT_MAX_ROWS,
+} from '#shared/constants/cart-import';
 import type {
   ConfigurationChange,
   CreateConfigurationInput,
@@ -173,6 +178,40 @@ export const CartPromoCodeSchema = z.object({
   promoCode: z.string().min(1).max(50),
 });
 export type CartPromoCodeInput = z.infer<typeof CartPromoCodeSchema>;
+
+// ---------------------------------------------------------------------------
+// Cart — file import
+// ---------------------------------------------------------------------------
+/** Base64 grows a file by 4/3; anything longer is over the file limit. */
+const CART_IMPORT_MAX_BASE64_LENGTH =
+  Math.ceil(CART_IMPORT_MAX_FILE_BYTES / 3) * 4;
+
+export const CartImportPreviewSchema = z.object({
+  fileName: z.string().trim().min(1).max(255),
+  content: z
+    .string()
+    .min(1)
+    .max(CART_IMPORT_MAX_BASE64_LENGTH)
+    .regex(/^[A-Za-z0-9+/]*={0,2}$/),
+  cartId: z.string().min(1).optional(),
+});
+export type CartImportPreviewInput = z.infer<typeof CartImportPreviewSchema>;
+
+export const CartImportAddSchema = z.object({
+  cartId: z.string().min(1).optional(),
+  items: z
+    .array(
+      z.object({
+        skuId: z.number().int().positive(),
+        quantity: z.number().int().min(1).max(CART_IMPORT_MAX_QUANTITY),
+        articleNumber: z.string().max(200),
+        inCartQuantity: z.number().int().min(0).max(CART_IMPORT_MAX_QUANTITY),
+      }),
+    )
+    .min(1)
+    .max(CART_IMPORT_MAX_ROWS),
+});
+export type CartImportAddInput = z.infer<typeof CartImportAddSchema>;
 
 // ---------------------------------------------------------------------------
 // Auth — Password Reset
