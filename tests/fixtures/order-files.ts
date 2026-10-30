@@ -23,10 +23,14 @@ function crc32(data: Buffer): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-/** A ZIP archive of the given entries, deflated unless `store` is set. */
+/**
+ * A ZIP archive of the given entries, deflated unless `store` is set.
+ * `declaredSizes` writes another uncompressed size into an entry's headers
+ * than the true one, as a hostile archive can.
+ */
 export function buildZip(
   files: Record<string, string | Buffer>,
-  options: { store?: boolean } = {},
+  options: { store?: boolean; declaredSizes?: Record<string, number> } = {},
 ): Buffer {
   const locals: Buffer[] = [];
   const directory: Buffer[] = [];
@@ -39,6 +43,7 @@ export function buildZip(
     const nameBytes = Buffer.from(name, 'utf8');
     const crc = crc32(data);
     const method = options.store ? 0 : 8;
+    const size = options.declaredSizes?.[name] ?? data.length;
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
@@ -46,7 +51,7 @@ export function buildZip(
     local.writeUInt16LE(method, 8);
     local.writeUInt32LE(crc, 14);
     local.writeUInt32LE(packed.length, 18);
-    local.writeUInt32LE(data.length, 22);
+    local.writeUInt32LE(size, 22);
     local.writeUInt16LE(nameBytes.length, 26);
     locals.push(local, nameBytes, packed);
 
@@ -57,7 +62,7 @@ export function buildZip(
     entry.writeUInt16LE(method, 10);
     entry.writeUInt32LE(crc, 16);
     entry.writeUInt32LE(packed.length, 20);
-    entry.writeUInt32LE(data.length, 24);
+    entry.writeUInt32LE(size, 24);
     entry.writeUInt16LE(nameBytes.length, 28);
     entry.writeUInt32LE(offset, 42);
     directory.push(entry, nameBytes);
@@ -119,14 +124,18 @@ export function sheetXml(
 }
 
 export interface WorkbookOptions {
-  /** Worksheets in workbook order; the first one is what the import reads. */
-  sheets: Array<{ name: string; xml: string }>;
+  /** Worksheets in workbook order; the first visible one is what is read. */
+  sheets: Array<{ name: string; xml: string; state?: 'hidden' | 'veryHidden' }>;
   /** Shared string table; plain strings or raw `<si>` inner XML. */
   sharedStrings?: string[];
   /** Custom number formats by id. */
   numberFormats?: Record<number, string>;
   /** numFmtId per style index (`s` attribute). */
   cellFormats?: number[];
+  /** Parts written as given, replacing a generated part with the same path. */
+  parts?: Record<string, string | Buffer>;
+  /** Uncompressed sizes to declare instead of the true ones, by part path. */
+  declaredSizes?: Record<string, number>;
 }
 
 /**
@@ -147,7 +156,7 @@ export function buildXlsx(options: WorkbookOptions): Buffer {
     )
     .join('');
 
-  const files: Record<string, string> = {
+  const files: Record<string, string | Buffer> = {
     '[Content_Types].xml':
       '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>',
     '_rels/.rels':
@@ -160,7 +169,7 @@ export function buildXlsx(options: WorkbookOptions): Buffer {
       parts
         .map(
           (part, index) =>
-            `<sheet name="${escapeXml(part.name)}" sheetId="${index + 1}" r:id="${part.id}"/>`,
+            `<sheet name="${escapeXml(part.name)}" sheetId="${index + 1}"${part.state ? ` state="${part.state}"` : ''} r:id="${part.id}"/>`,
         )
         .join('') +
       '</sheets></workbook>',
@@ -198,7 +207,8 @@ export function buildXlsx(options: WorkbookOptions): Buffer {
       '</cellXfs></styleSheet>',
   };
   for (const part of parts) files[`xl/${part.path}`] = part.xml;
-  return buildZip(files);
+  Object.assign(files, options.parts);
+  return buildZip(files, { declaredSizes: options.declaredSizes });
 }
 
 /** Bytes of `text` in Windows-1252, for the characters Swedish files use. */

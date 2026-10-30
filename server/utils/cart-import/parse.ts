@@ -59,8 +59,12 @@ const EXTENSIONS = new Set(['xlsx', 'xls', 'csv']);
 const OLE_SIGNATURE = Buffer.from([
   0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
 ]);
-/** How a long number reads after Excel has shortened it ("1,23457E+13"). */
-const SCIENTIFIC = /^[+-]?\d+(?:[.,]\d+)?e[+-]?\d+$/i;
+/**
+ * How Excel writes a number too long for its General format to a CSV
+ * ("1,23457E+13"): one digit, perhaps a fraction, and a signed exponent of
+ * two digits or more. An article number such as 12E5 never has that shape.
+ */
+const EXCEL_SCIENTIFIC = /^-?\d(?:[.,]\d+)?e[+-]\d{2,}$/i;
 const INVISIBLE = /[\u200b-\u200d\u2060\ufeff]/g;
 
 export interface OrderFileEntry {
@@ -222,7 +226,10 @@ export function parseOrderFile(
       });
       continue;
     }
-    if (articleCell?.altered || SCIENTIFIC.test(article)) {
+    // A workbook keeps a number's stored digits and text as it was typed, so
+    // Excel's shortened display text can only reach us through a CSV.
+    const excelScientific = format === 'csv' && EXCEL_SCIENTIFIC.test(article);
+    if (articleCell?.altered || excelScientific) {
       problems.push({
         reason: 'article_number_altered',
         rows,

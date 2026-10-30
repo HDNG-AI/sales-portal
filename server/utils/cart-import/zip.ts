@@ -99,8 +99,10 @@ export function listZipEntries(content: Buffer): Map<string, ZipEntry> {
 }
 
 /**
- * Inflate one entry. `maxBytes` caps the output whatever the directory
- * claims the size to be: zlib stops and throws once it is passed.
+ * Inflate one entry. An entry the directory declares larger than `maxBytes`
+ * is refused before anything is inflated. Since the declared size can lie,
+ * `maxBytes` also caps the actual output: zlib stops and throws once it is
+ * passed.
  */
 export function readZipEntry(
   content: Buffer,
@@ -108,6 +110,7 @@ export function readZipEntry(
   maxBytes: number,
 ): Buffer {
   if (entry.flags & 0x1) throw new ZipReadError('Encrypted entry');
+  if (entry.size > maxBytes) throw new ZipReadError('Entry too large');
   const local = entry.localOffset;
   if (
     local + 30 > content.length ||

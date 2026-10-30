@@ -90,6 +90,12 @@ export function readDelimitedRows(
   let truncated = false;
   let cells: string[] = [];
   let field = '';
+  /**
+   * Whether `field` holds more than whitespace, kept as characters arrive
+   * rather than by trimming the field at every quote, which takes quadratic
+   * time on a long line of quotes.
+   */
+  let fieldHasContent = false;
   let inQuotes = false;
   let fieldQuoted = false;
   let rowNumber = 0;
@@ -97,6 +103,7 @@ export function readDelimitedRows(
   const endField = () => {
     if (cells.length < SHEET_MAX_COLUMNS) cells.push(field);
     field = '';
+    fieldHasContent = false;
     fieldQuoted = false;
   };
   /** False once the limit is passed and reading should stop. */
@@ -122,7 +129,7 @@ export function readDelimitedRows(
         field += '"';
         index += 1;
       } else inQuotes = false;
-    } else if (char === '"' && !fieldQuoted && !field.trim()) {
+    } else if (char === '"' && !fieldQuoted && !fieldHasContent) {
       field = '';
       inQuotes = true;
       fieldQuoted = true;
@@ -133,6 +140,7 @@ export function readDelimitedRows(
       if (!endRow()) break;
     } else {
       field += char;
+      if (char.trim()) fieldHasContent = true;
     }
   }
   if (!truncated && (field || cells.length || fieldQuoted)) endRow();

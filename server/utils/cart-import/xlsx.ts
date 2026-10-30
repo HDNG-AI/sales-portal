@@ -4,7 +4,7 @@ import type { SheetCell, SheetReadResult, SheetRow } from './sheet';
 import { SHEET_MAX_COLUMNS, isBlankSheetRow } from './sheet';
 
 /**
- * Reads the first worksheet of an .xlsx workbook as cell text.
+ * Reads the first visible worksheet of an .xlsx workbook as cell text.
  *
  * Only cached values are read; a formula is never evaluated, and one with no
  * cached value reads as empty. Numbers are given back as their exact stored
@@ -12,39 +12,105 @@ import { SHEET_MAX_COLUMNS, isBlankSheetRow } from './sheet';
  * number into scientific notation. A zero-padding number format such as
  * `000000` is applied, so leading zeros the buyer sees in Excel survive.
  *
- * SpreadsheetML is regular, machine-written XML, so the parts are read with
- * patterns rather than a DOM; element names may carry a namespace prefix.
+ * SpreadsheetML is regular, machine-written XML, so the parts are read by
+ * scanning for tags rather than through a DOM; element names may carry a
+ * namespace prefix. Every scan only moves forward, so reading a part takes
+ * time in proportion to its size, and an element that is never closed makes
+ * the workbook unreadable.
  */
 
-/** Ceiling for any one inflated part of the workbook. */
-const MAX_PART_BYTES = 32 * 1024 * 1024;
+/**
+ * Ceiling for all inflated parts together. An order file needs a small
+ * fraction of it; the ceiling bounds the memory and time one upload can cost.
+ */
+export const XLSX_MAX_INFLATED_BYTES = 8 * 1024 * 1024;
 
-/** An optional namespace prefix in front of an element name. */
-const NS = '(?:[\\w.-]+:)?';
+/**
+ * Ceiling for each part that describes the workbook rather than holding its
+ * cells: the relationships, the workbook part and the styles.
+ */
+export const XLSX_MAX_STRUCTURE_PART_BYTES = 1024 * 1024;
 
-const ROW = new RegExp(
-  `<${NS}row\\b([^>]*?)(?:/>|>([\\s\\S]*?)</${NS}row>)`,
-  'g',
-);
-const CELL = new RegExp(`<${NS}c\\b([^>]*?)(?:/>|>([\\s\\S]*?)</${NS}c>)`, 'g');
-const VALUE = new RegExp(`<${NS}v(?:\\s[^>]*)?(?<!/)>([\\s\\S]*?)</${NS}v>`);
-const INLINE_STRING = new RegExp(`<${NS}is\\b[^>]*>([\\s\\S]*?)</${NS}is>`);
-const SHARED_STRING = new RegExp(
-  `<${NS}si\\b[^>]*?(?:/>|>([\\s\\S]*?)</${NS}si>)`,
-  'g',
-);
-const TEXT = new RegExp(
-  `<${NS}t(?:\\s[^>]*)?(?<!/)>([\\s\\S]*?)</${NS}t>`,
-  'g',
-);
-const PHONETIC = new RegExp(`<${NS}rPh\\b[\\s\\S]*?</${NS}rPh>`, 'g');
-const RELATIONSHIP = new RegExp(`<${NS}Relationship\\b([^>]*?)/?>`, 'g');
-const FIRST_SHEET = new RegExp(`<${NS}sheet\\b([^>]*?)/?>`);
-const NUMBER_FORMAT = new RegExp(`<${NS}numFmt\\b([^>]*?)/?>`, 'g');
-const CELL_FORMATS = new RegExp(
-  `<${NS}cellXfs\\b[^>]*>([\\s\\S]*?)</${NS}cellXfs>`,
-);
-const CELL_FORMAT = new RegExp(`<${NS}xf\\b([^>]*?)/?>`, 'g');
+/**
+ * A start tag named one of `names`, behind an optional namespace prefix.
+ * Captures the qualified name, the local name and the attribute text (with
+ * the `/` of a self-closing tag). It cannot match across a `<`, so a search
+ * for it never runs on through the rest of the part.
+ */
+function startTag(names: string): RegExp {
+  return new RegExp(`<((?:[\\w.-]+:)?(${names}))(?=[\\s/>])([^<>]*)>`, 'g');
+}
+
+const ROW = startTag('row');
+const CELL = startTag('c');
+const VALUE = startTag('v');
+const INLINE_STRING = startTag('is');
+const SHARED_STRING = startTag('si');
+/** Text runs, and the phonetic runs whose text is left out. */
+const TEXT = startTag('t|rPh');
+const RELATIONSHIP = startTag('Relationship');
+const SHEET = startTag('sheet');
+const NUMBER_FORMAT = startTag('numFmt');
+const CELL_FORMATS = startTag('cellXfs');
+const CELL_FORMAT = startTag('xf');
+
+interface XmlElement {
+  /** Local name, without a namespace prefix. */
+  name: string;
+  attributes: string;
+  /** Everything between the start and end tag; empty when self-closing. */
+  inner: string;
+}
+
+/**
+ * The elements `tag` matches, in document order, without looking inside one
+ * for more. Each end tag is found with `indexOf` from its start tag on, so
+ * the scan never goes back; an element with no end tag throws rather than
+ * being searched for again from every later start tag.
+ */
+function* elements(xml: string, tag: RegExp): Generator<XmlElement> {
+  let position = 0;
+  for (;;) {
+    // Set before every search: another scan with the same pattern may have
+    // run while this one was suspended.
+    tag.lastIndex = position;
+    const match = tag.exec(xml);
+    if (!match) return;
+    const [, qualifiedName = '', name = '', rawAttributes = ''] = match;
+    const contentStart = tag.lastIndex;
+    if (rawAttributes.endsWith('/')) {
+      position = contentStart;
+      yield { name, attributes: rawAttributes.slice(0, -1), inner: '' };
+      continue;
+    }
+    const endTag = `</${qualifiedName}>`;
+    const end = xml.indexOf(endTag, contentStart);
+    if (end < 0) throw new ZipReadError(`Unclosed <${qualifiedName}> element`);
+    position = end + endTag.length;
+    yield {
+      name,
+      attributes: rawAttributes,
+      inner: xml.slice(contentStart, end),
+    };
+  }
+}
+
+function firstElement(xml: string, tag: RegExp): XmlElement | undefined {
+  for (const element of elements(xml, tag)) return element;
+  return undefined;
+}
+
+/** Attribute text of every start tag `tag` matches, whatever follows it. */
+function* startTags(xml: string, tag: RegExp): Generator<string> {
+  let position = 0;
+  for (;;) {
+    tag.lastIndex = position;
+    const match = tag.exec(xml);
+    if (!match) return;
+    position = tag.lastIndex;
+    yield (match[3] ?? '').replace(/\/$/, '');
+  }
+}
 
 /** Built-in number formats that render a date or time. */
 const BUILTIN_DATE_FORMATS = new Set([
@@ -59,6 +125,8 @@ interface CellFormat {
 }
 
 function decodeXml(text: string): string {
+  // Most values have nothing to decode; spare them both passes.
+  if (!text.includes('&') && !text.includes('_x')) return text;
   return text
     .replace(
       /&(lt|gt|amp|quot|apos|#\d+|#x[0-9a-fA-F]+);/g,
@@ -89,10 +157,16 @@ function decodeXml(text: string): string {
     );
 }
 
+/** Compiled once per name, not per call: a sheet can hold millions of cells. */
+const ATTRIBUTE_PATTERNS = new Map<string, RegExp>();
+
 function attribute(attributes: string, name: string): string | undefined {
-  const match = new RegExp(
-    `(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`,
-  ).exec(attributes);
+  let pattern = ATTRIBUTE_PATTERNS.get(name);
+  if (!pattern) {
+    pattern = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`);
+    ATTRIBUTE_PATTERNS.set(name, pattern);
+  }
+  const match = pattern.exec(attributes);
   return match ? decodeXml(match[1] ?? match[2] ?? '') : undefined;
 }
 
@@ -103,8 +177,8 @@ function relationshipId(attributes: string): string | undefined {
 
 function textOf(fragment: string): string {
   let text = '';
-  for (const match of fragment.replace(PHONETIC, '').matchAll(TEXT)) {
-    text += decodeXml(match[1] ?? '');
+  for (const run of elements(fragment, TEXT)) {
+    if (run.name === 't') text += decodeXml(run.inner);
   }
   return text;
 }
@@ -140,34 +214,36 @@ interface Relationship {
 
 function readRelationships(xml: string | null): Relationship[] {
   if (!xml) return [];
-  return [...xml.matchAll(RELATIONSHIP)].map((match) => ({
-    id: attribute(match[1] ?? '', 'Id') ?? '',
-    type: attribute(match[1] ?? '', 'Type') ?? '',
-    target: attribute(match[1] ?? '', 'Target') ?? '',
+  return Array.from(startTags(xml, RELATIONSHIP), (attributes) => ({
+    id: attribute(attributes, 'Id') ?? '',
+    type: attribute(attributes, 'Type') ?? '',
+    target: attribute(attributes, 'Target') ?? '',
   }));
 }
 
+// A bracketed section stops at the next `[` as well as at its `]`, so a run
+// of unclosed brackets is passed over once rather than once per bracket.
 function isDateFormatCode(code: string): boolean {
-  const unquoted = code.replace(/"[^"]*"|\[[^\]]*\]|\\./g, '');
+  const unquoted = code.replace(/"[^"]*"|\[[^[\]]*\]|\\./g, '');
   return /[dmyhs]/i.test(unquoted);
 }
 
 function zeroPadWidth(code: string): number {
-  const section = (code.split(';')[0] ?? '').replace(/\[[^\]]*\]/g, '').trim();
+  const section = (code.split(';')[0] ?? '').replace(/\[[^[\]]*\]/g, '').trim();
   return /^0+$/.test(section) ? section.length : 0;
 }
 
 function readCellFormats(xml: string | null): CellFormat[] {
   if (!xml) return [];
   const custom = new Map<number, string>();
-  for (const match of xml.matchAll(NUMBER_FORMAT)) {
-    const id = Number(attribute(match[1] ?? '', 'numFmtId'));
-    const code = attribute(match[1] ?? '', 'formatCode');
+  for (const attributes of startTags(xml, NUMBER_FORMAT)) {
+    const id = Number(attribute(attributes, 'numFmtId'));
+    const code = attribute(attributes, 'formatCode');
     if (Number.isInteger(id) && code !== undefined) custom.set(id, code);
   }
-  const section = CELL_FORMATS.exec(xml)?.[1] ?? '';
-  return [...section.matchAll(CELL_FORMAT)].map((match) => {
-    const id = Number(attribute(match[1] ?? '', 'numFmtId') ?? 0);
+  const section = firstElement(xml, CELL_FORMATS)?.inner ?? '';
+  return Array.from(startTags(section, CELL_FORMAT), (attributes) => {
+    const id = Number(attribute(attributes, 'numFmtId') ?? 0);
     const code = custom.get(id);
     if (code === undefined) {
       return { padWidth: 0, isDate: BUILTIN_DATE_FORMATS.has(id) };
@@ -178,9 +254,7 @@ function readCellFormats(xml: string | null): CellFormat[] {
 
 function readSharedStrings(xml: string | null): string[] {
   if (!xml) return [];
-  return [...xml.matchAll(SHARED_STRING)].map((match) =>
-    textOf(match[1] ?? ''),
-  );
+  return Array.from(elements(xml, SHARED_STRING), (item) => textOf(item.inner));
 }
 
 /**
@@ -214,16 +288,17 @@ function cellValue(
   formats: CellFormat[],
 ): SheetCell {
   const type = attribute(attributes, 't') ?? 'n';
-  const value = decodeXml(VALUE.exec(inner)?.[1] ?? '');
+  const value = decodeXml(firstElement(inner, VALUE)?.inner ?? '');
   switch (type) {
     case 's': {
-      const index = Number(value);
+      // No value is an empty cell, not shared string 0.
+      const index = value.trim();
       return {
-        text: Number.isInteger(index) ? (sharedStrings[index] ?? '') : '',
+        text: /^\d+$/.test(index) ? (sharedStrings[Number(index)] ?? '') : '',
       };
     }
     case 'inlineStr':
-      return { text: textOf(INLINE_STRING.exec(inner)?.[1] ?? '') };
+      return { text: textOf(firstElement(inner, INLINE_STRING)?.inner ?? '') };
     case 'str':
       return { text: value };
     case 'b':
@@ -244,65 +319,79 @@ export function readFirstWorksheet(
   maxRows: number,
 ): SheetReadResult {
   const entries = listZipEntries(content);
-  const read = (name: string): string | null => {
+  let budget = XLSX_MAX_INFLATED_BYTES;
+  /** A part, within its own ceiling and what is left of the budget. */
+  const read = (name: string, ceiling: number): string | null => {
     const entry = entries.get(name);
     if (!entry) return null;
-    return readZipEntry(content, entry, MAX_PART_BYTES)
-      .toString('utf8')
-      .replace(/^\uFEFF/, '');
+    const data = readZipEntry(content, entry, Math.min(ceiling, budget));
+    budget -= data.length;
+    return data.toString('utf8').replace(/^\uFEFF/, '');
   };
+  const readStructure = (name: string) =>
+    read(name, XLSX_MAX_STRUCTURE_PART_BYTES);
 
-  const officeDocument = readRelationships(read('_rels/.rels')).find((rel) =>
-    rel.type.endsWith('/officeDocument'),
+  const officeDocument = readRelationships(readStructure('_rels/.rels')).find(
+    (rel) => rel.type.endsWith('/officeDocument'),
   );
   const workbookPath = officeDocument
     ? partPath('', officeDocument.target)
     : 'xl/workbook.xml';
-  const workbook = read(workbookPath);
+  const workbook = readStructure(workbookPath);
   if (!workbook) throw new ZipReadError('No workbook part');
 
   const workbookRelationships = readRelationships(
-    read(relationshipsPath(workbookPath)),
+    readStructure(relationshipsPath(workbookPath)),
   );
   const related = (suffix: string, fallback: string): string => {
     const rel = workbookRelationships.find((r) => r.type.endsWith(suffix));
     return rel ? partPath(workbookPath, rel.target) : fallback;
   };
 
-  const firstSheet = FIRST_SHEET.exec(workbook);
-  const sheetId = firstSheet ? relationshipId(firstSheet[1] ?? '') : undefined;
+  // A hidden sheet is usually a lookup list; the buyer means the first one
+  // Excel shows. With every sheet hidden, the first one is all there is.
+  const sheets = Array.from(startTags(workbook, SHEET));
+  const firstSheet =
+    sheets.find((sheet) => {
+      const state = attribute(sheet, 'state');
+      return state === undefined || state === 'visible';
+    }) ?? sheets[0];
+  const sheetId = firstSheet ? relationshipId(firstSheet) : undefined;
   const sheetRelationship = workbookRelationships.find((r) => r.id === sheetId);
   const sheetPath = sheetRelationship
     ? partPath(workbookPath, sheetRelationship.target)
     : 'xl/worksheets/sheet1.xml';
-  const sheet = read(sheetPath);
+  const sheet = read(sheetPath, XLSX_MAX_INFLATED_BYTES);
   if (!sheet) throw new ZipReadError('No worksheet part');
 
   const sharedStrings = readSharedStrings(
-    read(related('/sharedStrings', 'xl/sharedStrings.xml')),
+    read(
+      related('/sharedStrings', 'xl/sharedStrings.xml'),
+      XLSX_MAX_INFLATED_BYTES,
+    ),
   );
-  const formats = readCellFormats(read(related('/styles', 'xl/styles.xml')));
+  const formats = readCellFormats(
+    readStructure(related('/styles', 'xl/styles.xml')),
+  );
 
   const rows: SheetRow[] = [];
   let truncated = false;
   let previousRow = 0;
-  for (const rowMatch of sheet.matchAll(ROW)) {
-    const rowNumber =
-      Number(attribute(rowMatch[1] ?? '', 'r')) || previousRow + 1;
+  for (const row of elements(sheet, ROW)) {
+    const rowNumber = Number(attribute(row.attributes, 'r')) || previousRow + 1;
     previousRow = rowNumber;
 
     const cells: SheetCell[] = [];
     let previousColumn = -1;
-    for (const cellMatch of (rowMatch[2] ?? '').matchAll(CELL)) {
-      const attributes = cellMatch[1] ?? '';
+    for (const cell of elements(row.inner, CELL)) {
       const column =
-        columnIndex(attribute(attributes, 'r')) ?? previousColumn + 1;
+        columnIndex(attribute(cell.attributes, 'r')) ?? previousColumn + 1;
       previousColumn = column;
       if (column >= SHEET_MAX_COLUMNS) continue;
       while (cells.length < column) cells.push({ text: '' });
       cells[column] = cellValue(
-        attributes,
-        cellMatch[2] ?? '',
+        cell.attributes,
+        cell.inner,
         sharedStrings,
         formats,
       );

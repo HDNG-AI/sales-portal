@@ -7,6 +7,10 @@ import {
   parseOrderQuantity,
 } from '../../../../server/utils/cart-import/parse';
 import {
+  XLSX_MAX_INFLATED_BYTES,
+  XLSX_MAX_STRUCTURE_PART_BYTES,
+} from '../../../../server/utils/cart-import/xlsx';
+import {
   listZipEntries,
   readZipEntry,
   ZipReadError,
@@ -61,6 +65,31 @@ const header: XlsxCell[] = [
   { ref: 'A1', type: 'inlineStr', text: 'Artikelnummer' },
   { ref: 'B1', type: 'inlineStr', text: 'Antal' },
 ];
+
+/** A heading and one order line in rows 1 and 2. */
+function orderRows(article: string, quantity: string): XlsxCell[][] {
+  return [
+    header,
+    [
+      { ref: 'A2', type: 'inlineStr', text: article },
+      { ref: 'B2', raw: quantity },
+    ],
+  ];
+}
+
+function orderSheet(article: string, quantity: string): string {
+  return sheetXml(
+    orderRows(article, quantity).map((cells, index) => ({
+      r: index + 1,
+      cells,
+    })),
+  );
+}
+
+/** Where `buildXlsx` puts the parts of a one-sheet workbook. */
+const SHEET_PART = 'xl/worksheets/sheet1.xml';
+const SHARED_STRINGS_PART = 'xl/sharedStrings.xml';
+const STYLES_PART = 'xl/styles.xml';
 
 describe('parseOrderFile — CSV delimiters', () => {
   it('reads a semicolon file with a recognised heading', () => {
@@ -204,6 +233,68 @@ describe('parseOrderFile — XLSX', () => {
     expect(result.entries).toEqual([
       { articleNumber: 'FIRST-1', quantity: 2, rows: [2] },
     ]);
+  });
+
+  it.each(['hidden', 'veryHidden'] as const)(
+    'reads the first visible sheet, not a %s one before it',
+    (state) => {
+      const content = buildXlsx({
+        sheets: [
+          { name: 'Lookup', xml: orderSheet('HIDDEN-1', '1'), state },
+          { name: 'Order', xml: orderSheet('VISIBLE-1', '2') },
+        ],
+      });
+      expect(read(content, 'order.xlsx').entries).toEqual([
+        { articleNumber: 'VISIBLE-1', quantity: 2, rows: [2] },
+      ]);
+    },
+  );
+
+  it('reads the first sheet when every sheet is hidden', () => {
+    const content = buildXlsx({
+      sheets: [
+        { name: 'A', xml: orderSheet('FIRST-1', '1'), state: 'hidden' },
+        { name: 'B', xml: orderSheet('SECOND-1', '2'), state: 'veryHidden' },
+      ],
+    });
+    expect(read(content, 'order.xlsx').entries).toEqual([
+      { articleNumber: 'FIRST-1', quantity: 1, rows: [2] },
+    ]);
+  });
+
+  it('reads a shared-string cell with no value as empty, not as the first string', () => {
+    const content = workbook(
+      [
+        [
+          { ref: 'A1', type: 's', raw: '0' },
+          { ref: 'B1', type: 's', raw: '1' },
+        ],
+        [
+          { ref: 'A2', type: 's' },
+          { ref: 'B2', raw: '2' },
+        ],
+      ],
+      { sharedStrings: ['Artikelnummer', 'Antal'] },
+    );
+    const result = read(content, 'order.xlsx');
+    expect(result.entries).toEqual([]);
+    expect(result.problems).toEqual([
+      {
+        reason: 'missing_article_number',
+        rows: [2],
+        articleNumber: '',
+        quantity: '2',
+      },
+    ]);
+  });
+
+  it('takes a text cell such as 12E5 as written', () => {
+    const content = workbook(orderRows('12E5', '1'));
+    const result = read(content, 'order.xlsx');
+    expect(result.entries).toEqual([
+      { articleNumber: '12E5', quantity: 1, rows: [2] },
+    ]);
+    expect(result.problems).toEqual([]);
   });
 
   it('reads shared strings, rich text and inline strings, skipping phonetic runs', () => {
@@ -419,11 +510,24 @@ describe('parseOrderFile — XLSX', () => {
 
 describe('ZIP reading', () => {
   it('stops inflating at the ceiling whatever the archive claims', () => {
-    const archive = buildZip({ 'big.xml': Buffer.alloc(200_000, 0x20) });
+    const archive = buildZip(
+      { 'big.xml': Buffer.alloc(200_000, 0x20) },
+      { declaredSizes: { 'big.xml': 1_000 } },
+    );
     const entry = listZipEntries(archive).get('big.xml');
     expect(entry).toBeDefined();
     expect(() => readZipEntry(archive, entry!, 10_000)).toThrow(ZipReadError);
     expect(readZipEntry(archive, entry!, 200_000)).toHaveLength(200_000);
+  });
+
+  it('refuses an entry whose header declares more than the ceiling before inflating it', () => {
+    const archive = buildZip(
+      { 'small.xml': 'x' },
+      { declaredSizes: { 'small.xml': 200_000 } },
+    );
+    const entry = listZipEntries(archive).get('small.xml')!;
+    expect(() => readZipEntry(archive, entry, 10_000)).toThrow(ZipReadError);
+    expect(readZipEntry(archive, entry, 200_000).toString()).toBe('x');
   });
 
   it('refuses an encrypted entry', () => {
@@ -592,6 +696,26 @@ describe('parseOrderFile — cleaning and quantities', () => {
     });
   });
 
+  it.each(['1.23457E+13', '1E+15', '-1,5E-05'])(
+    'flags %s, another shape Excel writes a shortened number in',
+    (article) => {
+      const result = read(text(`Artikelnummer;Antal\n${article};1\n`));
+      expect(result.problems[0]).toMatchObject({
+        reason: 'article_number_altered',
+        rows: [2],
+      });
+    },
+  );
+
+  it('takes an article number such as 12E5 as written, since Excel never writes one so', () => {
+    const result = read(text('Artikelnummer;Antal\n12E5;1\n3e10;2\n'));
+    expect(result.entries).toEqual([
+      { articleNumber: '12E5', quantity: 1, rows: [2] },
+      { articleNumber: '3e10', quantity: 2, rows: [3] },
+    ]);
+    expect(result.problems).toEqual([]);
+  });
+
   it('refuses a quantity above the cart line limit, also when duplicates add up to it', () => {
     const result = read(
       text('Artikelnummer;Antal\nA-1;1000\nB-1;600\nB-1;400\n'),
@@ -665,6 +789,173 @@ describe('parseOrderFile — limits', () => {
     expect(
       refusal(Buffer.from([0x25, 0x50, 0x44, 0x46, 0x00, 0x01]), 'order.csv'),
     ).toBe('unsupported_format');
+  });
+});
+
+describe('parseOrderFile — XLSX inflate budget', () => {
+  /** `xml` with trailing spaces up to `bytes`. */
+  function padded(xml: string, bytes: number): string {
+    return xml + ' '.repeat(bytes - Buffer.byteLength(xml));
+  }
+
+  /** More than half the budget, so two such parts cannot both fit. */
+  const half = XLSX_MAX_INFLATED_BYTES / 2 + 1024;
+
+  it('reads a workbook that inflates to nearly the whole budget', () => {
+    const content = workbook(orderRows('A-1', '1'), {
+      parts: {
+        [SHEET_PART]: padded(
+          orderSheet('A-1', '1'),
+          XLSX_MAX_INFLATED_BYTES - 64 * 1024,
+        ),
+      },
+    });
+    expect(read(content, 'order.xlsx').entries).toHaveLength(1);
+  });
+
+  it('refuses a part whose header declares more than the budget', () => {
+    const content = workbook(orderRows('A-1', '1'), {
+      declaredSizes: { [SHEET_PART]: XLSX_MAX_INFLATED_BYTES + 1 },
+    });
+    expect(refusal(content, 'order.xlsx')).toBe('unreadable');
+  });
+
+  it.each([
+    '_rels/.rels',
+    'xl/workbook.xml',
+    'xl/_rels/workbook.xml.rels',
+    STYLES_PART,
+  ])('refuses %s when it declares more than its own ceiling', (part) => {
+    const content = workbook(orderRows('A-1', '1'), {
+      declaredSizes: { [part]: XLSX_MAX_STRUCTURE_PART_BYTES + 1 },
+    });
+    expect(refusal(content, 'order.xlsx')).toBe('unreadable');
+  });
+
+  it('refuses parts that together declare more than the budget', () => {
+    const content = workbook(orderRows('A-1', '1'), {
+      parts: {
+        [SHEET_PART]: padded(orderSheet('A-1', '1'), half),
+        [SHARED_STRINGS_PART]: padded('<sst></sst>', half),
+      },
+    });
+    expect(refusal(content, 'order.xlsx')).toBe('unreadable');
+  });
+
+  it('refuses parts that together inflate past the budget, whatever their headers declare', () => {
+    const content = workbook(orderRows('A-1', '1'), {
+      parts: {
+        [SHEET_PART]: padded(orderSheet('A-1', '1'), half),
+        [SHARED_STRINGS_PART]: padded('<sst></sst>', half),
+      },
+      declaredSizes: { [SHEET_PART]: 1024, [SHARED_STRINGS_PART]: 1024 },
+    });
+    expect(refusal(content, 'order.xlsx')).toBe('unreadable');
+  });
+});
+
+describe('parseOrderFile — hostile input in linear time', () => {
+  /**
+   * Each input below took seconds while a reader searched the rest of the
+   * file again for every tag or quote; read in one forward pass it takes
+   * milliseconds. The limit sits far from both.
+   */
+  const TIME_LIMIT_MS = 500;
+  const TAGS = 64 * 1024;
+
+  function timed<T>(run: () => T): { result: T; ms: number } {
+    const started = performance.now();
+    const result = run();
+    return { result, ms: performance.now() - started };
+  }
+
+  function worksheet(body: string): string {
+    return `<worksheet><sheetData>${body}</sheetData></worksheet>`;
+  }
+
+  it.each<[string, Record<string, string>]>([
+    ['<row>', { [SHEET_PART]: worksheet('<row>'.repeat(TAGS)) }],
+    [
+      '<c>',
+      { [SHEET_PART]: worksheet(`<row r="1">${'<c>'.repeat(TAGS)}</row>`) },
+    ],
+    [
+      '<v>',
+      {
+        [SHEET_PART]: worksheet(
+          `<row r="1"><c r="A1">${'<v>'.repeat(TAGS)}</c></row>`,
+        ),
+      },
+    ],
+    [
+      '<is>',
+      {
+        [SHEET_PART]: worksheet(
+          `<row r="1"><c r="A1" t="inlineStr">${'<is>'.repeat(TAGS)}</c></row>`,
+        ),
+      },
+    ],
+    ['<si>', { [SHARED_STRINGS_PART]: `<sst>${'<si>'.repeat(TAGS)}</sst>` }],
+    [
+      '<t>',
+      { [SHARED_STRINGS_PART]: `<sst><si>${'<t>'.repeat(TAGS)}</si></sst>` },
+    ],
+    [
+      '<rPh>',
+      { [SHARED_STRINGS_PART]: `<sst><si>${'<rPh>'.repeat(TAGS)}</si></sst>` },
+    ],
+    [
+      '<cellXfs>',
+      { [STYLES_PART]: `<styleSheet>${'<cellXfs>'.repeat(TAGS)}</styleSheet>` },
+    ],
+  ])('refuses a workbook of %s elements never closed', (_tag, parts) => {
+    const content = workbook(orderRows('A-1', '1'), { parts });
+    const { result, ms } = timed(() => refusal(content, 'order.xlsx'));
+    expect(result).toBe('unreadable');
+    expect(ms).toBeLessThan(TIME_LIMIT_MS);
+  });
+
+  it('reads past start tags that never end', () => {
+    const content = workbook(orderRows('A-1', '1'), {
+      parts: {
+        'xl/_rels/workbook.xml.rels': `<Relationships>${'<Relationship'.repeat(TAGS / 2)}`,
+      },
+    });
+    const { result, ms } = timed(() => read(content, 'order.xlsx'));
+    expect(result.entries).toHaveLength(1);
+    expect(ms).toBeLessThan(TIME_LIMIT_MS);
+  });
+
+  it('reads a number format of unclosed brackets', () => {
+    const content = workbook(
+      [
+        header,
+        [
+          { ref: 'A2', raw: '1234', style: 1 },
+          { ref: 'B2', raw: '1' },
+        ],
+      ],
+      {
+        numberFormats: { 164: '['.repeat(TAGS / 2) },
+        cellFormats: [0, 164],
+      },
+    );
+    const { result, ms } = timed(() => read(content, 'order.xlsx'));
+    expect(result.entries[0]?.articleNumber).toBe('1234');
+    expect(ms).toBeLessThan(TIME_LIMIT_MS);
+  });
+
+  it.each([
+    ['a value and then quotes', `a${'"'.repeat(200_000)}`],
+    [
+      'spaces, a value and then quotes',
+      `${' '.repeat(60_000)}a${'"'.repeat(60_000)}`,
+    ],
+  ])('reads a CSV field of %s', (_shape, field) => {
+    const content = text(`Artikelnummer;Antal\n${field};1\n`);
+    const { result, ms } = timed(() => read(content));
+    expect(result.entries).toHaveLength(1);
+    expect(ms).toBeLessThan(TIME_LIMIT_MS);
   });
 });
 
