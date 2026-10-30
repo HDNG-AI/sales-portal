@@ -983,6 +983,8 @@
     "field_required": "Detta fält är obligatoriskt.",
     "invalid_email": "Ange en giltig e-postadress.",
     "select_placeholder": "Välj...",
-    "submit": "Skicka"
+    "submit": "Skicka",
+    "submit_success": "Tack — ditt meddelande har skickats.",
+    "submit_failed": "Något gick fel. Försök igen, eller kontakta oss via telefon."
   }
 }

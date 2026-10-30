@@ -104,7 +104,11 @@ watch(
 function isFormWidgetData(data: unknown): data is FormWidgetData {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as Record<string, unknown>;
-  return typeof d['sendFormToEmail'] === 'string' && Array.isArray(d['fields']);
+  return (
+    Array.isArray(d['fields']) &&
+    (typeof d['sendFormToEmail'] === 'string' ||
+      ['contact', 'support', 'newCustomer'].includes(String(d['formEndpoint'])))
+  );
 }
 
 const formWidgetData = computed<FormWidgetData | null>(() =>
