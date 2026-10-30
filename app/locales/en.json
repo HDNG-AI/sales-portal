@@ -135,6 +135,7 @@
       "columns_recognized": "Article numbers were read from column {article} and quantities from column {quantity}.",
       "columns_assumed": "No heading row was recognised, so column {article} was read as article numbers and column {quantity} as quantities.",
       "heading_skipped": "Row {row} was treated as a heading.",
+      "new_cart": "Your current cart could not be linked to your account, so the items will go into a new cart.",
       "table_caption": "Articles to add to the cart",
       "col_article": "Article number",
       "col_name": "Name",
@@ -182,7 +183,8 @@
       },
       "add_failures": {
         "rejected": "The cart did not accept the article",
-        "quantity_limit": "The cart line would exceed {max}"
+        "quantity_limit": "The cart line would exceed {max}",
+        "timed_out": "Not added in time. Try again; items already added will not be added twice"
       }
     }
   },

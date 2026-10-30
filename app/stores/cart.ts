@@ -128,19 +128,22 @@ export const useCartStore = defineStore('cart', () => {
   }
 
   /**
-   * Add the lines of an imported order file. The server adds them through the
-   * cart path and answers with the cart as it now stands, so the cart shown is
-   * the one Geins holds even when some lines were refused. Throws when the
-   * request itself fails; the cart is then fetched again rather than guessed.
+   * Add the lines of an imported order file to the cart they were previewed
+   * against, or to a new cart when `previewedCartId` is undefined. The server
+   * adds them through the cart path and answers with the cart as it now
+   * stands, so the cart shown is the one Geins holds even when some lines were
+   * refused. Throws when the request itself fails; the cart is then fetched
+   * again rather than guessed.
    */
   async function importItems(
     items: CartImportAddItem[],
+    previewedCartId: string | undefined,
   ): Promise<Pick<CartImportAddResult, 'added' | 'failed'>> {
     isLoading.value = true;
     try {
       const result = await $fetch<CartImportAddResult>('/api/cart/import/add', {
         method: 'POST',
-        body: { cartId: cartId.value || undefined, items },
+        body: { cartId: previewedCartId, items },
       });
       cartId.value = result.cart.id;
       setCart(result.cart);

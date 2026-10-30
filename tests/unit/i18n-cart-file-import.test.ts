@@ -37,6 +37,7 @@ const REASONS: Record<CartImportProblemReason, true> = {
 const ADD_FAILURES: Record<CartImportAddFailure, true> = {
   rejected: true,
   quantity_limit: true,
+  timed_out: true,
 };
 
 const LOCALES_DIR = resolve(__dirname, '../../app/locales');
@@ -52,6 +53,7 @@ describe('cart file import messages', () => {
     ) as {
       cart?: {
         file_import?: {
+          new_cart?: string;
           errors?: Record<string, string>;
           reasons?: Record<string, string>;
           add_failures?: Record<string, string>;
@@ -60,6 +62,7 @@ describe('cart file import messages', () => {
     };
     const section = messages.cart?.file_import;
     const missing = [
+      ...(section?.new_cart ? [] : ['new_cart']),
       ...Object.keys(FILE_ERRORS).filter((code) => !section?.errors?.[code]),
       ...Object.keys(REASONS).filter((code) => !section?.reasons?.[code]),
       ...Object.keys(ADD_FAILURES).filter(

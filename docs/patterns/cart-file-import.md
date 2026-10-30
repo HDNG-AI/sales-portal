@@ -20,6 +20,42 @@ The key has no seeded default in `storefront-settings-defaults.ts`, so an
 absent key is off. Whatever `access` says, both routes and the button also
 require a signed-in buyer and `orderPlacement`, and refuse in catalogue mode.
 
+The deployment also needs `NUXT_CART_OWNER_SECRET` (see "Whose cart" below).
+Without it both routes answer 503.
+
+## Who may call
+
+`guardCartImport` runs before the body is read:
+
+- a request without `Content-Length` is refused (411), and one declaring more
+  than the file limit allows is refused (413);
+- the session must be one Geins confirms (`verifiedBuyerId`, the same check
+  that decides private prices). A preview or login-as session has no refresh
+  token and is refused (401);
+- requests are limited per address and then per buyer, so a new
+  `X-Forwarded-For` does not lift the limit.
+
+## Whose cart
+
+A Geins cart belongs to no one, and its id sits in a cookie the client can
+read, so knowing an id must not be enough to read or fill the cart.
+`server/utils/cart-ownership.ts` keeps an httpOnly `cart_owner` cookie with
+an HMAC over the tenant, the cart id and the owner:
+
+- `POST /api/cart` gives the browser that created a cart a proof with no
+  buyer in it;
+- the first import by a signed-in buyer binds it to that buyer, so another
+  buyer who signs in on the same browser cannot use the cart;
+- a cart the import creates is bound to its buyer from the start.
+
+The preview reads a named cart only with a matching proof. Without one it
+counts from an empty cart and answers `newCart: true`; the dialog says the
+lines go into a new cart and adds without the old id. The add route refuses a
+named cart without proof (403). Carts created before the key was set, and
+every cart after the key changes, have no valid proof: the buyer keeps the
+cart, but their next import goes into a new one. Only the import checks the
+proof; the other cart routes still take any id.
+
 ## Flow
 
 ```
@@ -81,8 +117,17 @@ Prices are Geins' own for this buyer, passed through `protectProductPrices`.
 
 ## Adding
 
+Each line carries the `inCartQuantity` the preview showed, and the add brings
+the SKU to that plus the file's quantity. Pressing add again after a failure
+therefore adds nothing twice. When the named cart is gone or checked out, a
+new cart is made and its targets count from zero; any other failure to read
+the cart fails the request rather than swap the cart. The cart limit counts
+every line of the SKU, as the preview does.
+
 `addImportedItems` raises an existing line with `updateItem` and adds new
-SKUs with `addItem`, four at a time. The outcome is then read from the cart
-itself, not from the calls: a call can fail after Geins applied it, or race
-another. A SKU still short gets one sequential top-up. What is reported added
-is in the cart, and nothing else is.
+SKUs with `addItem`, four at a time. No call starts after 20 s, so the answer
+beats a gateway timeout; lines not reached are reported as `timed_out`, and
+the buyer can send them again. The outcome is then read from the cart itself,
+not from the calls: a call can fail after Geins applied it, or race another.
+A SKU still short gets one sequential top-up. What is reported added is in
+the cart, and nothing else is.

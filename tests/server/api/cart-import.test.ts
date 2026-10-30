@@ -12,6 +12,9 @@ import type { CartImportPreview } from '../../../shared/types/cart-import';
 // ---------------------------------------------------------------------------
 const state = vi.hoisted(() => ({
   auth: null as null | { authToken: string; refreshToken: string },
+  /** The Geins user the session belongs to; null when Geins refuses it. */
+  buyerId: '7' as string | null,
+  ownerSecret: 'test-owner-key',
 }));
 
 vi.mock('../../../server/utils/auth', async (importOriginal) => {
@@ -31,8 +34,16 @@ vi.mock('../../../server/utils/auth', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../server/utils/cart-ownership-config', () => ({
+  readCartOwnerSecret: () => state.ownerSecret,
+}));
+
 vi.mock('../../../server/services/user', () => ({
-  getUser: vi.fn(async () => ({ id: 7, authenticated: true })),
+  getUser: vi.fn(async () =>
+    state.buyerId === null
+      ? { authenticated: false }
+      : { id: state.buyerId, authenticated: true },
+  ),
 }));
 
 const catalog = [
@@ -102,14 +113,16 @@ vi.mock('../../../server/services/graphql/loader', () => ({
   loadQuery: vi.fn((path: string) => `query:${path}`),
 }));
 
-const mockRateCheck = vi.fn(async () => ({
+const mockRateCheck = vi.fn(async (_key: string) => ({
   allowed: true,
   remaining: 9,
   resetTime: 0,
 }));
 vi.mock('../../../server/utils/rate-limiter', () => ({
-  cartImportPreviewRateLimiter: { check: () => mockRateCheck() },
-  cartImportAddRateLimiter: { check: () => mockRateCheck() },
+  cartImportPreviewRateLimiter: {
+    check: (key: string) => mockRateCheck(key),
+  },
+  cartImportAddRateLimiter: { check: (key: string) => mockRateCheck(key) },
   getClientIp: vi.fn(() => '203.0.113.7'),
 }));
 
@@ -148,11 +161,25 @@ vi.stubGlobal('getAuthCookies', () => ({
   authToken: null,
   refreshToken: null,
 }));
+// A cookie jar per event: what the browser sent, and what the server set.
+vi.stubGlobal(
+  'getCookie',
+  (event: { cookies: Record<string, string> }, name: string) =>
+    event.cookies[name],
+);
+vi.stubGlobal(
+  'setCookie',
+  (event: { cookies: Record<string, string> }, name: string, value: string) => {
+    event.cookies[name] = value;
+  },
+);
 
 const preview = (await import('../../../server/api/cart/import/preview.post'))
   .default as unknown as (event: H3Event) => Promise<CartImportPreview>;
 const add = (await import('../../../server/api/cart/import/add.post'))
   .default as unknown as (event: H3Event) => Promise<Record<string, unknown>>;
+const createCartRoute = (await import('../../../server/api/cart/index.post'))
+  .default as unknown as (event: H3Event) => Promise<{ id: string }>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -174,6 +201,7 @@ function makeEvent(
     config?: Record<string, unknown>;
     body?: unknown;
     headers?: Record<string, string>;
+    cookies?: Record<string, string>;
   } = {},
 ): H3Event {
   const tenantId = options.tenantId ?? 'shop';
@@ -185,10 +213,33 @@ function makeEvent(
         config: options.config ?? { tenantId, features: ENABLED },
       },
     },
-    headers: options.headers ?? {},
+    headers: options.headers ?? { 'content-length': '512' },
+    cookies: { ...options.cookies },
     body: options.body,
     node: { req: { headers: {} } },
   } as unknown as H3Event;
+}
+
+const jarOf = (event: H3Event) =>
+  (event as unknown as { cookies: Record<string, string> }).cookies;
+
+/** A session for this buyer, with a token of its own so no cache is shared. */
+function signIn(buyerId: string | null) {
+  state.buyerId = buyerId;
+  state.auth = {
+    authToken: jwt({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      session: `${buyerId}-${Math.random()}`,
+    }),
+    refreshToken: 'refresh',
+  };
+}
+
+/** The cart cookies a browser holds after `POST /api/cart` on a tenant. */
+async function browserWithCart(tenantId = 'shop') {
+  const event = makeEvent({ tenantId });
+  const cart = await createCartRoute(event);
+  return { cartId: cart.id, cookies: jarOf(event) };
 }
 
 function upload(csv: string, fileName = 'order.csv') {
@@ -197,10 +248,8 @@ function upload(csv: string, fileName = 'order.csv') {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  state.auth = {
-    authToken: jwt({ exp: Math.floor(Date.now() / 1000) + 3600 }),
-    refreshToken: 'refresh',
-  };
+  state.ownerSecret = 'test-owner-key';
+  signIn('7');
   emptyCart.items = [];
 });
 
@@ -328,7 +377,7 @@ describe('POST /api/cart/import/preview — results', () => {
     ]);
   });
 
-  it("shows a verified buyer the price, and withholds it when the tenant's price rule says so", async () => {
+  it('shows a verified buyer the price, and refuses a session Geins cannot confirm', async () => {
     const config = {
       tenantId: 'shop',
       features: {
@@ -341,18 +390,17 @@ describe('POST /api/cart/import/preview — results', () => {
     );
     expect(JSON.stringify(verified)).toContain('12,50 kr');
 
-    // A preview/login-as session carries no refresh token: no private prices.
+    // A preview/login-as session carries no refresh token, so it is not a
+    // confirmed buyer: no import, and nothing of the file is read.
     state.auth = {
       authToken: jwt({ exp: Math.floor(Date.now() / 1000) + 3600, n: 2 }),
       refreshToken: '',
     };
-    const unverified = await preview(
-      makeEvent({ config, body: upload('SKRUV-M6;1') }),
-    );
-    if (unverified.status !== 'ok') throw new Error('expected a preview');
-    expect(unverified.lines[0]).toMatchObject({ skuId: 101, quantity: 1 });
-    expect(unverified.lines[0]).not.toHaveProperty('unitPrice');
-    expect(JSON.stringify(unverified)).not.toContain('12,50');
+    mockReadBody.mockClear();
+    await expect(
+      preview(makeEvent({ config, body: upload('SKRUV-M6;1') })),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(mockReadBody).not.toHaveBeenCalled();
   });
 
   it('logs counts only, never the article numbers in the file', async () => {
@@ -378,7 +426,14 @@ describe('POST /api/cart/import/add', () => {
     const result = await add(
       makeEvent({
         body: {
-          items: [{ skuId: 101, quantity: 2, articleNumber: 'SKRUV-M6' }],
+          items: [
+            {
+              skuId: 101,
+              quantity: 2,
+              articleNumber: 'SKRUV-M6',
+              inCartQuantity: 0,
+            },
+          ],
         },
       }),
     );
@@ -389,7 +444,14 @@ describe('POST /api/cart/import/add', () => {
       undefined,
     );
     expect(result).toMatchObject({
-      added: [{ skuId: 101, quantity: 2, articleNumber: 'SKRUV-M6' }],
+      added: [
+        {
+          skuId: 101,
+          quantity: 2,
+          articleNumber: 'SKRUV-M6',
+          inCartQuantity: 0,
+        },
+      ],
       failed: [],
       cart: { id: 'cart-new' },
     });
@@ -402,7 +464,11 @@ describe('POST /api/cart/import/add', () => {
 
   it('requires a signed-in buyer and the feature', async () => {
     state.auth = null;
-    const body = { items: [{ skuId: 101, quantity: 1, articleNumber: 'A' }] };
+    const body = {
+      items: [
+        { skuId: 101, quantity: 1, articleNumber: 'A', inCartQuantity: 0 },
+      ],
+    };
     await expect(add(makeEvent({ body }))).rejects.toMatchObject({
       statusCode: 401,
     });
@@ -420,16 +486,196 @@ describe('POST /api/cart/import/add', () => {
         skuId: i + 1,
         quantity: 1,
         articleNumber: 'A',
+        inCartQuantity: 0,
       })),
     ],
-    ['a zero quantity', [{ skuId: 1, quantity: 0, articleNumber: 'A' }]],
+    [
+      'a zero quantity',
+      [{ skuId: 1, quantity: 0, articleNumber: 'A', inCartQuantity: 0 }],
+    ],
+    [
+      'no previewed cart quantity',
+      [{ skuId: 1, quantity: 1, articleNumber: 'A' }],
+    ],
     [
       'a quantity over the line limit',
-      [{ skuId: 1, quantity: 1000, articleNumber: 'A' }],
+      [{ skuId: 1, quantity: 1000, articleNumber: 'A', inCartQuantity: 0 }],
     ],
     ['no lines', []],
   ])('refuses %s', async (_label, items) => {
     await expect(add(makeEvent({ body: { items } }))).rejects.toThrow();
     expect(mockCart.addItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('cart import — the session and the request', () => {
+  it('refuses a session Geins does not confirm, before reading the file', async () => {
+    signIn(null);
+    await expect(
+      preview(makeEvent({ body: upload('SKRUV-M6;1') })),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(mockReadBody).not.toHaveBeenCalled();
+  });
+
+  it('refuses a body that declares no length, before reading it', async () => {
+    const event = makeEvent({ headers: {}, body: upload('SKRUV-M6;1') });
+    await expect(preview(event)).rejects.toMatchObject({ statusCode: 411 });
+    expect(mockReadBody).not.toHaveBeenCalled();
+  });
+
+  it('is unavailable without the cart ownership key', async () => {
+    state.ownerSecret = '';
+    await expect(
+      preview(makeEvent({ body: upload('SKRUV-M6;1') })),
+    ).rejects.toMatchObject({ statusCode: 503 });
+    expect(mockReadBody).not.toHaveBeenCalled();
+  });
+
+  it('limits each buyer as well as each address, so a new address does not help', async () => {
+    mockRateCheck.mockImplementation(async (key: string) => ({
+      allowed: !key.includes('buyer:7'),
+      remaining: 0,
+      resetTime: 0,
+    }));
+    try {
+      await expect(
+        preview(makeEvent({ body: upload('SKRUV-M6;1') })),
+      ).rejects.toMatchObject({ statusCode: 429 });
+      expect(mockRateCheck).toHaveBeenCalledWith('203.0.113.7');
+      expect(mockRateCheck).toHaveBeenCalledWith('shop:buyer:7');
+      expect(mockReadBody).not.toHaveBeenCalled();
+    } finally {
+      mockRateCheck.mockImplementation(async () => ({
+        allowed: true,
+        remaining: 9,
+        resetTime: 0,
+      }));
+    }
+  });
+});
+
+describe('cart import — whose cart', () => {
+  const line = {
+    skuId: 101,
+    quantity: 2,
+    articleNumber: 'SKRUV-M6',
+    inCartQuantity: 0,
+  };
+
+  it('reads and fills the cart this browser created, and binds it to the buyer', async () => {
+    const browser = await browserWithCart();
+    const proof = browser.cookies.cart_owner;
+    expect(proof).toBeTruthy();
+
+    const event = makeEvent({
+      cookies: browser.cookies,
+      body: { ...upload('SKRUV-M6;1'), cartId: browser.cartId },
+    });
+    const result = await preview(event);
+    expect(result).not.toHaveProperty('newCart');
+    expect(mockCart.get).toHaveBeenCalledWith(browser.cartId, false, undefined);
+    // Bound to buyer 7 from here on.
+    expect(jarOf(event).cart_owner).toBeTruthy();
+    expect(jarOf(event).cart_owner).not.toBe(proof);
+
+    const added = await add(
+      makeEvent({
+        cookies: jarOf(event),
+        body: { cartId: browser.cartId, items: [line] },
+      }),
+    );
+    expect(added).toMatchObject({ added: [line], failed: [] });
+  });
+
+  it('never reads a cart named without proof, and puts the file in a new cart', async () => {
+    const event = makeEvent({
+      body: { ...upload('SKRUV-M6;1'), cartId: 'someone-elses-cart' },
+    });
+    const result = await preview(event);
+    expect(result).toMatchObject({ status: 'ok', newCart: true });
+    expect(mockCart.get).not.toHaveBeenCalled();
+
+    await expect(
+      add(makeEvent({ body: { cartId: 'someone-elses-cart', items: [line] } })),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(mockCart.get).not.toHaveBeenCalled();
+    expect(mockCart.addItem).not.toHaveBeenCalled();
+  });
+
+  it('refuses a made-up proof', async () => {
+    const browser = await browserWithCart();
+    const cookies = { ...browser.cookies, cart_owner: 'AAAAAAAAAAAAAAAAAAAA' };
+    await expect(
+      add(
+        makeEvent({ cookies, body: { cartId: browser.cartId, items: [line] } }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(mockCart.addItem).not.toHaveBeenCalled();
+  });
+
+  it("refuses another buyer's cart, even on the same browser", async () => {
+    const browser = await browserWithCart();
+    const claim = makeEvent({
+      cookies: browser.cookies,
+      body: { ...upload('SKRUV-M6;1'), cartId: browser.cartId },
+    });
+    await preview(claim);
+    const boundTo7 = jarOf(claim);
+
+    signIn('8');
+    const peek = await preview(
+      makeEvent({
+        cookies: boundTo7,
+        body: { ...upload('SKRUV-M6;1'), cartId: browser.cartId },
+      }),
+    );
+    expect(peek).toMatchObject({ newCart: true });
+    expect(mockCart.get).toHaveBeenCalledTimes(1);
+    await expect(
+      add(
+        makeEvent({
+          cookies: boundTo7,
+          body: { cartId: browser.cartId, items: [line] },
+        }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(mockCart.addItem).not.toHaveBeenCalled();
+  });
+
+  it("refuses a cart proof from another tenant's store", async () => {
+    const browser = await browserWithCart('shop');
+    const elsewhere = makeEvent({
+      tenantId: 'other',
+      config: { tenantId: 'other', features: ENABLED },
+      cookies: browser.cookies,
+      body: { cartId: browser.cartId, items: [line] },
+    });
+    await expect(add(elsewhere)).rejects.toMatchObject({ statusCode: 403 });
+    expect(mockCart.addItem).not.toHaveBeenCalled();
+  });
+
+  it('binds a cart the import creates to its buyer, who can import into it again', async () => {
+    const first = makeEvent({ body: { items: [line] } });
+    const created = (await add(first)) as { cart: { id: string } };
+    expect(mockCart.create).toHaveBeenCalledTimes(1);
+    expect(jarOf(first).cart_owner).toBeTruthy();
+
+    await add(
+      makeEvent({
+        cookies: jarOf(first),
+        body: { cartId: created.cart.id, items: [line] },
+      }),
+    );
+    expect(mockCart.create).toHaveBeenCalledTimes(1);
+
+    signIn('8');
+    await expect(
+      add(
+        makeEvent({
+          cookies: jarOf(first),
+          body: { cartId: created.cart.id, items: [line] },
+        }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
   });
 });

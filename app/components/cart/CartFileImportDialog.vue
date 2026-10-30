@@ -72,6 +72,11 @@ const lines = ref<CartImportLine[]>([]);
 const outcome = ref<Pick<CartImportAddResult, 'added' | 'failed'> | null>(null);
 const heading = ref<HTMLElement | null>(null);
 const table = ref<HTMLElement | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+/** The cart the preview counted from; undefined means a new cart. */
+const previewCartId = ref<string | undefined>();
+/** Bumped on every reset, so a reply to an earlier opening is dropped. */
+let generation = 0;
 /** Polite announcements for progress that focus does not move to. */
 const status = ref('');
 watch(busy, (value) => {
@@ -95,10 +100,13 @@ watch(open, (isOpen) => {
 });
 
 function reset() {
+  generation += 1;
   step.value = 'select';
   busy.value = null;
+  file.value = undefined;
   error.value = null;
   preview.value = null;
+  previewCartId.value = undefined;
   lines.value = [];
   outcome.value = null;
 }
@@ -149,6 +157,8 @@ async function onFileChange(event: Event) {
     return;
   }
 
+  const current = generation;
+  const cartId = cartStore.cartId || undefined;
   busy.value = 'reading';
   try {
     file.value = chosen;
@@ -157,25 +167,28 @@ async function onFileChange(event: Event) {
     await reading.value;
     const result = await $fetch<CartImportPreview>('/api/cart/import/preview', {
       method: 'POST',
-      body: {
-        fileName: chosen.name,
-        content: base64.value,
-        cartId: cartStore.cartId || undefined,
-      },
+      body: { fileName: chosen.name, content: base64.value, cartId },
     });
+    if (current !== generation) return;
     if (result.status === 'invalid') {
       error.value = fileErrorMessage(result.error);
       return;
     }
     preview.value = result;
+    previewCartId.value = result.newCart ? undefined : cartId;
     lines.value = [...result.lines];
     step.value = 'preview';
     focusHeading();
   } catch (failure) {
+    if (current !== generation) return;
     error.value = requestErrorMessage(failure, 'upload_failed');
   } finally {
-    busy.value = null;
-    file.value = undefined;
+    if (current === generation) {
+      busy.value = null;
+      file.value = undefined;
+      // The input was disabled while reading, which dropped its focus.
+      if (error.value) nextTick(() => fileInput.value?.focus());
+    }
   }
 }
 
@@ -290,11 +303,13 @@ async function addToCart() {
   error.value = null;
   try {
     outcome.value = await cartStore.importItems(
-      lines.value.map(({ skuId, quantity, articleNumber }) => ({
+      lines.value.map(({ skuId, quantity, articleNumber, inCartQuantity }) => ({
         skuId,
         quantity,
         articleNumber,
+        inCartQuantity,
       })),
+      previewCartId.value,
     );
     step.value = 'result';
     focusHeading();
@@ -371,6 +386,7 @@ function onOpenChange(value: boolean) {
           </label>
           <input
             :id="inputId"
+            ref="fileInput"
             type="file"
             :accept="accept"
             :aria-describedby="helpId"
@@ -412,6 +428,13 @@ function onOpenChange(value: boolean) {
             }}
           </h3>
           <p class="text-muted-foreground text-sm">{{ columnsNote }}</p>
+          <p
+            v-if="preview?.newCart"
+            class="text-sm"
+            data-testid="cart-file-import-new-cart"
+          >
+            {{ t('cart.file_import.new_cart') }}
+          </p>
           <p
             v-if="skippedHeadingRow !== null"
             class="text-muted-foreground text-sm"

@@ -205,6 +205,7 @@ export const CartImportAddSchema = z.object({
         skuId: z.number().int().positive(),
         quantity: z.number().int().min(1).max(CART_IMPORT_MAX_QUANTITY),
         articleNumber: z.string().max(200),
+        inCartQuantity: z.number().int().min(0).max(CART_IMPORT_MAX_QUANTITY),
       }),
     )
     .min(1)

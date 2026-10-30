@@ -135,6 +135,7 @@
       "columns_recognized": "Varenumre ble lest fra kolonne {article} og antall fra kolonne {quantity}.",
       "columns_assumed": "Ingen overskriftsrad ble gjenkjent, så kolonne {article} ble lest som varenumre og kolonne {quantity} som antall.",
       "heading_skipped": "Rad {row} ble lest som overskrift.",
+      "new_cart": "Den nåværende handlekurven din kunne ikke knyttes til kontoen din, så varene legges i en ny handlekurv.",
       "table_caption": "Varer som legges i handlekurven",
       "col_article": "Varenummer",
       "col_name": "Navn",
@@ -182,7 +183,8 @@
       },
       "add_failures": {
         "rejected": "Handlekurven tok ikke imot varen",
-        "quantity_limit": "Linjen i handlekurven ville blitt over {max}"
+        "quantity_limit": "Linjen i handlekurven ville blitt over {max}",
+        "timed_out": "Ble ikke lagt til i tide. Prøv igjen; varer som allerede er lagt til, legges ikke til to ganger"
       }
     }
   },

@@ -135,6 +135,7 @@
       "columns_recognized": "Artikelnummer lästes från kolumn {article} och antal från kolumn {quantity}.",
       "columns_assumed": "Ingen rubrikrad kändes igen, så kolumn {article} lästes som artikelnummer och kolumn {quantity} som antal.",
       "heading_skipped": "Rad {row} lästes som rubrik.",
+      "new_cart": "Din nuvarande varukorg kunde inte kopplas till ditt konto, så artiklarna läggs i en ny varukorg.",
       "table_caption": "Artiklar som läggs i varukorgen",
       "col_article": "Artikelnummer",
       "col_name": "Benämning",
@@ -182,7 +183,8 @@
       },
       "add_failures": {
         "rejected": "Varukorgen tog inte emot artikeln",
-        "quantity_limit": "Raden i varukorgen skulle bli fler än {max}"
+        "quantity_limit": "Raden i varukorgen skulle bli fler än {max}",
+        "timed_out": "Hann inte läggas till. Försök igen; det som redan lagts till läggs inte till två gånger"
       }
     }
   },

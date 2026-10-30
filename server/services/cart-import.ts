@@ -18,7 +18,7 @@ import {
 import { getTenantSDK, getRequestChannelVariables } from './_sdk';
 import { loadQuery } from './graphql/loader';
 import { unwrapGraphQL } from './graphql/unwrap';
-import { addItem, createCart, getCart, updateItem } from './cart';
+import { addItem, createCart, findCart, getCart, updateItem } from './cart';
 
 /**
  * Cart file import against Geins: resolve article numbers to SKUs the buyer
@@ -33,6 +33,12 @@ import { addItem, createCart, getCart, updateItem } from './cart';
 const LOOKUP_BATCH = 300;
 /** Cart mutations in flight at once for one import. */
 const CART_CONCURRENCY = 4;
+/**
+ * No cart mutation starts after this, so the answer arrives before a gateway
+ * gives up on the request. Lines not reached are reported as timed out; the
+ * buyer can send them again, since an add only tops up to its target.
+ */
+const ADD_DEADLINE_MS = 20_000;
 
 interface LookupSku {
   skuId: number;
@@ -157,9 +163,7 @@ export async function resolveOrderEntries(
       options.userToken,
       event,
     ),
-    options.cartId
-      ? getCart(options.cartId, event).catch(() => null)
-      : Promise.resolve(null),
+    options.cartId ? openCart(options.cartId, event) : Promise.resolve(null),
   ]);
 
   const bySku = new Map<string, Match>();
@@ -221,7 +225,11 @@ export async function resolveOrderEntries(
     const rows = grouped.flatMap((entry) => entry.rows).sort((a, b) => a - b);
     const name = displayName(product, sku);
     const inCart = heldQuantity(cart, sku.skuId);
-    const stock = sku.stock ?? product.totalStock ?? null;
+    // A product's total speaks for its SKU only when it has no other.
+    const stock =
+      sku.stock ??
+      (skusOf(product).length === 1 ? product.totalStock : null) ??
+      null;
     const problem = (reason: CartImportProblem['reason']) =>
       problems.push({ reason, rows, articleNumber, name });
 
@@ -254,14 +262,27 @@ export async function resolveOrderEntries(
   return { lines, problems };
 }
 
+/**
+ * The cart, or null when Geins has no open cart by that id. Any other failure
+ * is thrown, so a Geins hiccup never swaps the buyer's cart for a new one.
+ */
+async function openCart(
+  cartId: string,
+  event: H3Event,
+): Promise<CartType | null> {
+  const cart = await findCart(cartId, event);
+  return cart && !cart.completed ? cart : null;
+}
+
 async function forEachWithLimit<T>(
   items: T[],
   limit: number,
   task: (item: T) => Promise<void>,
+  until: number,
 ): Promise<void> {
   let next = 0;
   const worker = async () => {
-    while (next < items.length) {
+    while (next < items.length && Date.now() < until) {
       const item = items[next++]!;
       await task(item);
     }
@@ -276,6 +297,7 @@ interface Plan {
   quantity: number;
   /** What the cart should hold of this SKU once the import is in. */
   expected: number;
+  /** `pending` until a call is made, so after the deadline it means untried. */
   state: 'pending' | 'sent' | 'retry' | 'rejected' | 'quantity_limit';
 }
 
@@ -305,6 +327,7 @@ async function topUp(
   event: H3Event,
 ): Promise<CartType> {
   const missing = expected - heldQuantity(cart, skuId);
+  if (missing <= 0 && cart) return cart;
   const line = plainLines(cart).find((item) => Number(item.skuId) === skuId);
   if (line?.id) {
     return updateItem(
@@ -319,7 +342,10 @@ async function topUp(
 /**
  * Add the previewed lines to the buyer's cart.
  *
- * Mutations run a few at a time. The outcome is then read back from the cart
+ * Each SKU is brought to what the previewed cart held plus the file's
+ * quantity, so sending the same lines again adds nothing twice. A new cart,
+ * made when there was none or it was checked out, holds nothing, so its
+ * target is the file's quantity alone. Mutations run a few at a time. The outcome is then read back from the cart
  * itself rather than from the calls: a call can fail after Geins applied it,
  * and two concurrent ones can race, so the cart is the only record that is
  * certainly right. A SKU short of what it should hold gets one sequential
@@ -330,29 +356,29 @@ export async function addImportedItems(
   cartId: string | undefined,
   items: CartImportAddItem[],
   event: H3Event,
+  deadlineMs: number = ADD_DEADLINE_MS,
 ): Promise<CartImportAddResult> {
-  let cart = cartId ? await getCart(cartId, event).catch(() => null) : null;
-  if (!cart || cart.completed) cart = await createCart(event);
-  const id = cart.id;
+  const until = Date.now() + deadlineMs;
+  const open = cartId ? await openCart(cartId, event) : null;
+  const start = open ?? (await createCart(event));
+  const id = start.id;
 
-  const quantities = new Map<number, number>();
+  const targets = new Map<number, { quantity: number; held: number }>();
   for (const item of items) {
-    quantities.set(
-      item.skuId,
-      (quantities.get(item.skuId) ?? 0) + item.quantity,
-    );
+    const target = targets.get(item.skuId);
+    targets.set(item.skuId, {
+      quantity: (target?.quantity ?? 0) + item.quantity,
+      held: open ? Math.max(target?.held ?? 0, item.inCartQuantity) : 0,
+    });
   }
-  const start = cart;
-  const plans: Plan[] = [...quantities].map(([skuId, quantity]) => {
-    const line = plainLines(start).find((item) => Number(item.skuId) === skuId);
-    const exceeds = (line?.quantity ?? 0) + quantity > CART_IMPORT_MAX_QUANTITY;
-    return {
-      skuId,
-      quantity,
-      expected: heldQuantity(start, skuId) + quantity,
-      state: exceeds ? 'quantity_limit' : 'pending',
-    };
-  });
+  // The limit counts every line of the SKU, as the preview does.
+  const plans: Plan[] = [...targets].map(([skuId, { quantity, held }]) => ({
+    skuId,
+    quantity,
+    expected: held + quantity,
+    state:
+      held + quantity > CART_IMPORT_MAX_QUANTITY ? 'quantity_limit' : 'pending',
+  }));
 
   await forEachWithLimit(
     plans.filter((plan) => plan.state === 'pending'),
@@ -365,6 +391,7 @@ export async function addImportedItems(
         plan.state = isTransient(error) ? 'retry' : 'rejected';
       }
     },
+    until,
   );
 
   let final = await getCart(id, event);
@@ -373,8 +400,9 @@ export async function addImportedItems(
       (plan.state === 'sent' || plan.state === 'retry') &&
       heldQuantity(final, plan.skuId) < plan.expected,
   );
-  if (short.length) {
+  if (short.length && Date.now() < until) {
     for (const plan of short) {
+      if (Date.now() >= until) break;
       try {
         final = await topUp(id, final, plan.skuId, plan.expected, event);
       } catch {
@@ -388,10 +416,12 @@ export async function addImportedItems(
   for (const plan of plans) {
     if (heldQuantity(final, plan.skuId) >= plan.expected) {
       outcome.set(plan.skuId, 'added');
+    } else if (plan.state === 'quantity_limit') {
+      outcome.set(plan.skuId, 'quantity_limit');
     } else {
       outcome.set(
         plan.skuId,
-        plan.state === 'quantity_limit' ? 'quantity_limit' : 'rejected',
+        plan.state === 'pending' ? 'timed_out' : 'rejected',
       );
     }
   }

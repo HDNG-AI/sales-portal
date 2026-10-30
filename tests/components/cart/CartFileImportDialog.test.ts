@@ -235,9 +235,83 @@ describe('CartFileImportDialog', () => {
     ).toHaveLength(1);
 
     await wrapper.find('[data-testid="cart-file-import-add"]').trigger('click');
-    expect(mockImportItems).toHaveBeenCalledWith([
-      { skuId: 202, quantity: 1, articleNumber: 'MUTTER-L' },
-    ]);
+    expect(mockImportItems).toHaveBeenCalledWith(
+      [
+        {
+          skuId: 202,
+          quantity: 1,
+          articleNumber: 'MUTTER-L',
+          inCartQuantity: 0,
+        },
+      ],
+      'cart-1',
+    );
+  });
+
+  it('says when the lines go into a new cart, and adds without the old cart id', async () => {
+    mockImportItems.mockResolvedValueOnce({ added: [], failed: [] });
+    mockFetch.mockResolvedValueOnce({ ...PREVIEW, newCart: true });
+    const wrapper = mount();
+    await chooseFile(wrapper, new File(['Artikelnummer;Antal\n'], 'order.csv'));
+    await vi.waitFor(() => {
+      expect(
+        wrapper.find('[data-testid="cart-file-import-new-cart"]').text(),
+      ).toBe('cart.file_import.new_cart');
+    });
+
+    await wrapper.find('[data-testid="cart-file-import-add"]').trigger('click');
+    expect(mockImportItems).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ skuId: 101, inCartQuantity: 2 }),
+        expect.objectContaining({ skuId: 202, inCartQuantity: 0 }),
+      ],
+      undefined,
+    );
+  });
+
+  it('drops a reply that arrives after the dialog was closed and opened again', async () => {
+    let answer!: (value: CartImportPreview) => void;
+    mockFetch.mockReturnValueOnce(
+      new Promise<CartImportPreview>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const wrapper = mount();
+    await chooseFile(wrapper, new File(['Artikelnummer;Antal\n'], 'order.csv'));
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ open: true });
+    answer(PREVIEW);
+    await flushPromises();
+
+    expect(
+      wrapper.find('[data-testid="cart-file-import-preview"]').exists(),
+    ).toBe(false);
+    expect(
+      wrapper
+        .find('[data-testid="cart-file-import-input"]')
+        .attributes('disabled'),
+    ).toBeUndefined();
+  });
+
+  it('gives focus back to the file input when the file is refused', async () => {
+    mockFetch.mockResolvedValueOnce({ status: 'invalid', error: 'no_rows' });
+    const wrapper = mountComponent(CartFileImportDialog, {
+      props: { open: true },
+      global: { stubs },
+      attachTo: document.body,
+    }) as VueWrapper;
+    try {
+      await chooseFile(wrapper, new File(['x'], 'order.csv'));
+      await vi.waitFor(() => {
+        expect(document.activeElement).toBe(
+          wrapper.find('[data-testid="cart-file-import-input"]').element,
+        );
+      });
+    } finally {
+      wrapper.unmount();
+    }
   });
 
   it('shows what was added and announces what failed, with the reason', async () => {

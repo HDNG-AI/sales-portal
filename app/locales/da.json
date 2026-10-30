@@ -135,6 +135,7 @@
       "columns_recognized": "Varenumre blev læst fra kolonne {article} og antal fra kolonne {quantity}.",
       "columns_assumed": "Ingen overskriftsrække blev genkendt, så kolonne {article} blev læst som varenumre og kolonne {quantity} som antal.",
       "heading_skipped": "Række {row} blev læst som overskrift.",
+      "new_cart": "Din nuværende kurv kunne ikke knyttes til din konto, så varerne lægges i en ny kurv.",
       "table_caption": "Varer, der lægges i kurven",
       "col_article": "Varenummer",
       "col_name": "Navn",
@@ -182,7 +183,8 @@
       },
       "add_failures": {
         "rejected": "Kurven accepterede ikke varen",
-        "quantity_limit": "Linjen i kurven ville blive over {max}"
+        "quantity_limit": "Linjen i kurven ville blive over {max}",
+        "timed_out": "Blev ikke tilføjet i tide. Prøv igen; varer, der allerede er tilføjet, tilføjes ikke to gange"
       }
     }
   },

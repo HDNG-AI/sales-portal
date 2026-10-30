@@ -135,6 +135,7 @@
       "columns_recognized": "Artikelnummern wurden aus Spalte {article} und Mengen aus Spalte {quantity} gelesen.",
       "columns_assumed": "Keine Überschriftenzeile erkannt. Spalte {article} wurde als Artikelnummer und Spalte {quantity} als Menge gelesen.",
       "heading_skipped": "Zeile {row} wurde als Überschrift gelesen.",
+      "new_cart": "Ihr aktueller Warenkorb konnte Ihrem Konto nicht zugeordnet werden. Die Artikel kommen deshalb in einen neuen Warenkorb.",
       "table_caption": "Artikel für den Warenkorb",
       "col_article": "Artikelnummer",
       "col_name": "Bezeichnung",
@@ -182,7 +183,8 @@
       },
       "add_failures": {
         "rejected": "Der Warenkorb hat den Artikel nicht angenommen",
-        "quantity_limit": "Die Warenkorbzeile würde {max} überschreiten"
+        "quantity_limit": "Die Warenkorbzeile würde {max} überschreiten",
+        "timed_out": "Nicht rechtzeitig hinzugefügt. Versuchen Sie es erneut; bereits hinzugefügte Artikel werden nicht doppelt hinzugefügt"
       }
     }
   },

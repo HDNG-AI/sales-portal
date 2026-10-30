@@ -195,11 +195,11 @@ describe('useCartStore', () => {
 
   describe('importItems', () => {
     const items = [
-      { skuId: 100, quantity: 2, articleNumber: 'ART-001' },
-      { skuId: 300, quantity: 1, articleNumber: 'ART-003' },
+      { skuId: 100, quantity: 2, articleNumber: 'ART-001', inCartQuantity: 1 },
+      { skuId: 300, quantity: 1, articleNumber: 'ART-003', inCartQuantity: 0 },
     ];
 
-    it('posts the lines with the cart id and takes the cart the server answers with', async () => {
+    it('posts the lines with the previewed cart id and takes the cart the server answers with', async () => {
       mockCartIdRef.value = 'cart-123';
       mockFetch.mockResolvedValueOnce({
         cart: mockCart,
@@ -208,7 +208,7 @@ describe('useCartStore', () => {
       });
 
       const store = useCartStore();
-      const outcome = await store.importItems(items);
+      const outcome = await store.importItems(items, 'cart-123');
 
       expect(mockFetch).toHaveBeenCalledWith('/api/cart/import/add', {
         method: 'POST',
@@ -223,6 +223,8 @@ describe('useCartStore', () => {
     });
 
     it('keeps the cart id of a cart the server had to create', async () => {
+      // The preview could not tie the current cart to the buyer.
+      mockCartIdRef.value = 'someone-elses-cart';
       mockFetch.mockResolvedValueOnce({
         cart: { ...mockCart, id: 'created-cart' },
         added: items,
@@ -230,7 +232,7 @@ describe('useCartStore', () => {
       });
 
       const store = useCartStore();
-      await store.importItems(items);
+      await store.importItems(items, undefined);
 
       expect(mockFetch).toHaveBeenCalledWith('/api/cart/import/add', {
         method: 'POST',
@@ -246,7 +248,7 @@ describe('useCartStore', () => {
         .mockResolvedValueOnce(mockCart);
 
       const store = useCartStore();
-      await expect(store.importItems(items)).rejects.toThrow('502');
+      await expect(store.importItems(items, 'cart-123')).rejects.toThrow('502');
 
       expect(mockFetch).toHaveBeenLastCalledWith('/api/cart', {
         query: { cartId: 'cart-123' },

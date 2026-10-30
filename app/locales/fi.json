@@ -135,6 +135,7 @@
       "columns_recognized": "Tuotenumerot luettiin sarakkeesta {article} ja määrät sarakkeesta {quantity}.",
       "columns_assumed": "Otsikkoriviä ei tunnistettu, joten sarake {article} luettiin tuotenumeroiksi ja sarake {quantity} määriksi.",
       "heading_skipped": "Rivi {row} luettiin otsikoksi.",
+      "new_cart": "Nykyistä ostoskoriasi ei voitu yhdistää tiliisi, joten tuotteet lisätään uuteen ostoskoriin.",
       "table_caption": "Ostoskoriin lisättävät tuotteet",
       "col_article": "Tuotenumero",
       "col_name": "Nimi",
@@ -182,7 +183,8 @@
       },
       "add_failures": {
         "rejected": "Ostoskori ei hyväksynyt tuotetta",
-        "quantity_limit": "Ostoskorin rivi ylittäisi {max}"
+        "quantity_limit": "Ostoskorin rivi ylittäisi {max}",
+        "timed_out": "Ei ehditty lisätä. Yritä uudelleen; jo lisättyjä tuotteita ei lisätä kahdesti"
       }
     }
   },
