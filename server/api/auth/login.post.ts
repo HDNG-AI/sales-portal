@@ -3,6 +3,7 @@ import * as cartService from '../../services/cart';
 import { loginRateLimiter, getClientIp } from '../../utils/rate-limiter';
 import { LoginSchema } from '../../schemas/api-input';
 import { resolveBuyerMarket } from '../../utils/buyer-market-resolver';
+import { issueCartProof } from '../../utils/cart-ownership';
 
 export default defineEventHandler(async (event) => {
   const clientIp = getClientIp(event);
@@ -49,6 +50,9 @@ export default defineEventHandler(async (event) => {
         tokens.token!,
       );
       setCartCookie(event, newCart.id);
+      // The copy is a cart this browser has not been handed before: without
+      // its proof the buyer could not import a file into it.
+      issueCartProof(event, newCart.id);
     } catch {
       // Non-fatal: cart copy failed, user gets fresh pricing on next add
     }

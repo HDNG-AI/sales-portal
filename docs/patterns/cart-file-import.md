@@ -42,8 +42,8 @@ read, so knowing an id must not be enough to read or fill the cart.
 `server/utils/cart-ownership.ts` keeps an httpOnly `cart_owner` cookie with
 an HMAC over the tenant, the cart id and the owner:
 
-- `POST /api/cart` gives the browser that created a cart a proof with no
-  buyer in it;
+- `POST /api/cart`, and the copy of a guest cart at sign-in, give the
+  browser a proof with no buyer in it;
 - the first import by a signed-in buyer binds it to that buyer, so another
   buyer who signs in on the same browser cannot use the cart;
 - a cart the import creates is bound to its buyer from the start.
