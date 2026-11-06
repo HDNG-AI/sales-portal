@@ -2420,6 +2420,13 @@ export const CONFIG_COVERAGE_MAP = {
             {
               spec: AUTH_CARD,
               title:
+                'keeps the apply CTA when registration is disabled but applyForAccount is enabled',
+              kind: 'consumer',
+              drives: 'field',
+            },
+            {
+              spec: AUTH_CARD,
+              title:
                 'forces login view when defaultView=register but registration disabled',
               kind: 'consumer',
               drives: 'field',
@@ -2431,7 +2438,11 @@ export const CONFIG_COVERAGE_MAP = {
               drives: 'field',
             },
           ],
-          note: 'The client hides the affordance and the endpoint refuses the call.',
+          note:
+            'The client hides the register view and the endpoint refuses the call. ' +
+            'The apply-for-account CTA in AuthCard stays while applyForAccount is on. ' +
+            'A deployment can force this branch through the portal override ' +
+            '(PUT /api/admin/tenants/:hostname/registration), which survives Geins refresh.',
         },
       },
       access: REGISTRATION_ACCESS,

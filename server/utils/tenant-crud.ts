@@ -167,9 +167,15 @@ export async function setTenantProductTextPlacement(
   hostname: string,
   placement: 'legacy' | 'semantic',
   event?: import('h3').H3Event,
-): Promise<{ tenantId: string; productTextPlacement: 'legacy' | 'semantic' } | null> {
+): Promise<{
+  tenantId: string;
+  productTextPlacement: 'legacy' | 'semantic';
+} | null> {
   if (placement !== 'legacy' && placement !== 'semantic') {
-    throw createAppError(ErrorCode.VALIDATION_ERROR, 'Invalid product text placement');
+    throw createAppError(
+      ErrorCode.VALIDATION_ERROR,
+      'Invalid product text placement',
+    );
   }
   const existing = await resolveTenant(hostname, event);
   if (!existing) return null;
@@ -205,6 +211,71 @@ export async function setTenantProductTextPlacement(
     useStorage('cache'),
   );
   return { tenantId: existing.tenantId, productTextPlacement: placement };
+}
+
+/**
+ * Environment-scoped self-registration kill switch, stored in
+ * tenant:override:<id> so it survives Geins refresh and webhook invalidation
+ * (tenant:config is a disposable cache and is never edited for a Geins
+ * tenant). `enabled: false` writes the override; `enabled: true` removes it,
+ * which hands the flag back to Geins rather than forcing it on. Only
+ * `features.registration` is touched: applyForAccount and every other
+ * feature, and the CMS/timezone/layout overrides, are preserved.
+ */
+export async function setTenantRegistrationEnabled(
+  hostname: string,
+  enabled: boolean,
+  event?: import('h3').H3Event,
+): Promise<{ tenantId: string; registrationEnabled: boolean } | null> {
+  if (typeof enabled !== 'boolean') {
+    throw createAppError(
+      ErrorCode.VALIDATION_ERROR,
+      'Invalid registration flag',
+    );
+  }
+  const existing = await resolveTenant(hostname, event);
+  if (!existing) return null;
+
+  const storage = useStorage('kv');
+  const key = tenantOverrideKey(existing.tenantId);
+  const previous = await storage.getItem<TenantPortalOverrides>(key);
+  const { registration: _previousRegistration, ...otherFeatures } =
+    previous?.features ?? {};
+  const { features: _previousFeatures, ...rest } = previous ?? {};
+  const features = enabled
+    ? otherFeatures
+    : { ...otherFeatures, registration: { enabled: false as const } };
+  await storage.setItem(key, {
+    ...rest,
+    ...(Object.keys(features).length > 0 ? { features } : {}),
+  } satisfies TenantPortalOverrides);
+
+  const refreshKey = tenantRefreshStateKey(existing.tenantId);
+  const state = await storage.getItem<TenantRefreshState>(refreshKey);
+  if (state?.source === 'local') {
+    // KV-only tenant: no upstream to refresh from, so update in place.
+    await storage.setItem(tenantConfigKey(existing.tenantId), {
+      ...existing,
+      features: {
+        ...existing.features,
+        registration: { ...existing.features?.registration, enabled },
+      },
+    });
+  } else {
+    // Expire, don't delete: the next request re-reads Geins and re-applies
+    // the override, while a Geins outage still serves last-known-good.
+    await storage.setItem(refreshKey, {
+      checkedAt: 0,
+      source: state?.source ?? 'unknown',
+    } satisfies TenantRefreshState);
+  }
+
+  await invalidateTenantCaches(
+    existing.tenantId,
+    hostnamesToInvalidate(hostname, existing),
+    useStorage('cache'),
+  );
+  return { tenantId: existing.tenantId, registrationEnabled: enabled };
 }
 
 /**

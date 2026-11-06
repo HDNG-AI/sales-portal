@@ -8,7 +8,10 @@ const mockFeatures = ref<Record<string, { enabled: boolean }>>({
   registration: { enabled: true },
 });
 vi.mock('../../../app/composables/useTenant', () => ({
-  useTenant: () => ({ features: mockFeatures }),
+  useTenant: () => ({
+    features: mockFeatures,
+    hasFeature: (name: string) => mockFeatures.value?.[name]?.enabled === true,
+  }),
 }));
 
 // useCmsPageLink mock, default: apply page resolved
@@ -180,6 +183,33 @@ describe('AuthCard', () => {
       expect(wrapper.find('[data-testid="auth-apply-button"]').exists()).toBe(
         true,
       );
+    });
+
+    it('keeps the apply CTA when registration is disabled but applyForAccount is enabled', () => {
+      mockFeatures.value = {
+        registration: { enabled: false },
+        applyForAccount: { enabled: true },
+      };
+      const wrapper = mountAuthCard();
+      expect(wrapper.find('[data-testid="auth-divider"]').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="auth-business-info"]').exists()).toBe(
+        true,
+      );
+      const apply = wrapper.find('[data-testid="auth-apply-button"]');
+      expect(apply.exists()).toBe(true);
+      expect(apply.attributes('href')).toBe('/se/sv/ansok-om-konto');
+    });
+
+    it('never offers the register view when registration is disabled and applyForAccount is enabled', () => {
+      mockFeatures.value = {
+        registration: { enabled: false },
+        applyForAccount: { enabled: true },
+      };
+      const wrapper = mountAuthCard('register');
+      expect(wrapper.find('[data-testid="register-slot"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.find('[data-testid="login-slot"]').exists()).toBe(true);
     });
 
     it('hides divider, business-info, and apply button when registration disabled', () => {

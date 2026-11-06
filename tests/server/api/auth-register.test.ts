@@ -137,6 +137,29 @@ describe('POST /api/auth/register', () => {
     expect(userService.register).not.toHaveBeenCalled();
   });
 
+  it('throws 403 before reading the body when the portal override disabled registration over a Geins true (Odelco staging)', async () => {
+    // Shape produced by mergeTenantPortalOverrides for a Geins config that
+    // still says registration=true, with applyForAccount left on.
+    const event = {
+      node: { req: { headers: {}, socket: { remoteAddress: '127.0.0.1' } } },
+      context: {
+        tenant: {
+          config: {
+            tenantId: 'odelco',
+            features: {
+              registration: { enabled: false },
+              applyForAccount: { enabled: true },
+            },
+          },
+        },
+      },
+    } as unknown as H3Event;
+    vi.mocked(readValidatedBody).mockClear();
+    await expect(handler(event)).rejects.toMatchObject({ statusCode: 403 });
+    expect(readValidatedBody).not.toHaveBeenCalled();
+    expect(userService.register).not.toHaveBeenCalled();
+  });
+
   it('proceeds (fail-open) when registration key is missing from features', async () => {
     // Tenant exists but has no registration key — must default to enabled
     const event = {

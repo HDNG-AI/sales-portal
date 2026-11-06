@@ -202,7 +202,13 @@ export type TenantResolutionOutcome =
 export interface TenantResolutionTrace {
   hostname: string;
   /** `stale` is a hit whose config no longer claims the hostname; the lookup then falls through. */
-  kv: 'hit' | 'stale' | 'miss' | 'skipped' | 'expired' | 'stale-on-refresh-error';
+  kv:
+    | 'hit'
+    | 'stale'
+    | 'miss'
+    | 'skipped'
+    | 'expired'
+    | 'stale-on-refresh-error';
   /** The merchant API call, when one was made: its URL and status or error. */
   api?: { url: string; result: string };
   outcome: TenantResolutionOutcome;
@@ -321,6 +327,13 @@ export interface TenantPortalOverrides {
   timezone?: string;
   /** A portal-owned PDP presentation override; does not mutate Geins. */
   layout?: { productTextPlacement?: 'legacy' | 'semantic' };
+  /**
+   * Environment-scoped kill switch for self-registration. Only an explicit
+   * `false` is honoured: this override can switch registration OFF on the
+   * deployment whose KV holds it, never switch it on over a Geins `false`.
+   * Every other feature (applyForAccount included) stays Geins-owned.
+   */
+  features?: { registration?: { enabled?: false } };
 }
 
 /**
@@ -346,17 +359,39 @@ export function mergeTenantPortalOverrides(
   const timezone =
     base.timezone && base.timezone !== 'UTC'
       ? base.timezone
-      : (portalZone ?? APPROVED_TENANT_TIMEZONES[base.tenantId] ?? base.timezone);
+      : (portalZone ??
+        APPROVED_TENANT_TIMEZONES[base.tenantId] ??
+        base.timezone);
   // Fail closed on malformed KV values. A tenant without the explicit
   // override retains Geins's placement (or the storefront's legacy default).
   const rawPlacement = overrides?.layout?.productTextPlacement;
-  const placement = rawPlacement === 'semantic' || rawPlacement === 'legacy'
-    ? rawPlacement
-    : undefined;
-  if (!overrides?.cms && timezone === base.timezone && !placement) return base;
+  const placement =
+    rawPlacement === 'semantic' || rawPlacement === 'legacy'
+      ? rawPlacement
+      : undefined;
+  // Strict `=== false`: a malformed or `true` stored value is ignored, so the
+  // effective flag falls back to whatever Geins says.
+  const disableRegistration =
+    overrides?.features?.registration?.enabled === false;
+  if (
+    !overrides?.cms &&
+    timezone === base.timezone &&
+    !placement &&
+    !disableRegistration
+  ) {
+    return base;
+  }
 
   return {
     ...base,
+    ...(disableRegistration
+      ? {
+          features: {
+            ...base.features,
+            registration: { ...base.features?.registration, enabled: false },
+          },
+        }
+      : {}),
     ...(timezone !== undefined ? { timezone } : {}),
     ...(placement
       ? { layout: { ...(base.layout ?? {}), productTextPlacement: placement } }

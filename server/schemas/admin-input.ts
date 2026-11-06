@@ -108,3 +108,11 @@ export const UpdateTenantTimezoneSchema = z
 export const UpdateTenantProductTextPlacementSchema = z
   .object({ productTextPlacement: z.enum(['legacy', 'semantic']) })
   .strict();
+
+/**
+ * Environment-scoped self-registration switch. `false` stores the portal
+ * override; `true` removes it so the Geins value applies again.
+ */
+export const UpdateTenantRegistrationSchema = z
+  .object({ enabled: z.boolean() })
+  .strict();
